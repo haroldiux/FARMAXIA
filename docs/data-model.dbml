@@ -1,0 +1,509 @@
+Project farmaxia {
+  database_type: 'PostgreSQL'
+  Note: 'Modelo lógico F0. Migraciones añaden RLS, roles y FKs compuestas tenant_id/id.'
+}
+
+Enum document_mode { FISCAL_INVOICE NON_FISCAL_RECEIPT }
+Enum sale_status { DRAFT CONFIRMED VOIDED RETURNED }
+Enum payment_status { PENDING CONFIRMED FAILED REVERSED }
+Enum subscription_status { TRIALING ACTIVE PAST_DUE SUSPENDED CANCELED }
+Enum inventory_movement_type { RECEIPT SALE RETURN TRANSFER_OUT TRANSFER_IN ADJUSTMENT WASTE RESERVATION RELEASE }
+
+Table tenants {
+  id uuid [pk]
+  slug varchar [not null, unique]
+  name varchar [not null]
+  created_at timestamptz [not null]
+}
+
+Table legal_entities {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  legal_name varchar [not null]
+  tax_id varchar [not null]
+  is_active boolean [not null]
+  indexes { (tenant_id, tax_id) [unique] }
+}
+
+Table subscription_plans {
+  id uuid [pk]
+  code varchar [not null, unique]
+  name varchar [not null]
+  allows_all_features boolean [not null]
+  is_active boolean [not null]
+}
+
+Table plan_features {
+  plan_id uuid [not null]
+  feature_code varchar [not null]
+  is_enabled boolean [not null]
+  indexes { (plan_id, feature_code) [pk] }
+}
+
+Table plan_quotas {
+  plan_id uuid [not null]
+  resource_code varchar [not null]
+  limit_units bigint
+  indexes { (plan_id, resource_code) [pk] }
+}
+
+Table tenant_subscriptions {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  plan_id uuid [not null]
+  status subscription_status [not null]
+  starts_at timestamptz [not null]
+  trial_ends_at timestamptz
+  grace_ends_at timestamptz
+  canceled_at timestamptz
+}
+
+Table subscription_quota_overrides {
+  subscription_id uuid [not null]
+  resource_code varchar [not null]
+  limit_units bigint
+  indexes { (subscription_id, resource_code) [pk] }
+}
+
+Table tenant_resource_usage {
+  tenant_id uuid [not null]
+  resource_code varchar [not null]
+  used_units bigint [not null]
+  indexes { (tenant_id, resource_code) [pk] }
+}
+
+Table branches {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  legal_entity_id uuid [not null]
+  code varchar [not null]
+  name varchar [not null]
+  indexes { (tenant_id, code) [unique] }
+}
+
+Table warehouses {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  branch_id uuid [not null]
+  name varchar [not null]
+  is_dispatch_enabled boolean [not null]
+  indexes { (tenant_id, branch_id, name) [unique] }
+}
+
+Table cash_registers {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  branch_id uuid [not null]
+  code varchar [not null]
+  is_active boolean [not null]
+  indexes { (tenant_id, branch_id, code) [unique] }
+}
+
+Table users {
+  id uuid [pk]
+  email varchar [not null, unique]
+  display_name varchar [not null]
+  password_hash varchar [not null]
+  is_active boolean [not null]
+}
+
+Table roles {
+  id uuid [pk]
+  tenant_id uuid
+  code varchar [not null]
+  indexes { (tenant_id, code) [unique] }
+}
+
+Table permissions {
+  code varchar [pk]
+  description varchar [not null]
+}
+
+Table user_roles {
+  user_id uuid [not null]
+  tenant_id uuid [not null]
+  role_id uuid [not null]
+  indexes { (user_id, tenant_id, role_id) [pk] }
+}
+
+Table role_permissions {
+  role_id uuid [not null]
+  permission_code varchar [not null]
+  indexes { (role_id, permission_code) [pk] }
+}
+
+Table user_branch_memberships {
+  user_id uuid [not null]
+  tenant_id uuid [not null]
+  branch_id uuid [not null]
+  indexes { (user_id, tenant_id, branch_id) [pk] }
+}
+
+Table refresh_sessions {
+  id uuid [pk]
+  user_id uuid [not null]
+  tenant_id uuid [not null]
+  token_hash varchar [not null, unique]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+}
+
+Table product_categories {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  name varchar [not null]
+  is_controlled boolean [not null]
+  indexes { (tenant_id, name) [unique] }
+}
+
+Table products {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  category_id uuid
+  name varchar [not null]
+  active_ingredient varchar
+  is_active boolean [not null]
+}
+
+Table product_presentations {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  product_id uuid [not null]
+  name varchar [not null]
+  base_unit_factor bigint [not null]
+  is_sellable boolean [not null]
+  indexes { (tenant_id, product_id, name) [unique] }
+}
+
+Table product_barcodes {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  presentation_id uuid [not null]
+  barcode varchar [not null]
+  indexes { (tenant_id, barcode) [unique] }
+}
+
+Table price_lists {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  branch_id uuid
+  name varchar [not null]
+  currency char(3) [not null]
+}
+
+Table presentation_prices {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  price_list_id uuid [not null]
+  presentation_id uuid [not null]
+  amount numeric(18,4) [not null]
+  valid_from timestamptz [not null]
+  valid_to timestamptz
+}
+
+Table suppliers {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  name varchar [not null]
+  tax_id varchar
+}
+
+Table purchase_orders {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  supplier_id uuid [not null]
+  warehouse_id uuid [not null]
+  status varchar [not null]
+}
+
+Table purchase_order_items {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  purchase_order_id uuid [not null]
+  presentation_id uuid [not null]
+  quantity_base bigint [not null]
+  unit_cost numeric(18,4) [not null]
+}
+
+Table inventory_batches {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  presentation_id uuid [not null]
+  supplier_id uuid
+  lot_code varchar [not null]
+  expires_on date [not null]
+  unit_cost numeric(18,4) [not null]
+  status varchar [not null]
+  indexes { (tenant_id, presentation_id, lot_code) [unique] }
+}
+
+Table inventory_balances {
+  tenant_id uuid [not null]
+  warehouse_id uuid [not null]
+  batch_id uuid [not null]
+  quantity_base bigint [not null]
+  reserved_base bigint [not null]
+  indexes { (tenant_id, warehouse_id, batch_id) [pk] }
+}
+
+Table inventory_movements {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  warehouse_id uuid [not null]
+  batch_id uuid [not null]
+  movement_type inventory_movement_type [not null]
+  quantity_base bigint [not null]
+  reference_type varchar [not null]
+  reference_id uuid [not null]
+  occurred_at timestamptz [not null]
+}
+
+Table inventory_reservations {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  warehouse_id uuid [not null]
+  batch_id uuid [not null]
+  quantity_base bigint [not null]
+  expires_at timestamptz [not null]
+  consumed_at timestamptz
+  released_at timestamptz
+}
+
+Table cash_shifts {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  cash_register_id uuid [not null]
+  opened_by_user_id uuid [not null]
+  status varchar [not null]
+  opened_at timestamptz [not null]
+  closed_at timestamptz
+}
+
+Table customers {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  full_name varchar [not null]
+  document_number varchar
+  phone varchar
+}
+
+Table sales {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  branch_id uuid [not null]
+  warehouse_id uuid [not null]
+  cash_register_id uuid [not null]
+  cash_shift_id uuid [not null]
+  cashier_user_id uuid [not null]
+  customer_id uuid
+  document_mode document_mode [not null]
+  status sale_status [not null]
+  total_amount numeric(18,4) [not null]
+  confirmed_at timestamptz
+}
+
+Table sale_items {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  sale_id uuid [not null]
+  presentation_id uuid [not null]
+  quantity_base bigint [not null]
+  unit_price numeric(18,4) [not null]
+  line_total numeric(18,4) [not null]
+}
+
+Table sale_item_batch_allocations {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  sale_item_id uuid [not null]
+  batch_id uuid [not null]
+  quantity_base bigint [not null]
+  indexes { (tenant_id, sale_item_id, batch_id) [unique] }
+}
+
+Table payments {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  sale_id uuid [not null]
+  method varchar [not null]
+  status payment_status [not null]
+  amount numeric(18,4) [not null]
+  provider_reference varchar
+}
+
+Table commercial_documents {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  sale_id uuid [not null]
+  type varchar [not null]
+  series varchar [not null]
+  number bigint [not null]
+  rendered_at timestamptz
+  indexes { (tenant_id, series, number) [unique] }
+}
+
+Table fiscal_documents {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  sale_id uuid [not null]
+  status varchar [not null]
+  provider_request_id varchar
+  provider_reference varchar
+  last_attempt_at timestamptz
+}
+
+Table quotes {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  branch_id uuid [not null]
+  status varchar [not null]
+  expires_at timestamptz [not null]
+  converted_sale_id uuid
+}
+
+Table quote_items {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  quote_id uuid [not null]
+  presentation_id uuid [not null]
+  quantity_base bigint [not null]
+  unit_price numeric(18,4) [not null]
+}
+
+Table prescriptions {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  customer_id uuid
+  prescriber_name varchar
+  recorded_at timestamptz [not null]
+}
+
+Table controlled_dispenses {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  sale_item_id uuid [not null]
+  prescription_id uuid [not null]
+}
+
+Table stock_transfers {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  source_warehouse_id uuid [not null]
+  destination_warehouse_id uuid [not null]
+  status varchar [not null]
+}
+
+Table stock_transfer_items {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  transfer_id uuid [not null]
+  batch_id uuid [not null]
+  requested_base bigint [not null]
+  received_base bigint
+}
+
+Table tenant_files {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  branch_id uuid [not null]
+  storage_key varchar [not null]
+  media_type varchar [not null]
+  byte_size bigint [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, id) [unique]
+    (tenant_id, branch_id, id) [unique]
+    (storage_key) [unique]
+  }
+}
+
+Table background_jobs {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  branch_id uuid [not null]
+  kind varchar [not null]
+  status varchar [not null]
+  payload jsonb [not null]
+  result_file_id uuid
+  created_at timestamptz [not null]
+  started_at timestamptz
+  completed_at timestamptz
+  indexes { (tenant_id, branch_id, status, created_at) }
+}
+
+Table audit_events {
+  id uuid [pk]
+  tenant_id uuid
+  actor_user_id uuid
+  action varchar [not null]
+  resource_type varchar [not null]
+  resource_id uuid
+  request_id uuid
+  occurred_at timestamptz [not null]
+}
+
+Table idempotency_keys {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  key varchar [not null]
+  request_hash varchar [not null]
+  response_code int
+  response_body jsonb
+  expires_at timestamptz [not null]
+  indexes { (tenant_id, key) [unique] }
+}
+
+Table outbox_events {
+  id uuid [pk]
+  tenant_id uuid
+  aggregate_type varchar [not null]
+  aggregate_id uuid [not null]
+  event_type varchar [not null]
+  payload jsonb [not null]
+  occurred_at timestamptz [not null]
+  processed_at timestamptz
+}
+
+Ref: legal_entities.tenant_id > tenants.id
+Ref: tenant_subscriptions.tenant_id > tenants.id
+Ref: tenant_subscriptions.plan_id > subscription_plans.id
+Ref: plan_features.plan_id > subscription_plans.id
+Ref: plan_quotas.plan_id > subscription_plans.id
+Ref: subscription_quota_overrides.subscription_id > tenant_subscriptions.id
+Ref: tenant_resource_usage.tenant_id > tenants.id
+Ref: branches.tenant_id > tenants.id
+Ref: branches.legal_entity_id > legal_entities.id
+Ref: warehouses.branch_id > branches.id
+Ref: cash_registers.branch_id > branches.id
+Ref: tenant_files.branch_id > branches.id
+Ref: background_jobs.branch_id > branches.id
+Ref: background_jobs.result_file_id > tenant_files.id
+Ref: user_roles.user_id > users.id
+Ref: user_roles.role_id > roles.id
+Ref: role_permissions.role_id > roles.id
+Ref: role_permissions.permission_code > permissions.code
+Ref: user_branch_memberships.user_id > users.id
+Ref: user_branch_memberships.branch_id > branches.id
+Ref: products.category_id > product_categories.id
+Ref: product_presentations.product_id > products.id
+Ref: product_barcodes.presentation_id > product_presentations.id
+Ref: presentation_prices.price_list_id > price_lists.id
+Ref: presentation_prices.presentation_id > product_presentations.id
+Ref: purchase_orders.supplier_id > suppliers.id
+Ref: purchase_order_items.purchase_order_id > purchase_orders.id
+Ref: inventory_batches.presentation_id > product_presentations.id
+Ref: inventory_balances.batch_id > inventory_batches.id
+Ref: inventory_movements.batch_id > inventory_batches.id
+Ref: sales.cash_shift_id > cash_shifts.id
+Ref: sales.customer_id > customers.id
+Ref: sale_items.sale_id > sales.id
+Ref: sale_item_batch_allocations.sale_item_id > sale_items.id
+Ref: sale_item_batch_allocations.batch_id > inventory_batches.id
+Ref: payments.sale_id > sales.id
+Ref: commercial_documents.sale_id > sales.id
+Ref: fiscal_documents.sale_id > sales.id
+Ref: quote_items.quote_id > quotes.id
+Ref: controlled_dispenses.sale_item_id > sale_items.id
+Ref: controlled_dispenses.prescription_id > prescriptions.id
+Ref: stock_transfer_items.transfer_id > stock_transfers.id
+Ref: stock_transfer_items.batch_id > inventory_batches.id

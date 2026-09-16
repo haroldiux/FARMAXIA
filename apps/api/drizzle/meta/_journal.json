@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789474149440,
+      "tag": "0000_initial_tenancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789474653703,
+      "tag": "0001_authentication_and_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789475044246,
+      "tag": "0002_restrict_auth_role_read",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789556608588,
+      "tag": "0003_tenant_resource_boundary",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789557652697,
+      "tag": "0004_subscriptions_and_quotas",
+      "breakpoints": true
+    }
+  ]
+}
