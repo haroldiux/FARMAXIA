@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   timestamp,
@@ -586,3 +587,183 @@ export const documentSequences = pgTable(
   ]
 );
 
+export const productCategories = pgTable(
+  "product_categories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    isControlled: boolean("is_controlled").default(false).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "product_categories_tenant_fk",
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id]
+    }),
+    unique("product_categories_tenant_name_unique").on(table.tenantId, table.name),
+    unique("product_categories_tenant_id_unique").on(table.tenantId, table.id)
+  ]
+);
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    categoryId: uuid("category_id"),
+    name: varchar("name", { length: 200 }).notNull(),
+    activeIngredient: varchar("active_ingredient", { length: 240 }),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "products_tenant_fk",
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id]
+    }),
+    foreignKey({
+      name: "products_tenant_category_fk",
+      columns: [table.tenantId, table.categoryId],
+      foreignColumns: [productCategories.tenantId, productCategories.id]
+    }),
+    unique("products_tenant_id_unique").on(table.tenantId, table.id)
+  ]
+);
+
+export const productPresentations = pgTable(
+  "product_presentations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    baseUnitFactor: bigint("base_unit_factor", { mode: "number" }).notNull(),
+    isSellable: boolean("is_sellable").default(true).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "product_presentations_tenant_product_fk",
+      columns: [table.tenantId, table.productId],
+      foreignColumns: [products.tenantId, products.id]
+    }),
+    unique("product_presentations_tenant_id_unique").on(table.tenantId, table.id),
+    unique("product_presentations_tenant_product_name_unique").on(
+      table.tenantId,
+      table.productId,
+      table.name
+    ),
+    check("product_presentations_factor_positive_check", sql`${table.baseUnitFactor} > 0`)
+  ]
+);
+
+export const productBarcodes = pgTable(
+  "product_barcodes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    barcode: varchar("barcode", { length: 80 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "product_barcodes_tenant_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    unique("product_barcodes_tenant_id_unique").on(table.tenantId, table.id),
+    unique("product_barcodes_tenant_barcode_unique").on(table.tenantId, table.barcode)
+  ]
+);
+
+export const priceLists = pgTable(
+  "price_lists",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id"),
+    name: varchar("name", { length: 120 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "price_lists_tenant_fk",
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id]
+    }),
+    foreignKey({
+      name: "price_lists_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    unique("price_lists_tenant_id_unique").on(table.tenantId, table.id),
+    unique("price_lists_tenant_name_unique").on(table.tenantId, table.name),
+    check("price_lists_currency_format_check", sql`${table.currency} ~ '^[A-Z]{3}$'`)
+  ]
+);
+
+export const presentationPrices = pgTable(
+  "presentation_prices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    priceListId: uuid("price_list_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    amount: numeric("amount", { precision: 18, scale: 4 }).notNull(),
+    validFrom: timestamp("valid_from", { withTimezone: true }).notNull(),
+    validTo: timestamp("valid_to", { withTimezone: true }),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "presentation_prices_tenant_price_list_fk",
+      columns: [table.tenantId, table.priceListId],
+      foreignColumns: [priceLists.tenantId, priceLists.id]
+    }),
+    foreignKey({
+      name: "presentation_prices_tenant_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    unique("presentation_prices_tenant_id_unique").on(table.tenantId, table.id),
+    check("presentation_prices_amount_non_negative_check", sql`${table.amount} >= 0`),
+    check(
+      "presentation_prices_valid_range_check",
+      sql`${table.validTo} is null or ${table.validTo} > ${table.validFrom}`
+    )
+  ]
+);
+
+export const productHomologations = pgTable(
+  "product_homologations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    authority: varchar("authority", { length: 80 }).notNull(),
+    externalCode: varchar("external_code", { length: 120 }).notNull(),
+    externalDescription: varchar("external_description", { length: 255 }),
+    status: varchar("status", { length: 24 }).default("PENDING").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "product_homologations_tenant_product_fk",
+      columns: [table.tenantId, table.productId],
+      foreignColumns: [products.tenantId, products.id]
+    }),
+    unique("product_homologations_tenant_id_unique").on(table.tenantId, table.id),
+    unique("product_homologations_tenant_authority_code_unique").on(
+      table.tenantId,
+      table.authority,
+      table.externalCode
+    )
+  ]
+);

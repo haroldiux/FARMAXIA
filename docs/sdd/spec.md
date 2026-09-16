@@ -156,3 +156,28 @@ Una secuencia se asigna atómicamente por tenant, sucursal y tipo documental. Do
 peticiones concurrentes no reciben el mismo número. Es una numeración interna de
 documentos comerciales; no representa aún numeración, autorización ni aceptación
 fiscal.
+
+## S23 — catálogo y presentaciones
+
+El catálogo DEBE mantener categorías y productos del mismo tenant. Una
+presentación DEBE pertenecer a su producto mediante FK compuesta y usar un factor
+entero positivo hacia la unidad base. La marca de categoría controlada es
+informativa hasta resolver D13.
+
+## S24 — códigos de barras
+
+Un código de barras DEBE ser único por tenant y solo devolver presentaciones y
+productos activos dentro de la membresía de sucursal del contexto.
+
+## S25 — listas y precios
+
+Una lista DEBE declarar una moneda de tres letras y puede ser global o específica
+de la sucursal activa. Los precios conservan hasta cuatro decimales, fechas de
+vigencia y no ejecutan redondeo, impuestos ni costos. La búsqueda vigente prioriza
+la lista específica de sucursal sobre la global.
+
+## S26 — homologaciones preparadas
+
+El catálogo DEBE guardar autoridad, código externo, descripción y estado por
+producto. Registrar la autoridad `SIAT` no llama a servicios externos ni afirma
+homologación oficial.

@@ -47,3 +47,11 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] B06.2 Añadir schema y migración RLS para eventos de auditoría, claves idempotentes, outbox y secuencias documentales.
 - [x] B06.3 Implementar servicios transaccionales que compongan estos recursos dentro de `TenantDatabase.withScope`.
 - [x] B06.4 Verificar concurrencia, RLS, inmutabilidad y migración real; no implementar worker, purgas, SIAT ni proveedores externos.
+
+## Lote C01
+
+- [x] C01.1 Escribir pruebas rojas de catálogo, precios, códigos y aislamiento.
+- [x] C01.2 Añadir tablas Drizzle y migración `0006_cool_payback.sql` con FKs compuestas.
+- [x] C01.3 Aplicar RLS, membresía de sucursal y privilegios mínimos a las tablas.
+- [x] C01.4 Implementar `CatalogService`, búsqueda vigente y homologaciones preparadas.
+- [x] C01.5 Ejecutar suite, typecheck, builds, `drizzle-kit check` y migración idempotente.

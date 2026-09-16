@@ -57,6 +57,13 @@ describe("transversal services (B06)", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        product_homologations,
+        presentation_prices,
+        product_barcodes,
+        price_lists,
+        product_presentations,
+        products,
+        product_categories,
         audit_events,
         idempotency_records,
         outbox_events,

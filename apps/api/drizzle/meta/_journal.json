@@ -43,6 +43,13 @@
       "when": 1789558800000,
       "tag": "0005_transversal_services",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789581752950,
+      "tag": "0006_cool_payback",
+      "breakpoints": true
     }
   ]
 }

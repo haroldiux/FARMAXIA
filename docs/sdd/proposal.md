@@ -60,3 +60,9 @@ secuencias documentales internas por sucursal. No se borra información auditada
 no se ejecuta un worker ni se publica un evento a terceros. La retención legal por
 clase sigue siendo una decisión externa (D12), por lo que tampoco se implementan
 expiración ni purgas.
+
+## Lote C01 — catálogo farmacéutico
+
+Crear el catálogo tenant-scoped de productos, categorías, presentaciones, códigos
+de barras, listas/precios y homologaciones externas preparadas. C01 no implementa
+compras, lotes, FEFO, ventas, validación SIAT ni dispensación controlada.

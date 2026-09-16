@@ -11,7 +11,8 @@ export default defineConfig({
       "test/subscription-state.spec.ts",
       "test/subscription-quotas.spec.ts",
       "test/transversal-services.spec.ts",
-      "test/platform-services.spec.ts"
+      "test/platform-services.spec.ts",
+      "test/catalog.spec.ts"
     ],
     fileParallelism: false
   }

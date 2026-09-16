@@ -165,6 +165,18 @@ Table products {
   is_active boolean [not null]
 }
 
+Table product_homologations {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  product_id uuid [not null]
+  authority varchar [not null]
+  external_code varchar [not null]
+  external_description varchar
+  status varchar [not null]
+  created_at timestamptz [not null]
+  indexes { (tenant_id, authority, external_code) [unique] }
+}
+
 Table product_presentations {
   id uuid [pk]
   tenant_id uuid [not null]
@@ -485,8 +497,10 @@ Ref: role_permissions.permission_code > permissions.code
 Ref: user_branch_memberships.user_id > users.id
 Ref: user_branch_memberships.branch_id > branches.id
 Ref: products.category_id > product_categories.id
+Ref: product_homologations.product_id > products.id
 Ref: product_presentations.product_id > products.id
 Ref: product_barcodes.presentation_id > product_presentations.id
+Ref: price_lists.branch_id > branches.id
 Ref: presentation_prices.price_list_id > price_lists.id
 Ref: presentation_prices.presentation_id > product_presentations.id
 Ref: purchase_orders.supplier_id > suppliers.id

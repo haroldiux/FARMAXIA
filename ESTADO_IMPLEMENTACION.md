@@ -1,12 +1,12 @@
 # Estado de implementación — FARMAXIA
 
 **Actualizado:** 16 de septiembre de 2026  
-**Fase actual:** F1 completa (B01–B06) — Próxima: F2 (Catálogo / Inventario).
+**Fase actual:** F2 / C02 — compras, recepción y lotes de inventario.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
 | A01 | Completada para la base | `REGISTRO_DECISIONES.md`; D01, D02, D04, D05 y D10 delimitadas | D03 requiere un emisor y asesoría tributaria para adaptador real. |
-| A02 | Completada como diseño y núcleo persistido | `docs/data-model.dbml` y migraciones B02–B05 describen entidades, ownership, claves y RLS | B06 añadirá los servicios transversales de auditoría, idempotencia y outbox. |
+| A02 | Completada como diseño y núcleo persistido | `docs/data-model.dbml` y migraciones B02–B06 describen entidades, ownership, claves y RLS | C02 añadirá compras, recepción y lotes respetando las decisiones D08/D22. |
 | A03 | Completada como contrato | `docs/api-contracts.md` define contratos, permisos, idempotencia y errores | OpenAPI ejecutable empieza con los módulos de dominio. |
 | A04 | Completada como matriz | `docs/test-matrix.md` enlaza RF01–RF16 con T01–T27 | D06–D09, D11 y D14 se cierran antes de sus módulos. |
 | B01 | Completada | Prueba health verde; builds API/web verdes; PostgreSQL 18 y Redis 8 saludables en Compose. | Completada. |
@@ -14,7 +14,8 @@
 | B03 | Completada | Migraciones `0001`–`0002`, Argon2id, JWT breve, refresh rotativo, RBAC, guards globales y 8 pruebas reales verdes. | Base disponible para B04. |
 | B04 | Completada | Migración `0003`, contexto tenant/usuario/sucursal, RLS de sucursal, metadatos de jobs/archivos y claves de caché aisladas; 11 pruebas verdes. | Base disponible para B05. |
 | B05 | Completada | Migración `0004`, plan `COMPLETO`, máquina de estados, entitlements y cuota atómica; 14 pruebas verdes. | Base disponible para administrar altas y segmentar planes posteriores. |
-| B06 | Completada | Migración `0005`, auditoría inmutable con trigger, idempotencia transaccional con SHA-256, outbox PENDING y secuencias atómicas por sucursal; 22 pruebas verdes. | Base lista para el primer módulo de dominio. |
+| B06 | Completada | Migración `0005`, auditoría inmutable con trigger, idempotencia transaccional con SHA-256, outbox PENDING y secuencias atómicas por sucursal; 22 pruebas verdes. | Base disponible para catálogo e inventario. |
+| C01 | Completada | Migración `0006_cool_payback.sql`, catálogo con FKs/RLS, búsqueda de barras, precio por sucursal y homologación preparada; 24 pruebas verdes. | Base disponible para compras, recepción y lotes. |
 
 ## Límites del lote B01
 
@@ -64,4 +65,4 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 
 ## Próxima tarea
 
-Iniciar F2 — Módulo de Catálogo Farmacéutico (productos, presentaciones, unidades de medida y codificación regulatoria) o Gestión de Inventario con lotes y FEFO.
+Iniciar C02 — proveedores, órdenes de compra, recepción por lote/fecha/almacén y cuentas por pagar básicas. D08 y D22 permanecen abiertas para costos/importación.

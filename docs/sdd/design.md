@@ -120,3 +120,17 @@ consumer en B06: la tabla conserva `PENDING`, intentos y fecha de disponibilidad
 para el worker posterior. `document_sequences` usa `INSERT ... ON CONFLICT ...
 DO UPDATE ... RETURNING` para entregar un número único por tenant, sucursal y
 tipo sin depender de una secuencia global ni de una numeración fiscal.
+
+## Diseño C01: catálogo tenant-scoped
+
+Las tablas `product_categories`, `products`, `product_presentations`,
+`product_barcodes`, `price_lists`, `presentation_prices` y
+`product_homologations` usan claves y FKs compuestas por tenant. Sus políticas
+RLS exigen que el usuario tenga membresía en la sucursal activa; el catálogo
+puede ser compartido por varias sucursales sin aceptar un `tenantId` libre.
+
+`CatalogService` concentra las escrituras transaccionales y la búsqueda por
+código de barras. La búsqueda filtra producto/presentación activos y usa una
+consulta lateral para escoger el precio vigente más reciente, priorizando una
+lista de la sucursal sobre una global. Los valores monetarios permanecen como
+decimales de PostgreSQL; las reglas de costo y redondeo se reservan para D08.
