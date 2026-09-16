@@ -1,7 +1,7 @@
 # Estado de implementación — FARMAXIA
 
 **Actualizado:** 16 de septiembre de 2026  
-**Fase actual:** F1 / B06 — servicios comunes de auditoría, idempotencia y outbox.
+**Fase actual:** F1 completa (B01–B06) — Próxima: F2 (Catálogo / Inventario).
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
@@ -14,6 +14,7 @@
 | B03 | Completada | Migraciones `0001`–`0002`, Argon2id, JWT breve, refresh rotativo, RBAC, guards globales y 8 pruebas reales verdes. | Base disponible para B04. |
 | B04 | Completada | Migración `0003`, contexto tenant/usuario/sucursal, RLS de sucursal, metadatos de jobs/archivos y claves de caché aisladas; 11 pruebas verdes. | Base disponible para B05. |
 | B05 | Completada | Migración `0004`, plan `COMPLETO`, máquina de estados, entitlements y cuota atómica; 14 pruebas verdes. | Base disponible para administrar altas y segmentar planes posteriores. |
+| B06 | Completada | Migración `0005`, auditoría inmutable con trigger, idempotencia transaccional con SHA-256, outbox PENDING y secuencias atómicas por sucursal; 22 pruebas verdes. | Base lista para el primer módulo de dominio. |
 
 ## Límites del lote B01
 
@@ -52,6 +53,15 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 - Migración: `0004_subscriptions_and_quotas.sql` crea planes, funcionalidades, cuotas, suscripciones, overrides y uso, aplica RLS/privilegios y siembra `COMPLETO` con todas las funciones y límites `NULL` (ilimitados).
 - Verificación: `pnpm --filter @farmaxia/api test` pasó con 14 pruebas contra PostgreSQL real; `pnpm build`, `tsc --noEmit`, `drizzle-kit check` y `docker compose ps` pasaron con PostgreSQL y Redis saludables.
 
+## Evidencia B06
+
+- Red/Green: se escribieron pruebas rojas para `audit_events` inmutables, reintentos/conflictos de `idempotency_records`, `outbox_events` transaccional y asignación atómica de `document_sequences`; pasaron 22 pruebas verdes contra PostgreSQL real.
+- Inmutabilidad: el trigger `trg_audit_events_immutable` rechaza de forma determinista cualquier intento de `UPDATE` o `DELETE` sobre `audit_events`.
+- Idempotencia: payload canonicalizado con SHA-256; peticiones repetidas devuelven la respuesta en caché sin duplicar efectos y peticiones con payload conflictivo elevan `IDEMPOTENCY_KEY_REUSED` (409).
+- Secuencias: concurrencia verificada sin colisiones ni duplicados gracias a bloqueo a nivel de fila `ON CONFLICT DO UPDATE RETURNING`.
+- Migración: `0005_transversal_services.sql` versionada con Drizzle, aplicando RLS forzada y privilegios estrictos para `farmaxia_app`.
+- Verificación global: `pnpm --filter @farmaxia/api test` (22 pruebas verdes en 8 suites), `tsc --noEmit` en API y Web, `pnpm build` en API y Web, y `drizzle-kit check` pasaron.
+
 ## Próxima tarea
 
-B06: incorporar servicios comunes de auditoría inmutable, idempotencia, outbox y secuencias documentales, sin worker ni proveedores externos.
+Iniciar F2 — Módulo de Catálogo Farmacéutico (productos, presentaciones, unidades de medida y codificación regulatoria) o Gestión de Inventario con lotes y FEFO.

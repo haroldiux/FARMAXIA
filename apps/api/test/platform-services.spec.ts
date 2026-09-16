@@ -54,6 +54,13 @@ describe("platform transactional services", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        audit_events,
+        idempotency_records,
+        outbox_events,
+        document_sequences,
+        subscription_quota_overrides,
+        tenant_resource_usage,
+        tenant_subscriptions,
         background_jobs,
         tenant_files,
         auth_sessions,

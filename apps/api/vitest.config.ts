@@ -9,7 +9,9 @@ export default defineConfig({
       "test/auth.e2e.spec.ts",
       "test/tenant-resource-keys.spec.ts",
       "test/subscription-state.spec.ts",
-      "test/subscription-quotas.spec.ts"
+      "test/subscription-quotas.spec.ts",
+      "test/transversal-services.spec.ts",
+      "test/platform-services.spec.ts"
     ],
     fileParallelism: false
   }

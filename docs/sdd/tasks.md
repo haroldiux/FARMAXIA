@@ -43,7 +43,7 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 
 ## Lote B06
 
-- [ ] B06.1 Escribir pruebas rojas para auditoría inmutable, idempotencia repetida/conflictiva, outbox y secuencias concurrentes.
-- [ ] B06.2 Añadir schema y migración RLS para eventos de auditoría, claves idempotentes, outbox y secuencias documentales.
-- [ ] B06.3 Implementar servicios transaccionales que compongan estos recursos dentro de `TenantDatabase.withScope`.
-- [ ] B06.4 Verificar concurrencia, RLS, inmutabilidad y migración real; no implementar worker, purgas, SIAT ni proveedores externos.
+- [x] B06.1 Escribir pruebas rojas para auditoría inmutable, idempotencia repetida/conflictiva, outbox y secuencias concurrentes.
+- [x] B06.2 Añadir schema y migración RLS para eventos de auditoría, claves idempotentes, outbox y secuencias documentales.
+- [x] B06.3 Implementar servicios transaccionales que compongan estos recursos dentro de `TenantDatabase.withScope`.
+- [x] B06.4 Verificar concurrencia, RLS, inmutabilidad y migración real; no implementar worker, purgas, SIAT ni proveedores externos.

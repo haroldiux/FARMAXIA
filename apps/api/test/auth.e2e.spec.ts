@@ -72,6 +72,10 @@ describe("authentication API", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        audit_events,
+        idempotency_records,
+        outbox_events,
+        document_sequences,
         subscription_quota_overrides,
         tenant_resource_usage,
         tenant_subscriptions,

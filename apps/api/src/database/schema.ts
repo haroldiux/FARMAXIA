@@ -4,6 +4,7 @@ import {
   check,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -463,3 +464,125 @@ export const backgroundJobs = pgTable(
     )
   ]
 );
+
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    actorUserId: uuid("actor_user_id").notNull(),
+    action: varchar("action", { length: 100 }).notNull(),
+    entityType: varchar("entity_type", { length: 100 }).notNull(),
+    entityId: varchar("entity_id", { length: 100 }).notNull(),
+    payload: jsonb("payload").default({}).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "audit_events_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "audit_events_actor_user_fk",
+      columns: [table.actorUserId],
+      foreignColumns: [users.id]
+    }),
+    unique("audit_events_tenant_id_id_unique").on(table.tenantId, table.id),
+    index("audit_events_tenant_branch_occurred_at_idx").on(
+      table.tenantId,
+      table.branchId,
+      table.occurredAt
+    )
+  ]
+);
+
+export const idempotencyRecords = pgTable(
+  "idempotency_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    operation: varchar("operation", { length: 100 }).notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    requestHash: varchar("request_hash", { length: 64 }).notNull(),
+    statusCode: integer("status_code").notNull(),
+    responsePayload: jsonb("response_payload").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "idempotency_records_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "idempotency_records_user_fk",
+      columns: [table.userId],
+      foreignColumns: [users.id]
+    }),
+    uniqueIndex("idempotency_records_tenant_op_key_unique").on(
+      table.tenantId,
+      table.operation,
+      table.idempotencyKey
+    )
+  ]
+);
+
+export const outboxEvents = pgTable(
+  "outbox_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    aggregateType: varchar("aggregate_type", { length: 100 }).notNull(),
+    aggregateId: varchar("aggregate_id", { length: 100 }).notNull(),
+    eventType: varchar("event_type", { length: 100 }).notNull(),
+    payload: jsonb("payload").notNull(),
+    status: varchar("status", { length: 20 }).default("PENDING").notNull(),
+    retryCount: integer("retry_count").default(0).notNull(),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "outbox_events_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    index("outbox_events_tenant_branch_status_scheduled_idx").on(
+      table.tenantId,
+      table.branchId,
+      table.status,
+      table.scheduledFor
+    )
+  ]
+);
+
+export const documentSequences = pgTable(
+  "document_sequences",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    documentType: varchar("document_type", { length: 50 }).notNull(),
+    currentNumber: bigint("current_number", { mode: "bigint" }).default(sql`0`).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "document_sequences_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    uniqueIndex("document_sequences_tenant_branch_type_unique").on(
+      table.tenantId,
+      table.branchId,
+      table.documentType
+    )
+  ]
+);
+
