@@ -181,3 +181,28 @@ la lista específica de sucursal sobre la global.
 El catálogo DEBE guardar autoridad, código externo, descripción y estado por
 producto. Registrar la autoridad `SIAT` no llama a servicios externos ni afirma
 homologación oficial.
+
+## S27 — proveedores y órdenes de compra
+
+Los proveedores y órdenes DEBEN estar aislados por tenant. Una orden DEBE
+conservar almacén, estado, presentación, cantidad base y costo decimal
+provisional, con referencias tenant/sucursal protegidas por FKs compuestas y RLS.
+
+## S28 — recepción trazable e idempotente
+
+Una recepción DEBE exigir una clave de idempotencia, lote, vencimiento, cantidad y
+costo por línea. Su transacción DEBE crear o reutilizar el lote, incrementar el
+saldo del almacén y registrar un movimiento `RECEIPT`; repetir la clave no puede
+duplicar ninguno de esos efectos.
+
+## S29 — cuentas por pagar básicas
+
+Una factura de proveedor DEBE poder vincularse a la recepción y crear una cuenta
+con monto original, saldo pendiente, moneda y vencimiento. C02 no registra pagos
+ni conciliación bancaria.
+
+## S30 — decisiones abiertas
+
+C02 conserva costos como `numeric(18,4)` sin escoger promedio, FIFO, ponderado,
+impuestos o redondeo (D08), y no importa saldos históricos (D22). Las reglas de
+FEFO, reservas, cuarentena avanzada y mermas quedan para C04/C05.

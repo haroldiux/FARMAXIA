@@ -50,6 +50,13 @@
       "when": 1789581752950,
       "tag": "0006_cool_payback",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789582767582,
+      "tag": "0007_swift_supernaut",
+      "breakpoints": true
     }
   ]
 }

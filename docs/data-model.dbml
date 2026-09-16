@@ -237,6 +237,28 @@ Table purchase_order_items {
   unit_cost numeric(18,4) [not null]
 }
 
+Table goods_receipts {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  purchase_order_id uuid [not null]
+  supplier_id uuid [not null]
+  warehouse_id uuid [not null]
+  idempotency_key varchar [not null]
+  status varchar [not null]
+  received_at timestamptz [not null]
+  indexes { (tenant_id, idempotency_key) [unique] }
+}
+
+Table goods_receipt_items {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  goods_receipt_id uuid [not null]
+  presentation_id uuid [not null]
+  batch_id uuid [not null]
+  quantity_base bigint [not null]
+  unit_cost numeric(18,4) [not null]
+}
+
 Table inventory_batches {
   id uuid [pk]
   tenant_id uuid [not null]
@@ -268,6 +290,30 @@ Table inventory_movements {
   reference_type varchar [not null]
   reference_id uuid [not null]
   occurred_at timestamptz [not null]
+}
+
+Table supplier_invoices {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  supplier_id uuid [not null]
+  goods_receipt_id uuid
+  invoice_number varchar [not null]
+  issued_on date [not null]
+  currency char(3) [not null]
+  total_amount numeric(18,4) [not null]
+  status varchar [not null]
+  indexes { (tenant_id, supplier_id, invoice_number) [unique] }
+}
+
+Table payables {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  supplier_invoice_id uuid [not null]
+  due_on date [not null]
+  original_amount numeric(18,4) [not null]
+  outstanding_amount numeric(18,4) [not null]
+  status varchar [not null]
+  indexes { (tenant_id, supplier_invoice_id) [unique] }
 }
 
 Table inventory_reservations {
@@ -505,9 +551,18 @@ Ref: presentation_prices.price_list_id > price_lists.id
 Ref: presentation_prices.presentation_id > product_presentations.id
 Ref: purchase_orders.supplier_id > suppliers.id
 Ref: purchase_order_items.purchase_order_id > purchase_orders.id
+Ref: goods_receipts.purchase_order_id > purchase_orders.id
+Ref: goods_receipts.supplier_id > suppliers.id
+Ref: goods_receipt_items.goods_receipt_id > goods_receipts.id
+Ref: goods_receipt_items.batch_id > inventory_batches.id
 Ref: inventory_batches.presentation_id > product_presentations.id
 Ref: inventory_balances.batch_id > inventory_batches.id
+Ref: inventory_balances.warehouse_id > warehouses.id
 Ref: inventory_movements.batch_id > inventory_batches.id
+Ref: inventory_movements.warehouse_id > warehouses.id
+Ref: supplier_invoices.supplier_id > suppliers.id
+Ref: supplier_invoices.goods_receipt_id > goods_receipts.id
+Ref: payables.supplier_invoice_id > supplier_invoices.id
 Ref: sales.cash_shift_id > cash_shifts.id
 Ref: sales.customer_id > customers.id
 Ref: sale_items.sale_id > sales.id

@@ -66,3 +66,10 @@ expiración ni purgas.
 Crear el catálogo tenant-scoped de productos, categorías, presentaciones, códigos
 de barras, listas/precios y homologaciones externas preparadas. C01 no implementa
 compras, lotes, FEFO, ventas, validación SIAT ni dispensación controlada.
+
+## Lote C02 — compras, recepción y cuentas por pagar
+
+Registrar proveedores y órdenes, recibir mercadería por lote y vencimiento en un
+almacén y crear cuentas por pagar básicas. Los costos se almacenan como decimales
+provisionales; no se decide todavía el método de costeo/importación de D08/D22,
+ni se integran pagos a proveedores.

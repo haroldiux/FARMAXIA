@@ -55,3 +55,11 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] C01.3 Aplicar RLS, membresía de sucursal y privilegios mínimos a las tablas.
 - [x] C01.4 Implementar `CatalogService`, búsqueda vigente y homologaciones preparadas.
 - [x] C01.5 Ejecutar suite, typecheck, builds, `drizzle-kit check` y migración idempotente.
+
+## Lote C02
+
+- [x] C02.1 Escribir pruebas rojas de proveedor, orden, recepción idempotente, lotes, saldo/movimiento y cuenta por pagar.
+- [x] C02.2 Añadir schema Drizzle y migración `0007_swift_supernaut.sql` con FKs compuestas.
+- [x] C02.3 Aplicar RLS y privilegios mínimos por tenant/sucursal.
+- [x] C02.4 Implementar `ProcurementService` para proveedores, órdenes, recepción y cuenta por pagar.
+- [x] C02.5 Ejecutar pruebas, typecheck, builds, `drizzle-kit check` y migración idempotente; mantener D08/D22 abiertas.

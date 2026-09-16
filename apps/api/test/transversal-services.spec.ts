@@ -57,6 +57,16 @@ describe("transversal services (B06)", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        payables,
+        supplier_invoices,
+        inventory_movements,
+        inventory_balances,
+        goods_receipt_items,
+        goods_receipts,
+        inventory_batches,
+        purchase_order_items,
+        purchase_orders,
+        suppliers,
         product_homologations,
         presentation_prices,
         product_barcodes,

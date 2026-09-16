@@ -12,7 +12,8 @@ export default defineConfig({
       "test/subscription-quotas.spec.ts",
       "test/transversal-services.spec.ts",
       "test/platform-services.spec.ts",
-      "test/catalog.spec.ts"
+      "test/catalog.spec.ts",
+      "test/procurement.spec.ts"
     ],
     fileParallelism: false
   }

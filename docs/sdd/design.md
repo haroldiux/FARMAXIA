@@ -134,3 +134,15 @@ código de barras. La búsqueda filtra producto/presentación activos y usa una
 consulta lateral para escoger el precio vigente más reciente, priorizando una
 lista de la sucursal sobre una global. Los valores monetarios permanecen como
 decimales de PostgreSQL; las reglas de costo y redondeo se reservan para D08.
+
+## Diseño C02: recepción con saldo y movimiento
+
+`ProcurementService.receive` ejecuta la acción mediante el servicio de idempotencia
+de B06. En una única transacción inserta `goods_receipts` y sus líneas, crea o
+reutiliza `inventory_batches`, incrementa `inventory_balances` y añade un
+`inventory_movements` de tipo `RECEIPT`. La recepción valida que el proveedor y
+almacén coincidan con la orden y que la cantidad acumulada no supere lo pedido.
+
+Los costos se persisten como decimales de cuatro posiciones sin cálculo de costo
+de inventario. `supplier_invoices` y `payables` conservan únicamente el saldo
+inicial; pagos y conciliación esperan un lote posterior.

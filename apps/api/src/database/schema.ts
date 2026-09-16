@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -765,5 +766,302 @@ export const productHomologations = pgTable(
       table.authority,
       table.externalCode
     )
+  ]
+);
+
+export const suppliers = pgTable(
+  "suppliers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    name: varchar("name", { length: 200 }).notNull(),
+    taxId: varchar("tax_id", { length: 32 }),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "suppliers_tenant_fk",
+      columns: [table.tenantId],
+      foreignColumns: [tenants.id]
+    }),
+    unique("suppliers_tenant_id_unique").on(table.tenantId, table.id),
+    unique("suppliers_tenant_name_unique").on(table.tenantId, table.name)
+  ]
+);
+
+export const purchaseOrders = pgTable(
+  "purchase_orders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    status: varchar("status", { length: 24 }).default("DRAFT").notNull(),
+    orderedAt: timestamp("ordered_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "purchase_orders_tenant_supplier_fk",
+      columns: [table.tenantId, table.supplierId],
+      foreignColumns: [suppliers.tenantId, suppliers.id]
+    }),
+    foreignKey({
+      name: "purchase_orders_tenant_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    unique("purchase_orders_tenant_id_unique").on(table.tenantId, table.id)
+  ]
+);
+
+export const purchaseOrderItems = pgTable(
+  "purchase_order_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    purchaseOrderId: uuid("purchase_order_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "purchase_order_items_tenant_order_fk",
+      columns: [table.tenantId, table.purchaseOrderId],
+      foreignColumns: [purchaseOrders.tenantId, purchaseOrders.id]
+    }),
+    foreignKey({
+      name: "purchase_order_items_tenant_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    unique("purchase_order_items_tenant_id_unique").on(table.tenantId, table.id),
+    check("purchase_order_items_quantity_positive_check", sql`${table.quantityBase} > 0`),
+    check("purchase_order_items_cost_non_negative_check", sql`${table.unitCost} >= 0`)
+  ]
+);
+
+export const goodsReceipts = pgTable(
+  "goods_receipts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    purchaseOrderId: uuid("purchase_order_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    status: varchar("status", { length: 24 }).default("POSTED").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "goods_receipts_tenant_order_fk",
+      columns: [table.tenantId, table.purchaseOrderId],
+      foreignColumns: [purchaseOrders.tenantId, purchaseOrders.id]
+    }),
+    foreignKey({
+      name: "goods_receipts_tenant_supplier_fk",
+      columns: [table.tenantId, table.supplierId],
+      foreignColumns: [suppliers.tenantId, suppliers.id]
+    }),
+    foreignKey({
+      name: "goods_receipts_tenant_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    unique("goods_receipts_tenant_id_unique").on(table.tenantId, table.id),
+    unique("goods_receipts_tenant_idempotency_unique").on(table.tenantId, table.idempotencyKey)
+  ]
+);
+
+export const inventoryBatches = pgTable(
+  "inventory_batches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    supplierId: uuid("supplier_id"),
+    lotCode: varchar("lot_code", { length: 100 }).notNull(),
+    expiresOn: date("expires_on").notNull(),
+    unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
+    status: varchar("status", { length: 24 }).default("AVAILABLE").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "inventory_batches_tenant_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    foreignKey({
+      name: "inventory_batches_tenant_supplier_fk",
+      columns: [table.tenantId, table.supplierId],
+      foreignColumns: [suppliers.tenantId, suppliers.id]
+    }),
+    unique("inventory_batches_tenant_id_unique").on(table.tenantId, table.id),
+    unique("inventory_batches_tenant_presentation_lot_unique").on(
+      table.tenantId,
+      table.presentationId,
+      table.lotCode
+    ),
+    check("inventory_batches_cost_non_negative_check", sql`${table.unitCost} >= 0`)
+  ]
+);
+
+export const goodsReceiptItems = pgTable(
+  "goods_receipt_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    goodsReceiptId: uuid("goods_receipt_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    unitCost: numeric("unit_cost", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "goods_receipt_items_tenant_receipt_fk",
+      columns: [table.tenantId, table.goodsReceiptId],
+      foreignColumns: [goodsReceipts.tenantId, goodsReceipts.id]
+    }),
+    foreignKey({
+      name: "goods_receipt_items_tenant_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    foreignKey({
+      name: "goods_receipt_items_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    unique("goods_receipt_items_tenant_id_unique").on(table.tenantId, table.id),
+    check("goods_receipt_items_quantity_positive_check", sql`${table.quantityBase} > 0`),
+    check("goods_receipt_items_cost_non_negative_check", sql`${table.unitCost} >= 0`)
+  ]
+);
+
+export const inventoryBalances = pgTable(
+  "inventory_balances",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).default(0).notNull(),
+    reservedBase: bigint("reserved_base", { mode: "number" }).default(0).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    primaryKey({ name: "inventory_balances_pk", columns: [table.tenantId, table.warehouseId, table.batchId] }),
+    foreignKey({
+      name: "inventory_balances_tenant_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "inventory_balances_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    check("inventory_balances_quantity_non_negative_check", sql`${table.quantityBase} >= 0`),
+    check("inventory_balances_reserved_non_negative_check", sql`${table.reservedBase} >= 0`)
+  ]
+);
+
+export const inventoryMovements = pgTable(
+  "inventory_movements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    movementType: varchar("movement_type", { length: 24 }).notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    referenceType: varchar("reference_type", { length: 80 }).notNull(),
+    referenceId: uuid("reference_id").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "inventory_movements_tenant_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "inventory_movements_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    index("inventory_movements_tenant_warehouse_occurred_idx").on(
+      table.tenantId,
+      table.warehouseId,
+      table.occurredAt
+    ),
+    check("inventory_movements_quantity_positive_check", sql`${table.quantityBase} > 0`)
+  ]
+);
+
+export const supplierInvoices = pgTable(
+  "supplier_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    goodsReceiptId: uuid("goods_receipt_id"),
+    invoiceNumber: varchar("invoice_number", { length: 80 }).notNull(),
+    issuedOn: date("issued_on").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    totalAmount: numeric("total_amount", { precision: 18, scale: 4 }).notNull(),
+    status: varchar("status", { length: 24 }).default("OPEN").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "supplier_invoices_tenant_supplier_fk",
+      columns: [table.tenantId, table.supplierId],
+      foreignColumns: [suppliers.tenantId, suppliers.id]
+    }),
+    foreignKey({
+      name: "supplier_invoices_tenant_receipt_fk",
+      columns: [table.tenantId, table.goodsReceiptId],
+      foreignColumns: [goodsReceipts.tenantId, goodsReceipts.id]
+    }),
+    unique("supplier_invoices_tenant_id_unique").on(table.tenantId, table.id),
+    unique("supplier_invoices_tenant_supplier_number_unique").on(
+      table.tenantId,
+      table.supplierId,
+      table.invoiceNumber
+    ),
+    check("supplier_invoices_amount_non_negative_check", sql`${table.totalAmount} >= 0`)
+  ]
+);
+
+export const payables = pgTable(
+  "payables",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    supplierInvoiceId: uuid("supplier_invoice_id").notNull(),
+    dueOn: date("due_on").notNull(),
+    originalAmount: numeric("original_amount", { precision: 18, scale: 4 }).notNull(),
+    outstandingAmount: numeric("outstanding_amount", { precision: 18, scale: 4 }).notNull(),
+    status: varchar("status", { length: 24 }).default("OPEN").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "payables_tenant_invoice_fk",
+      columns: [table.tenantId, table.supplierInvoiceId],
+      foreignColumns: [supplierInvoices.tenantId, supplierInvoices.id]
+    }),
+    unique("payables_tenant_id_unique").on(table.tenantId, table.id),
+    unique("payables_tenant_invoice_unique").on(table.tenantId, table.supplierInvoiceId),
+    check("payables_original_amount_non_negative_check", sql`${table.originalAmount} >= 0`),
+    check("payables_outstanding_amount_non_negative_check", sql`${table.outstandingAmount} >= 0`)
   ]
 );
