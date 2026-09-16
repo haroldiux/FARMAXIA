@@ -1,0 +1,27 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Node.js 22, pnpm monorepo, NestJS 12, Fastify, Next.js 16, PostgreSQL 18, Drizzle ORM, Vitest
+  Architecture: Multi-tenant SaaS with PostgreSQL RLS, composite foreign keys, transactional boundaries (TenantDatabase.withScope)
+  Testing: Vitest, TDD against real PostgreSQL in Docker Compose
+  Style: TypeScript strict, ESLint, conventional commits
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Document architecture decisions with rationale
+    - Maintain D01: cashier selects digital invoice or non-fiscal receipt per sale without additional supervisor guards
+  tasks:
+    - Group tasks by phase
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+  apply:
+    - TDD discipline (write red test first, then implement)
+    - Always enforce RLS and tenant/branch isolation
+  verify:
+    - Run automated test suite against real PostgreSQL container
+    - Verify schema migrations idempotence
