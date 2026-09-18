@@ -1,7 +1,7 @@
 # Estado de implementación — FARMAXIA
 
 **Actualizado:** 18 de septiembre de 2026
-**Fase actual:** F3-WEB — vista operativa de inventario.
+**Fase actual:** F4-WEB — compras y órdenes de abastecimiento.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
@@ -23,6 +23,7 @@
 | C05 | Completada | Migración `0010_wealthy_katie_power.sql`, alertas de vencimiento, cuarentena/cadena de frío, mermas y conteos autorizados con idempotencia, auditoría y RLS; 37 pruebas verdes; change archivado. | Preparar F3-WEB; sensores, notificaciones, D08/D09/D22 siguen fuera de alcance. |
 | F1-WEB | Completada como base funcional | Login contra API, refresh/logout, dashboard protegido, contexto tenant/sucursal y permisos efectivos; builds Next y CORS verificados dentro de Docker. | CRUD de catálogo, ventas y caja se implementará por lotes posteriores. |
 | F3-WEB | Completada | Cliente scoped y vista `/inventory` con almacenes de la sucursal activa, alertas FEFO a 7/30/90 días, estados de lote y acciones auditadas de cuarentena, liberación y merma; suite API en 38 pruebas; builds y smoke Docker verificados. | Reservas comerciales, sensores, notificaciones, D08/D09/D22 siguen fuera de alcance. |
+| F4-WEB | Completada | Controller y módulo HTTP de compras, listados scoped de proveedores/presentaciones/órdenes y vista `/procurement` con alta de proveedor y orden de una línea; suite API en 39 pruebas; builds y smoke Docker verificados. | Recepción por lote, facturas/CxP e importación se mantienen para lotes posteriores. |
 
 ## Límites del lote B01
 
@@ -132,8 +133,23 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 - Verificación: typecheck/build de API y Web, `git diff --check`, Compose,
   healthchecks y smoke HTTP fueron ejecutados antes de publicar el lote.
 
+## Evidencia F4-WEB
+
+- Red/Green: la prueba de listados comenzó con `listSuppliers` inexistente y
+  pasó después con proveedores activos tenant-scoped, órdenes limitadas a la
+  sucursal y líneas de presentación/producto.
+- API: `ProcurementController` expone proveedores, presentaciones y órdenes
+  bajo `inventory.manage`; `ProcurementModule` quedó registrado en `AppModule`.
+- Web: `/procurement` permite registrar proveedores y crear una orden de una
+  línea; muestra órdenes existentes, estados y aviso explícito de recepción
+  diferida sin mutar stock.
+- Verificación: suite completa pasó con 39 pruebas; typecheck/build API y Web,
+  `drizzle-kit check`, Compose y smoke (`/procurement` 200, suppliers sin
+  bearer 401) fueron ejecutados; change archivado en
+  `openspec/changes/archive/2026-09-18-16-compras-f4-web`.
+
 ## Próxima tarea
 
-Continuar con compras/recepción o ventas y caja según prioridad de producto;
-la integración comercial de reservas depende de D09 y D08/D22 permanecen
-abiertas para costos/importación.
+Continuar con F5-WEB para recepción por lote y conciliación física, o priorizar
+ventas y caja; la integración comercial de reservas depende de D09 y D08/D22
+permanecen abiertas para costos/importación.

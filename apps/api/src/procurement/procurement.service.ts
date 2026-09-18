@@ -44,6 +44,52 @@ export interface ReceiveResult {
   lineCount: number;
 }
 
+export interface SupplierSummary {
+  id: string;
+  name: string;
+  taxId: string | null;
+  isActive: boolean;
+}
+
+export interface SupplierListResult {
+  items: SupplierSummary[];
+}
+
+export interface PresentationSummary {
+  presentationId: string;
+  presentationName: string;
+  productName: string;
+  baseUnitFactor: number;
+  isSellable: boolean;
+}
+
+export interface PresentationListResult {
+  items: PresentationSummary[];
+}
+
+export interface PurchaseOrderLineSummary {
+  presentationId: string;
+  presentationName: string;
+  productName: string;
+  quantityBase: number;
+  unitCost: string;
+}
+
+export interface PurchaseOrderSummary {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  warehouseId: string;
+  warehouseName: string;
+  status: string;
+  orderedAt: string;
+  lines: PurchaseOrderLineSummary[];
+}
+
+export interface PurchaseOrderListResult {
+  items: PurchaseOrderSummary[];
+}
+
 export interface SupplierInvoiceInput {
   supplierId: string;
   goodsReceiptId: string;
@@ -68,6 +114,17 @@ interface PurchaseOrderRow {
   supplierId: string;
   warehouseId: string;
   status: string;
+}
+
+interface PurchaseOrderListRow {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  warehouseId: string;
+  warehouseName: string;
+  status: string;
+  orderedAt: string | Date;
+  lines: PurchaseOrderLineSummary[];
 }
 
 interface QuantityRow {
@@ -139,6 +196,90 @@ export class ProcurementService {
 
   constructor(private readonly database: TenantDatabase) {
     this.idempotency = new IdempotencyService();
+  }
+
+  async listSuppliers(scope: TenantScope): Promise<SupplierListResult> {
+    return this.database.withScope(scope, async (client) => {
+      const result = await client.query<SupplierSummary>(
+        `select id,
+                name,
+                tax_id as "taxId",
+                is_active as "isActive"
+         from suppliers
+         where tenant_id = $1 and is_active = true
+         order by name asc, id asc`,
+        [scope.tenantId]
+      );
+      return { items: result.rows };
+    });
+  }
+
+  async listPresentations(scope: TenantScope): Promise<PresentationListResult> {
+    return this.database.withScope(scope, async (client) => {
+      const result = await client.query<PresentationSummary>(
+        `select presentation.id as "presentationId",
+                presentation.name as "presentationName",
+                product.name as "productName",
+                presentation.base_unit_factor::int as "baseUnitFactor",
+                presentation.is_sellable as "isSellable"
+         from product_presentations presentation
+         join products product
+           on product.tenant_id = presentation.tenant_id and product.id = presentation.product_id
+         where presentation.tenant_id = $1 and product.is_active = true
+         order by product.name asc, presentation.name asc, presentation.id asc`,
+        [scope.tenantId]
+      );
+      return { items: result.rows };
+    });
+  }
+
+  async listPurchaseOrders(scope: TenantScope): Promise<PurchaseOrderListResult> {
+    return this.database.withScope(scope, async (client) => {
+      const result = await client.query<PurchaseOrderListRow>(
+        `select po.id,
+                po.supplier_id as "supplierId",
+                supplier.name as "supplierName",
+                po.warehouse_id as "warehouseId",
+                warehouse.name as "warehouseName",
+                po.status,
+                po.ordered_at as "orderedAt",
+                coalesce(
+                  json_agg(
+                    json_build_object(
+                      'presentationId', item.presentation_id,
+                      'presentationName', presentation.name,
+                      'productName', product.name,
+                      'quantityBase', item.quantity_base,
+                      'unitCost', item.unit_cost::text
+                    ) order by item.id
+                  ) filter (where item.id is not null),
+                  '[]'::json
+                ) as lines
+         from purchase_orders po
+         join suppliers supplier
+           on supplier.tenant_id = po.tenant_id and supplier.id = po.supplier_id
+         join warehouses warehouse
+           on warehouse.tenant_id = po.tenant_id and warehouse.id = po.warehouse_id
+         left join purchase_order_items item
+           on item.tenant_id = po.tenant_id and item.purchase_order_id = po.id
+         left join product_presentations presentation
+           on presentation.tenant_id = item.tenant_id and presentation.id = item.presentation_id
+         left join products product
+           on product.tenant_id = presentation.tenant_id and product.id = presentation.product_id
+         where po.tenant_id = $1 and warehouse.branch_id = $2
+         group by po.id, po.supplier_id, supplier.name, po.warehouse_id,
+                  warehouse.name, po.status, po.ordered_at
+         order by po.ordered_at desc, po.id desc`,
+        [scope.tenantId, scope.branchId]
+      );
+      return {
+        items: result.rows.map((row) => ({
+          ...row,
+          orderedAt: new Date(row.orderedAt).toISOString(),
+          lines: row.lines ?? []
+        }))
+      };
+    });
   }
 
   async createSupplier(scope: TenantScope, input: SupplierInput): Promise<CreatedRow> {

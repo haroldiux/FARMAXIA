@@ -67,6 +67,19 @@ Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog
 Las rutas no aceptan `tenantId` o `branchId` de autorización desde el cuerpo: el
 contexto proviene del access token y las consultas usan RLS.
 
+## Compras F4-WEB
+
+| Ruta | Acceso y contrato |
+| --- | --- |
+| `GET /api/v1/procurement/suppliers` | Requiere `inventory.manage`. Devuelve `{ items }` de proveedores activos del tenant, ordenados por nombre e ID. El modelo C02 no asigna proveedores a una sucursal. |
+| `GET /api/v1/procurement/presentations` | Requiere `inventory.manage`. Devuelve presentaciones de productos activos del tenant para seleccionar líneas de compra; es una lectura y no modifica catálogo. |
+| `GET /api/v1/procurement/purchase-orders` | Requiere `inventory.manage`. Devuelve órdenes de almacenes de la sucursal activa, proveedor/almacén, estado, fecha y líneas con producto, presentación, cantidad base y costo unitario. |
+| `POST /api/v1/procurement/suppliers` | Requiere `inventory.manage`. Recibe `name` y `taxId` opcional; crea un proveedor activo y devuelve `{ id }`. |
+| `POST /api/v1/procurement/purchase-orders` | Requiere `inventory.manage`. Recibe `supplierId`, `warehouseId` y `lines` con presentación, cantidad base entera positiva y costo decimal; crea una orden `SUBMITTED` y devuelve `{ id }`. |
+
+La recepción parcial/completa, los lotes y las facturas de proveedor no forman
+parte de F4-WEB; se implementarán en lotes posteriores sin inventar stock.
+
 ## Inventario operativo C04/C05
 
 | Ruta | Acceso y contrato |

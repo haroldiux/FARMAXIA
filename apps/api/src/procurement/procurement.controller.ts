@@ -1,0 +1,55 @@
+import { Body, Controller, Get, Post, Req, UnauthorizedException } from "@nestjs/common";
+import { RequirePermissions } from "../auth/auth.decorators.js";
+import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
+import {
+  ProcurementService,
+  type PresentationListResult,
+  type PurchaseOrderInput,
+  type PurchaseOrderListResult,
+  type SupplierInput,
+  type SupplierListResult
+} from "./procurement.service.js";
+
+function scopeFrom(request: AuthenticatedRequest) {
+  if (!request.auth) {
+    throw new UnauthorizedException();
+  }
+  return request.auth;
+}
+
+@Controller("api/v1/procurement")
+@RequirePermissions("inventory.manage")
+export class ProcurementController {
+  constructor(private readonly procurement: ProcurementService) {}
+
+  @Get("suppliers")
+  listSuppliers(@Req() request: AuthenticatedRequest): Promise<SupplierListResult> {
+    return this.procurement.listSuppliers(scopeFrom(request));
+  }
+
+  @Post("suppliers")
+  createSupplier(
+    @Req() request: AuthenticatedRequest,
+    @Body() input: SupplierInput
+  ): Promise<{ id: string }> {
+    return this.procurement.createSupplier(scopeFrom(request), input);
+  }
+
+  @Get("presentations")
+  listPresentations(@Req() request: AuthenticatedRequest): Promise<PresentationListResult> {
+    return this.procurement.listPresentations(scopeFrom(request));
+  }
+
+  @Get("purchase-orders")
+  listPurchaseOrders(@Req() request: AuthenticatedRequest): Promise<PurchaseOrderListResult> {
+    return this.procurement.listPurchaseOrders(scopeFrom(request));
+  }
+
+  @Post("purchase-orders")
+  createPurchaseOrder(
+    @Req() request: AuthenticatedRequest,
+    @Body() input: PurchaseOrderInput
+  ): Promise<{ id: string }> {
+    return this.procurement.createPurchaseOrder(scopeFrom(request), input);
+  }
+}

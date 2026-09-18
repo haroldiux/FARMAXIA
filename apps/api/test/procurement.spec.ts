@@ -208,6 +208,91 @@ describe("procurement and receiving service (C02)", () => {
     expect(payableRows.rows).toEqual([{ outstanding_amount: "25.0000" }]);
   });
 
+  it("lists active suppliers and purchase orders scoped to the branch", async () => {
+    const category = await catalog.createCategory(scope, {
+      name: "Analgésicos",
+      isControlled: false
+    });
+    const product = await catalog.createProduct(scope, {
+      categoryId: category.id,
+      name: "Paracetamol",
+      activeIngredient: "Paracetamol 500 mg"
+    });
+    const presentation = await catalog.createPresentation(scope, {
+      productId: product.id,
+      name: "Caja x 20 tabletas",
+      baseUnitFactor: 20,
+      isSellable: true
+    });
+    const supplier = await procurement.createSupplier(scope, {
+      name: "Proveedor visible",
+      taxId: "5000010"
+    });
+    await ownerPool.query(
+      "insert into suppliers (tenant_id, name, tax_id, is_active) values ($1, $2, $3, false)",
+      [tenantId, "Proveedor inactivo", "5000011"]
+    );
+    const order = await procurement.createPurchaseOrder(scope, {
+      supplierId: supplier.id,
+      warehouseId,
+      lines: [{ presentationId: presentation.id, quantityBase: 20, unitCost: "3.2500" }]
+    });
+    const otherBranchId = "00000000-0000-4000-8000-000000000551";
+    const otherWarehouseId = "00000000-0000-4000-8000-000000000561";
+    await ownerPool.query(
+      "insert into branches (id, tenant_id, legal_entity_id, code, name) values ($1, $2, $3, $4, $5)",
+      [otherBranchId, tenantId, legalEntityId, "OTHER", "Other branch"]
+    );
+    await ownerPool.query(
+      "insert into warehouses (id, tenant_id, branch_id, name) values ($1, $2, $3, $4)",
+      [otherWarehouseId, tenantId, otherBranchId, "Other warehouse"]
+    );
+    await ownerPool.query(
+      "insert into user_branch_memberships (user_id, tenant_id, branch_id) values ($1, $2, $3)",
+      [userId, tenantId, otherBranchId]
+    );
+    await procurement.createPurchaseOrder({ ...scope, branchId: otherBranchId }, {
+      supplierId: supplier.id,
+      warehouseId: otherWarehouseId,
+      lines: [{ presentationId: presentation.id, quantityBase: 10, unitCost: "3.2500" }]
+    });
+
+    const suppliers = await procurement.listSuppliers(scope);
+    const presentations = await procurement.listPresentations(scope);
+    const orders = await procurement.listPurchaseOrders(scope);
+
+    expect(suppliers.items).toEqual([
+      { id: supplier.id, name: "Proveedor visible", taxId: "5000010", isActive: true }
+    ]);
+    expect(presentations.items).toEqual([
+      {
+        presentationId: presentation.id,
+        presentationName: "Caja x 20 tabletas",
+        productName: "Paracetamol",
+        baseUnitFactor: 20,
+        isSellable: true
+      }
+    ]);
+    expect(orders.items).toHaveLength(1);
+    expect(orders.items[0]).toMatchObject({
+      id: order.id,
+      supplierId: supplier.id,
+      supplierName: "Proveedor visible",
+      warehouseId,
+      warehouseName: "Main warehouse",
+      status: "SUBMITTED",
+      lines: [
+        {
+          presentationId: presentation.id,
+          presentationName: "Caja x 20 tabletas",
+          productName: "Paracetamol",
+          quantityBase: 20,
+          unitCost: "3.2500"
+        }
+      ]
+    });
+  });
+
   it("rejects invalid quantities and costs before changing inventory", async () => {
     await expect(
       procurement.receive(scope, {

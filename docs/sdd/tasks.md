@@ -130,3 +130,14 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
   liberación y merma.
 - [x] F3-WEB.4 Enlazar Inventario desde el shell por `inventory.manage`,
   verificar responsive, API/Web y Docker; archivar y publicar.
+
+## Lote F4-WEB
+
+- [x] F4-WEB.1 Escribir prueba scoped para proveedores, presentaciones y
+  órdenes con líneas de sucursal.
+- [x] F4-WEB.2 Exponer controller/módulo de compras bajo `inventory.manage` y
+  conservar el servicio C02 de recepción sin duplicar validación.
+- [x] F4-WEB.3 Implementar `/procurement` con alta de proveedor, creación de
+  orden de una línea, listados y aviso de recepción diferida.
+- [x] F4-WEB.4 Verificar suite completa, builds, Docker, smoke y archivar/
+  publicar el change.

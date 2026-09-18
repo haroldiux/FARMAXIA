@@ -87,6 +87,9 @@ export function DashboardShell() {
             </Link> : item.label === "Inventario" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/inventory" key={item.label}>
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
+            </Link> : item.label === "Compras" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/procurement" key={item.label}>
+              <span className="nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
             </Link> : <button className={`nav-item ${item.active ? "is-active" : ""}`} disabled={!item.active} key={item.label} type="button">
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
