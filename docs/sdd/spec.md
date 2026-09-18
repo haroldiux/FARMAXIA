@@ -216,3 +216,11 @@ y registra el movimiento; una salida no puede reducirlo por debajo de
 `reserved_base`. Repetir la misma clave y payload devuelve el resultado original
 sin duplicar movimiento ni auditoría. Las decisiones D08 y D22 permanecen
 abiertas.
+
+## S32 — composición local dockerizada
+
+`docker compose up --build -d` DEBE construir y levantar PostgreSQL, Redis, API
+y web. La API DEBE esperar dependencias saludables, ejecutar migraciones
+idempotentes y servir en el puerto 3001. La web DEBE usar el build standalone de
+Next.js y servir en el puerto 3000. Las imágenes DEBEN instalar desde el
+lockfile con Node 22 y no depender de artefactos del host.

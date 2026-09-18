@@ -15,6 +15,7 @@
 | B04 | Completada | Migración `0003`, contexto tenant/usuario/sucursal, RLS de sucursal, metadatos de jobs/archivos y claves de caché aisladas; 11 pruebas verdes. | Base disponible para B05. |
 | B05 | Completada | Migración `0004`, plan `COMPLETO`, máquina de estados, entitlements y cuota atómica; 14 pruebas verdes. | Base disponible para administrar altas y segmentar planes posteriores. |
 | B06 | Completada | Migración `0005`, auditoría inmutable con trigger, idempotencia transaccional con SHA-256, outbox PENDING y secuencias atómicas por sucursal; 22 pruebas verdes. | Base disponible para catálogo e inventario. |
+| B07 | Completada | Dockerfiles reproducibles para API/web, Compose con cuatro servicios, migración automática y healthchecks; API y web respondieron HTTP 200. | Las vistas funcionales de dominio aún se construirán por lotes posteriores. |
 | C01 | Completada | Migración `0006_cool_payback.sql`, catálogo con FKs/RLS, búsqueda de barras, precio por sucursal y homologación preparada; 24 pruebas verdes. | Base disponible para compras, recepción y lotes. |
 | C02 | Completada | Migración `0007_swift_supernaut.sql`, proveedores, órdenes, recepción idempotente, lotes, saldos, movimiento `RECEIPT` y cuentas por pagar; 26 pruebas verdes. | Costeo/importación siguen provisionales hasta D08/D22. |
 | C03 | Completada | Migración `0008_messy_mauler.sql`, dirección `IN`/`OUT`, conciliación idempotente, ajuste atómico respetando reservas, auditoría y RLS; 28 pruebas verdes. | C04 aborda FEFO, reservas operativas y vencimientos; D08/D22 permanecen abiertas. |
@@ -71,7 +72,14 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 - Migración: `0008_messy_mauler.sql` se aplicó a PostgreSQL local y de pruebas; añade `inventory_reconciliations`, dirección de movimiento, FKs, RLS y privilegios mínimos.
 - Verificación: `pnpm --filter @farmaxia/api test` pasó con 28 pruebas en 11 suites; `tsc --noEmit`, build API/web y `drizzle-kit check` pasaron.
 
+## Evidencia B07
+
+- Construcción: `docker compose build api web` compiló API NestJS y web Next.js desde `pnpm-lock.yaml` con Node 22.
+- Ejecución: `docker compose up -d` levantó `postgres`, `redis`, `api` y `web`; la API aplicó migraciones automáticamente.
+- Healthchecks: `docker compose ps` mostró los cuatro servicios saludables; `GET /health` y `GET /` respondieron HTTP 200.
+
 ## Próxima tarea
 
-Iniciar C04 — FEFO, reservas operativas y reglas de vencimiento. D08 y D22
-permanecen abiertas para costos/importación.
+Iniciar el frontend funcional en paralelo con C04, comenzando por las vistas
+autenticadas del backoffice; C04 cubre FEFO, reservas operativas y reglas de
+vencimiento. D08 y D22 permanecen abiertas para costos/importación.

@@ -80,3 +80,10 @@ Completar el núcleo de inventario con dirección explícita `IN`/`OUT`, ajustes
 por conteo físico y evidencia idempotente/auditable. El ajuste respeta el saldo
 reservado y el aislamiento tenant/sucursal. C03 no decide D08 (costeo), D22
 (importación), FEFO, reservas operativas, ventas ni traspasos.
+
+## Lote B07 — entorno local completamente dockerizado
+
+Incorporar imágenes reproducibles para API y web y extender Compose para levantar
+PostgreSQL, Redis, API NestJS y Next.js con healthchecks. La API ejecutará las
+migraciones al iniciar. Este lote no implica que las vistas funcionales de
+catálogo, ventas o POS ya estén construidas.

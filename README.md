@@ -8,19 +8,30 @@ SaaS multisucursal y multi-tenant para farmacias bolivianas.
 - pnpm 11.19+
 - Docker Desktop para PostgreSQL y Redis locales
 
-## Inicio
+## Inicio con Docker (recomendado)
 
 ```powershell
-pnpm install
-Copy-Item apps/api/.env.example apps/api/.env
-docker compose up -d
-pnpm --filter @farmaxia/api db:migrate
-pnpm dev
+docker compose up --build -d
+docker compose ps
 ```
 
 - Web: `http://localhost:3000`
 - API: `http://localhost:3001/health`
 - PostgreSQL local: `localhost:5433`
+- Redis local: `localhost:6379`
+
+La API aplica automáticamente las migraciones Drizzle antes de iniciar. Para
+seguir los logs usa `docker compose logs -f api web`; para detener el entorno
+usa `docker compose down` (los volúmenes se conservan).
+
+## Inicio sin contenedores (desarrollo alternativo)
+
+```powershell
+pnpm install
+Copy-Item apps/api/.env.example apps/api/.env
+pnpm --filter @farmaxia/api db:migrate
+pnpm dev
+```
 
 Antes de iniciar la API, sustituye `AUTH_JWT_SECRET` de `apps/api/.env` por un
 secreto local único de al menos 32 caracteres. Puedes generar uno con:

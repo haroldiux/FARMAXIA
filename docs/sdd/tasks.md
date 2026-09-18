@@ -71,3 +71,10 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] C03.3 Implementar `InventoryService` con ajuste atómico, lectura de saldo, auditoría e idempotencia.
 - [x] C03.4 Ejecutar suite PostgreSQL real (28 pruebas), typecheck, builds, `drizzle-kit check` y migración idempotente.
 - [x] C03.5 Mantener D08/D22 abiertas y documentar evidencia para iniciar C04.
+
+## Lote B07
+
+- [x] B07.1 Crear Dockerfiles reproducibles para API y web.
+- [x] B07.2 Añadir servicios API/web, healthchecks y dependencias al Compose.
+- [x] B07.3 Ejecutar migraciones desde el arranque de la API.
+- [x] B07.4 Construir y verificar los cuatro contenedores con HTTP 200.

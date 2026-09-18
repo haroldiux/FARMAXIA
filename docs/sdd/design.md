@@ -156,3 +156,12 @@ diferencia no es cero añade un movimiento `ADJUSTMENT` con dirección explícit
 si es cero conserva únicamente la evidencia. La auditoría se escribe en la
 misma transacción. `inventory_reconciliations` usa FKs compuestas y RLS de
 tenant/sucursal. C03 no selecciona método de costeo ni importa saldos.
+
+## Diseño B07: ejecución local en contenedores
+
+Cada aplicación tiene un Dockerfile con contexto raíz del workspace, instalación
+reproducible mediante pnpm y Node 22. API conserva Drizzle para ejecutar
+`db:migrate` antes de arrancar NestJS. Web compila con `output: "standalone"` y
+su runtime solo copia el servidor y estáticos de Next. Compose conecta la API a
+`postgres`/`redis` por DNS interno, publica 3001/3000 al host y usa healthchecks
+para ordenar el arranque.
