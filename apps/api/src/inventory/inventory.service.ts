@@ -35,9 +35,20 @@ export interface ExpiryAlert {
   lotCode: string;
   expiresOn: string;
   status: "EXPIRED" | "DUE_SOON";
+  batchStatus: "AVAILABLE" | "QUARANTINED" | "DISPOSED";
   quantityBase: number;
   reservedBase: number;
   availableQuantity: number;
+}
+
+export interface WarehouseSummary {
+  id: string;
+  name: string;
+  isDispatchEnabled: boolean;
+}
+
+export interface WarehouseListResult {
+  items: WarehouseSummary[];
 }
 
 export type QuarantineReasonCode = "QUALITY" | "COLD_CHAIN" | "DAMAGE" | "OTHER";
@@ -173,9 +184,16 @@ interface ExpiryAlertRow {
   lotCode: string;
   expiresOn: string | Date;
   alertStatus: "EXPIRED" | "DUE_SOON";
+  batchStatus: "AVAILABLE" | "QUARANTINED" | "DISPOSED";
   quantityBase: string;
   reservedBase: string;
   availableQuantity: string;
+}
+
+interface WarehouseRow {
+  id: string;
+  name: string;
+  isDispatchEnabled: boolean;
 }
 
 interface BatchStatusRow {
@@ -309,6 +327,7 @@ export class InventoryService {
         `select b.id as "batchId",
                 b.lot_code as "lotCode",
                 b.expires_on as "expiresOn",
+                b.status as "batchStatus",
                 case when b.expires_on < current_date then 'EXPIRED' else 'DUE_SOON' end as "alertStatus",
                 ib.quantity_base as "quantityBase",
                 ib.reserved_base as "reservedBase",
@@ -331,10 +350,26 @@ export class InventoryService {
         lotCode: row.lotCode,
         expiresOn: dateOnly(row.expiresOn),
         status: row.alertStatus,
+        batchStatus: row.batchStatus,
         quantityBase: Number(row.quantityBase),
         reservedBase: Number(row.reservedBase),
         availableQuantity: Number(row.availableQuantity)
       }));
+    });
+  }
+
+  async listWarehouses(scope: TenantScope): Promise<WarehouseListResult> {
+    return this.database.withScope(scope, async (client) => {
+      const result = await client.query<WarehouseRow>(
+        `select id,
+                name,
+                is_dispatch_enabled as "isDispatchEnabled"
+         from warehouses
+         where tenant_id = $1 and branch_id = $2
+         order by name asc, id asc`,
+        [scope.tenantId, scope.branchId]
+      );
+      return { items: result.rows };
     });
   }
 

@@ -500,6 +500,25 @@ describe("inventory adjustments and reconciliation (C03)", () => {
     });
   });
 
+  it("lists only active-branch warehouses in deterministic order", async () => {
+    const otherBranchId = "00000000-0000-4000-8000-000000000612";
+    const otherWarehouseId = "00000000-0000-4000-8000-000000000642";
+    await ownerPool.query(
+      "insert into branches (id, tenant_id, legal_entity_id, code, name) values ($1, $2, $3, $4, $5)",
+      [otherBranchId, tenantId, legalEntityId, "OTHER", "Other branch"]
+    );
+    await ownerPool.query(
+      "insert into warehouses (id, tenant_id, branch_id, name) values ($1, $2, $3, $4)",
+      [otherWarehouseId, tenantId, otherBranchId, "Other warehouse"]
+    );
+
+    const result = await inventory.listWarehouses(scope);
+
+    expect(result).toEqual({
+      items: [{ id: warehouseId, name: "Inventory warehouse", isDispatchEnabled: true }]
+    });
+  });
+
   it("quarantines and releases a cold-chain batch idempotently", async () => {
     const batchId = await seedBatch();
 

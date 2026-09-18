@@ -16,6 +16,7 @@ import {
   type QuarantineInput,
   type ReconcileInput,
   type ReleaseQuarantineInput,
+  type WarehouseListResult,
   type WasteInput,
   type ConsumeReservationInput,
   type ReserveFefoInput,
@@ -33,6 +34,11 @@ function scopeFrom(request: AuthenticatedRequest) {
 @RequirePermissions("inventory.manage")
 export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
+
+  @Get("warehouses")
+  listWarehouses(@Req() request: AuthenticatedRequest): Promise<WarehouseListResult> {
+    return this.inventory.listWarehouses(scopeFrom(request));
+  }
 
   @Get("expiry-alerts")
   listExpiryAlerts(

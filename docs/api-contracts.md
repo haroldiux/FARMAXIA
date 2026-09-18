@@ -71,11 +71,12 @@ contexto proviene del access token y las consultas usan RLS.
 
 | Ruta | Acceso y contrato |
 | --- | --- |
+| `GET /api/v1/inventory/warehouses` | Requiere `inventory.manage`. Devuelve `{ items }` con los almacenes visibles de la sucursal activa, ordenados por nombre e identificador; cada elemento incluye `id`, `name` e `isDispatchEnabled`. |
 | `POST /api/v1/inventory/reservations/fefo` | Requiere `inventory.manage`. Recibe `idempotencyKey`, `warehouseId`, `presentationId`, `quantityRequested` y `expiresAt`; reserva unidades base completas por vencimiento FEFO. |
 | `POST /api/v1/inventory/reservations/{reservationId}/release` | Requiere `inventory.manage`. Recibe una clave de idempotencia y libera la reserva activa; no modifica stock físico. |
 | `POST /api/v1/inventory/reservations/{reservationId}/consume` | Requiere `inventory.manage`. Recibe clave, `referenceType` y `referenceId`; consume la reserva, decrementa stock y registra movimiento `OUT`. |
 | `POST /api/v1/inventory/reservations/expire` | Requiere `inventory.manage`. Libera todas las reservas activas vencidas visibles en la sucursal y devuelve sus IDs. |
-| `GET /api/v1/inventory/expiry-alerts?warehouseId={id}&horizonDays={n}` | Requiere `inventory.manage`. Consulta lotes con existencia física que vencen dentro de 0–365 días; devuelve `EXPIRED`/`DUE_SOON` sin mutar stock. |
+| `GET /api/v1/inventory/expiry-alerts?warehouseId={id}&horizonDays={n}` | Requiere `inventory.manage`. Consulta lotes con existencia física que vencen dentro de 0–365 días; devuelve `EXPIRED`/`DUE_SOON`, `batchStatus`, cantidades física/reservada/disponible y no muta stock. |
 | `POST /api/v1/inventory/batches/{batchId}/quarantine` | Requiere `inventory.manage`. Recibe `warehouseId`, `idempotencyKey`, `reasonCode`, `reason` y temperatura opcional/obligatoria para `COLD_CHAIN`; rechaza reservas activas. |
 | `POST /api/v1/inventory/batches/{batchId}/release-quarantine` | Requiere `inventory.manage`. Recibe `warehouseId`, `idempotencyKey` y `reason`; solo libera lotes no vencidos. |
 | `POST /api/v1/inventory/waste` | Requiere `inventory.manage`. Recibe almacén, lote, `quantityBase`, motivo y clave; registra `WASTE`/`OUT` sobre stock libre. |

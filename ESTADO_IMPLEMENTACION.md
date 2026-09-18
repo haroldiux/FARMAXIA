@@ -21,7 +21,8 @@
 | C03 | Completada | Migración `0008_messy_mauler.sql`, dirección `IN`/`OUT`, conciliación idempotente, ajuste atómico respetando reservas, auditoría y RLS; 28 pruebas verdes. | C04 aborda FEFO, reservas operativas y vencimientos; D08/D22 permanecen abiertas. |
 | C04 | Completada | Motor FEFO transaccional con factor de presentación, reservas por lote, liberación/consumo/expiración idempotentes, auditoría y RLS en migración `0009_productive_human_torch.sql`; 33 pruebas verdes. | La integración con proformas/ventas y la política comercial de reservas dependen de D09; D08/D22 siguen abiertas. |
 | C05 | Completada | Migración `0010_wealthy_katie_power.sql`, alertas de vencimiento, cuarentena/cadena de frío, mermas y conteos autorizados con idempotencia, auditoría y RLS; 37 pruebas verdes; change archivado. | Preparar F3-WEB; sensores, notificaciones, D08/D09/D22 siguen fuera de alcance. |
-| F1-WEB | Completada como base funcional | Login contra API, refresh/logout, dashboard protegido, contexto tenant/sucursal y permisos efectivos; builds Next y CORS verificados dentro de Docker. | CRUD de catálogo, inventario, ventas y caja se implementará por lotes posteriores. |
+| F1-WEB | Completada como base funcional | Login contra API, refresh/logout, dashboard protegido, contexto tenant/sucursal y permisos efectivos; builds Next y CORS verificados dentro de Docker. | CRUD de catálogo, ventas y caja se implementará por lotes posteriores. |
+| F3-WEB | Completada | Cliente scoped y vista `/inventory` con almacenes de la sucursal activa, alertas FEFO a 7/30/90 días, estados de lote y acciones auditadas de cuarentena, liberación y merma; suite API en 38 pruebas; builds y smoke Docker verificados. | Reservas comerciales, sensores, notificaciones, D08/D09/D22 siguen fuera de alcance. |
 
 ## Límites del lote B01
 
@@ -117,8 +118,22 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
   `drizzle-kit check` y Compose pasaron; los cuatro servicios quedaron
   healthy y el change se archivó en `openspec/changes/archive/2026-09-18-14-inventario-c05`.
 
+## Evidencia F3-WEB
+
+- Red/Green: la prueba scoped de almacenes comenzó con `listWarehouses` inexistente
+  y pasó después con orden determinista por nombre/ID; la suite de inventario
+  quedó en 11 pruebas y la suite API completa en 38.
+- API: `GET /api/v1/inventory/warehouses` mantiene tenant/sucursal mediante
+  `withScope`; las alertas incluyen `batchStatus` para decidir acciones sin
+  inferir estado en el navegador.
+- Web: `/inventory` usa la sesión y `inventory.manage`, evita respuestas
+  obsoletas al cambiar filtros, conserva idempotencia en el cuerpo de cada
+  mutación y ofrece estados vacíos, errores y layout responsive.
+- Verificación: typecheck/build de API y Web, `git diff --check`, Compose,
+  healthchecks y smoke HTTP fueron ejecutados antes de publicar el lote.
+
 ## Próxima tarea
 
-Publicar C05 y luego iniciar F3-WEB para la vista de inventario; la integración
-comercial de reservas depende de D09 y D08/D22 permanecen abiertas para
-costos/importación.
+Continuar con compras/recepción o ventas y caja según prioridad de producto;
+la integración comercial de reservas depende de D09 y D08/D22 permanecen
+abiertas para costos/importación.

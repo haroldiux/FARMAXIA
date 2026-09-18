@@ -118,3 +118,15 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] C05.4 Exponer conteo físico y las operaciones C05 bajo `inventory.manage`.
 - [x] C05.5 Verificar suite completa (37 pruebas), typecheck, builds,
   `drizzle-kit check`, migración y Docker; dejar listo para archivar.
+
+## Lote F3-WEB
+
+- [x] F3-WEB.1 Escribir prueba scoped para almacenes y añadir contratos de
+  cliente para almacenes, alertas, errores e idempotencia.
+- [x] F3-WEB.2 Exponer `GET /api/v1/inventory/warehouses` y completar el
+  estado de lote en las alertas C05.
+- [x] F3-WEB.3 Implementar `/inventory` con selector de almacén, horizonte,
+  alertas FEFO, estados vacíos y acciones confirmadas de cuarentena,
+  liberación y merma.
+- [x] F3-WEB.4 Enlazar Inventario desde el shell por `inventory.manage`,
+  verificar responsive, API/Web y Docker; archivar y publicar.
