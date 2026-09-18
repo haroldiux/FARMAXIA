@@ -981,6 +981,7 @@ export const inventoryMovements = pgTable(
     warehouseId: uuid("warehouse_id").notNull(),
     batchId: uuid("batch_id").notNull(),
     movementType: varchar("movement_type", { length: 24 }).notNull(),
+    movementDirection: varchar("movement_direction", { length: 3 }).default("IN").notNull(),
     quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
     referenceType: varchar("reference_type", { length: 80 }).notNull(),
     referenceId: uuid("reference_id").notNull(),
@@ -1002,7 +1003,44 @@ export const inventoryMovements = pgTable(
       table.warehouseId,
       table.occurredAt
     ),
-    check("inventory_movements_quantity_positive_check", sql`${table.quantityBase} > 0`)
+    check("inventory_movements_quantity_positive_check", sql`${table.quantityBase} > 0`),
+    check("inventory_movements_direction_check", sql`${table.movementDirection} in ('IN', 'OUT')`)
+  ]
+);
+
+export const inventoryReconciliations = pgTable(
+  "inventory_reconciliations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    expectedQuantity: bigint("expected_quantity", { mode: "number" }).notNull(),
+    countedQuantity: bigint("counted_quantity", { mode: "number" }).notNull(),
+    deltaQuantity: bigint("delta_quantity", { mode: "number" }).notNull(),
+    reason: varchar("reason", { length: 255 }).notNull(),
+    status: varchar("status", { length: 24 }).default("POSTED").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "inventory_reconciliations_tenant_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "inventory_reconciliations_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    unique("inventory_reconciliations_tenant_id_unique").on(table.tenantId, table.id),
+    unique("inventory_reconciliations_tenant_idempotency_unique").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    check("inventory_reconciliations_expected_non_negative_check", sql`${table.expectedQuantity} >= 0`),
+    check("inventory_reconciliations_counted_non_negative_check", sql`${table.countedQuantity} >= 0`)
   ]
 );
 

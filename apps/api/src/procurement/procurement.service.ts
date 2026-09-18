@@ -383,8 +383,9 @@ export class ProcurementService {
       );
       await client.query(
         `insert into inventory_movements
-           (tenant_id, warehouse_id, batch_id, movement_type, quantity_base, reference_type, reference_id)
-         values ($1, $2, $3, 'RECEIPT', $4, 'GOODS_RECEIPT', $5)`,
+           (tenant_id, warehouse_id, batch_id, movement_type, movement_direction,
+            quantity_base, reference_type, reference_id)
+         values ($1, $2, $3, 'RECEIPT', 'IN', $4, 'GOODS_RECEIPT', $5)`,
         [scope.tenantId, input.warehouseId, batch.id, line.quantityBase, receipt.id]
       );
     }

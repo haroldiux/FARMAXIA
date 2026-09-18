@@ -206,3 +206,13 @@ ni conciliación bancaria.
 C02 conserva costos como `numeric(18,4)` sin escoger promedio, FIFO, ponderado,
 impuestos o redondeo (D08), y no importa saldos históricos (D22). Las reglas de
 FEFO, reservas, cuarentena avanzada y mermas quedan para C04/C05.
+
+## S31 — movimientos y conciliación de inventario
+
+Todo movimiento debe expresar dirección `IN` o `OUT` y cantidad positiva; una
+recepción es `IN`. Una conciliación guarda esperado, contado, delta, motivo y
+clave única por tenant. En una transacción atómica, el ajuste actualiza el saldo
+y registra el movimiento; una salida no puede reducirlo por debajo de
+`reserved_base`. Repetir la misma clave y payload devuelve el resultado original
+sin duplicar movimiento ni auditoría. Las decisiones D08 y D22 permanecen
+abiertas.

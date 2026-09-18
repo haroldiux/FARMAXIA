@@ -73,3 +73,10 @@ Registrar proveedores y órdenes, recibir mercadería por lote y vencimiento en 
 almacén y crear cuentas por pagar básicas. Los costos se almacenan como decimales
 provisionales; no se decide todavía el método de costeo/importación de D08/D22,
 ni se integran pagos a proveedores.
+
+## Lote C03 — movimientos y conciliación de inventario
+
+Completar el núcleo de inventario con dirección explícita `IN`/`OUT`, ajustes
+por conteo físico y evidencia idempotente/auditable. El ajuste respeta el saldo
+reservado y el aislamiento tenant/sucursal. C03 no decide D08 (costeo), D22
+(importación), FEFO, reservas operativas, ventas ni traspasos.

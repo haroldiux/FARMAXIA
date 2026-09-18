@@ -1,12 +1,12 @@
 # Estado de implementación — FARMAXIA
 
-**Actualizado:** 16 de septiembre de 2026  
-**Fase actual:** F2 / C03 — movimientos, saldos y conciliación de inventario.
+**Actualizado:** 18 de septiembre de 2026
+**Fase actual:** F2 / C04 — reglas operativas de inventario.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
 | A01 | Completada para la base | `REGISTRO_DECISIONES.md`; D01, D02, D04, D05 y D10 delimitadas | D03 requiere un emisor y asesoría tributaria para adaptador real. |
-| A02 | Completada como diseño y núcleo persistido | `docs/data-model.dbml` y migraciones B02–B07 describen entidades, ownership, claves y RLS | C03 añadirá movimientos, conciliación y reglas de costo sin cerrar D08 por inferencia. |
+| A02 | Completada como diseño y núcleo persistido | `docs/data-model.dbml` y migraciones B02–B08 describen entidades, ownership, claves y RLS | D08 y D22 siguen abiertas; C04 continúa con reglas operativas. |
 | A03 | Completada como contrato | `docs/api-contracts.md` define contratos, permisos, idempotencia y errores | OpenAPI ejecutable empieza con los módulos de dominio. |
 | A04 | Completada como matriz | `docs/test-matrix.md` enlaza RF01–RF16 con T01–T27 | D06–D09, D11 y D14 se cierran antes de sus módulos. |
 | B01 | Completada | Prueba health verde; builds API/web verdes; PostgreSQL 18 y Redis 8 saludables en Compose. | Completada. |
@@ -17,6 +17,7 @@
 | B06 | Completada | Migración `0005`, auditoría inmutable con trigger, idempotencia transaccional con SHA-256, outbox PENDING y secuencias atómicas por sucursal; 22 pruebas verdes. | Base disponible para catálogo e inventario. |
 | C01 | Completada | Migración `0006_cool_payback.sql`, catálogo con FKs/RLS, búsqueda de barras, precio por sucursal y homologación preparada; 24 pruebas verdes. | Base disponible para compras, recepción y lotes. |
 | C02 | Completada | Migración `0007_swift_supernaut.sql`, proveedores, órdenes, recepción idempotente, lotes, saldos, movimiento `RECEIPT` y cuentas por pagar; 26 pruebas verdes. | Costeo/importación siguen provisionales hasta D08/D22. |
+| C03 | Completada | Migración `0008_messy_mauler.sql`, dirección `IN`/`OUT`, conciliación idempotente, ajuste atómico respetando reservas, auditoría y RLS; 28 pruebas verdes. | C04 aborda FEFO, reservas operativas y vencimientos; D08/D22 permanecen abiertas. |
 
 ## Límites del lote B01
 
@@ -64,6 +65,13 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 - Migración: `0005_transversal_services.sql` versionada con Drizzle, aplicando RLS forzada y privilegios estrictos para `farmaxia_app`.
 - Verificación global: `pnpm --filter @farmaxia/api test` (22 pruebas verdes en 8 suites), `tsc --noEmit` en API y Web, `pnpm build` en API y Web, y `drizzle-kit check` pasaron.
 
+## Evidencia C03
+
+- Red/Green: `apps/api/test/inventory.spec.ts` se escribió contra el servicio inexistente y luego verificó conciliación OUT, replay idempotente, bloqueo por reservas y corrección IN.
+- Migración: `0008_messy_mauler.sql` se aplicó a PostgreSQL local y de pruebas; añade `inventory_reconciliations`, dirección de movimiento, FKs, RLS y privilegios mínimos.
+- Verificación: `pnpm --filter @farmaxia/api test` pasó con 28 pruebas en 11 suites; `tsc --noEmit`, build API/web y `drizzle-kit check` pasaron.
+
 ## Próxima tarea
 
-Iniciar C03 — movimientos, saldos y conciliación de inventario. D08 y D22 permanecen abiertas para costos/importación.
+Iniciar C04 — FEFO, reservas operativas y reglas de vencimiento. D08 y D22
+permanecen abiertas para costos/importación.

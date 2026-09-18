@@ -57,6 +57,13 @@
       "when": 1789582767582,
       "tag": "0007_swift_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789729419429,
+      "tag": "0008_messy_mauler",
+      "breakpoints": true
     }
   ]
 }

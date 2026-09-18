@@ -146,3 +146,13 @@ almacén coincidan con la orden y que la cantidad acumulada no supere lo pedido.
 Los costos se persisten como decimales de cuatro posiciones sin cálculo de costo
 de inventario. `supplier_invoices` y `payables` conservan únicamente el saldo
 inicial; pagos y conciliación esperan un lote posterior.
+
+## Diseño C03: conciliación atómica
+
+`InventoryService.reconcile` ejecuta una operación idempotente dentro de
+`TenantDatabase.withScope`: bloquea el saldo, inserta la conciliación, calcula
+la diferencia y aplica un `UPDATE` condicional que conserva las reservas. Si la
+diferencia no es cero añade un movimiento `ADJUSTMENT` con dirección explícita;
+si es cero conserva únicamente la evidencia. La auditoría se escribe en la
+misma transacción. `inventory_reconciliations` usa FKs compuestas y RLS de
+tenant/sucursal. C03 no selecciona método de costeo ni importa saldos.

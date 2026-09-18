@@ -63,3 +63,11 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] C02.3 Aplicar RLS y privilegios mínimos por tenant/sucursal.
 - [x] C02.4 Implementar `ProcurementService` para proveedores, órdenes, recepción y cuenta por pagar.
 - [x] C02.5 Ejecutar pruebas, typecheck, builds, `drizzle-kit check` y migración idempotente; mantener D08/D22 abiertas.
+
+## Lote C03
+
+- [x] C03.1 Escribir pruebas rojas de dirección, ajuste, reserva, conciliación e idempotencia.
+- [x] C03.2 Añadir dirección de movimiento, conciliaciones, FKs/RLS y migración `0008_messy_mauler.sql`.
+- [x] C03.3 Implementar `InventoryService` con ajuste atómico, lectura de saldo, auditoría e idempotencia.
+- [x] C03.4 Ejecutar suite PostgreSQL real (28 pruebas), typecheck, builds, `drizzle-kit check` y migración idempotente.
+- [x] C03.5 Mantener D08/D22 abiertas y documentar evidencia para iniciar C04.

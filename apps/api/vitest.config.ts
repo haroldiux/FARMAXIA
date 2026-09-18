@@ -13,7 +13,8 @@ export default defineConfig({
       "test/transversal-services.spec.ts",
       "test/platform-services.spec.ts",
       "test/catalog.spec.ts",
-      "test/procurement.spec.ts"
+      "test/procurement.spec.ts",
+      "test/inventory.spec.ts"
     ],
     fileParallelism: false
   }

@@ -286,10 +286,26 @@ Table inventory_movements {
   warehouse_id uuid [not null]
   batch_id uuid [not null]
   movement_type inventory_movement_type [not null]
+  movement_direction varchar(3) [not null, note: 'IN or OUT']
   quantity_base bigint [not null]
   reference_type varchar [not null]
   reference_id uuid [not null]
   occurred_at timestamptz [not null]
+}
+
+Table inventory_reconciliations {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  warehouse_id uuid [not null]
+  batch_id uuid [not null]
+  idempotency_key varchar(255) [not null]
+  expected_quantity bigint [not null]
+  counted_quantity bigint [not null]
+  delta_quantity bigint [not null]
+  reason varchar(255) [not null]
+  status varchar [not null]
+  created_at timestamptz [not null]
+  indexes { (tenant_id, idempotency_key) [unique] }
 }
 
 Table supplier_invoices {
@@ -560,6 +576,8 @@ Ref: inventory_balances.batch_id > inventory_batches.id
 Ref: inventory_balances.warehouse_id > warehouses.id
 Ref: inventory_movements.batch_id > inventory_batches.id
 Ref: inventory_movements.warehouse_id > warehouses.id
+Ref: inventory_reconciliations.batch_id > inventory_batches.id
+Ref: inventory_reconciliations.warehouse_id > warehouses.id
 Ref: supplier_invoices.supplier_id > suppliers.id
 Ref: supplier_invoices.goods_receipt_id > goods_receipts.id
 Ref: payables.supplier_invoice_id > supplier_invoices.id

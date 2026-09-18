@@ -47,6 +47,7 @@ describe("catalog service (C01)", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        inventory_reconciliations,
         payables,
         supplier_invoices,
         inventory_movements,
