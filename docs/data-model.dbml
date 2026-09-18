@@ -338,9 +338,12 @@ Table inventory_reservations {
   warehouse_id uuid [not null]
   batch_id uuid [not null]
   quantity_base bigint [not null]
+  idempotency_key varchar [not null]
   expires_at timestamptz [not null]
+  status varchar [not null]
   consumed_at timestamptz
   released_at timestamptz
+  created_at timestamptz [not null]
 }
 
 Table cash_shifts {

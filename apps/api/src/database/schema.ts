@@ -1044,6 +1044,47 @@ export const inventoryReconciliations = pgTable(
   ]
 );
 
+export const inventoryReservations = pgTable(
+  "inventory_reservations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    status: varchar("status", { length: 24 }).default("ACTIVE").notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "inventory_reservations_tenant_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "inventory_reservations_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    unique("inventory_reservations_tenant_id_unique").on(table.tenantId, table.id),
+    index("inventory_reservations_tenant_warehouse_status_expiry_idx").on(
+      table.tenantId,
+      table.warehouseId,
+      table.status,
+      table.expiresAt
+    ),
+    check("inventory_reservations_quantity_positive_check", sql`${table.quantityBase} > 0`),
+    check(
+      "inventory_reservations_status_check",
+      sql`${table.status} in ('ACTIVE', 'CONSUMED', 'RELEASED', 'EXPIRED')`
+    )
+  ]
+);
+
 export const supplierInvoices = pgTable(
   "supplier_invoices",
   {

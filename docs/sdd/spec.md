@@ -239,3 +239,20 @@ La API DEBE listar productos activos agrupados con presentaciones, búsqueda y
 paginación bajo RLS, y DEBE proteger altas de categoría, producto y presentación
 con `catalog.manage`. La web `/catalog` DEBE consumir esa API, mostrar estados
 vacíos/errores y permitir alta básica sin presentar métricas ficticias.
+
+## S35 — inventario operativo C04
+
+La API DEBE convertir cantidades comerciales mediante el factor entero de la
+presentación y seleccionar únicamente lotes `AVAILABLE`, no vencidos y con
+saldo disponible. La selección DEBE ser FEFO estable (`expires_on ASC,
+batch_id ASC`) con `FOR UPDATE`; una insuficiencia DEBE revertir toda la
+reserva.
+
+Una reserva DEBE incrementar `reserved_base` sin alterar `quantity_base`. Sus
+operaciones de liberación, consumo y expiración DEBEN ser idempotentes,
+auditablemente transaccionales y usar estados `ACTIVE`, `CONSUMED`, `RELEASED`
+o `EXPIRED`. El consumo crea un movimiento `OUT` con referencia externa, sin
+inventar una venta.
+
+Todas las rutas exigen `inventory.manage`, aplican `withScope`/RLS y no
+resuelven D08, D09 ni D22.

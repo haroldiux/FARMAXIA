@@ -182,3 +182,19 @@ de una consulta scoped. `CatalogController` expone lectura y altas bajo el guard
 global de autenticación y `catalog.manage`. `/catalog` usa `authenticatedFetch`,
 renderiza las presentaciones reales y ofrece alta de producto; no introduce aún
 precios, barras, homologaciones ni operaciones de inventario.
+
+## Diseño C04: FEFO y reservas operativas
+
+`inventory_reservations` conserva una fila por lote asignado, con estado,
+vencimiento, clave de idempotencia y marcas de finalización. Sus FK compuestas
+y política RLS replican el límite tenant/sucursal de C03.
+
+`InventoryService.reserveFefo` bloquea balances elegibles en orden de
+vencimiento y lote, calcula unidades base desde la presentación y actualiza
+`reserved_base` en la misma transacción idempotente. Si no cubre la solicitud,
+no persiste nada. Liberar solo disminuye reserva; consumir disminuye físico y
+reserva y crea un movimiento `OUT`; expirar libera y audita reservas vencidas.
+
+El controlador requiere `inventory.manage`. `referenceType/referenceId` son
+obligatorios al consumir para dejar el primitive listo para ventas/proformas
+sin cerrar D09 ni seleccionar costeo D08.

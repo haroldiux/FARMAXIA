@@ -66,3 +66,16 @@ Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog
 
 Las rutas no aceptan `tenantId` o `branchId` de autorización desde el cuerpo: el
 contexto proviene del access token y las consultas usan RLS.
+
+## Inventario operativo C04
+
+| Ruta | Acceso y contrato |
+| --- | --- |
+| `POST /api/v1/inventory/reservations/fefo` | Requiere `inventory.manage`. Recibe `idempotencyKey`, `warehouseId`, `presentationId`, `quantityRequested` y `expiresAt`; reserva unidades base completas por vencimiento FEFO. |
+| `POST /api/v1/inventory/reservations/{reservationId}/release` | Requiere `inventory.manage`. Recibe una clave de idempotencia y libera la reserva activa; no modifica stock físico. |
+| `POST /api/v1/inventory/reservations/{reservationId}/consume` | Requiere `inventory.manage`. Recibe clave, `referenceType` y `referenceId`; consume la reserva, decrementa stock y registra movimiento `OUT`. |
+| `POST /api/v1/inventory/reservations/expire` | Requiere `inventory.manage`. Libera todas las reservas activas vencidas visibles en la sucursal y devuelve sus IDs. |
+
+FEFO ignora lotes vencidos, en cuarentena o no disponibles y ordena por
+`expires_on ASC, batch_id ASC`. La asignación no devuelve costos y no decide la
+política comercial de proformas (D09) ni la valoración de inventario (D08).

@@ -1,5 +1,6 @@
+import { Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
-import type { TenantDatabase, TenantScope } from "../database/tenant-database.js";
+import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 
 export interface CatalogCategoryInput {
   name: string;
@@ -127,6 +128,7 @@ function validFactor(value: number): number {
   return value;
 }
 
+@Injectable()
 export class CatalogService {
   constructor(private readonly database: TenantDatabase) {}
 

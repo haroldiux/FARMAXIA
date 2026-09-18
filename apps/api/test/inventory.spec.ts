@@ -51,6 +51,7 @@ describe("inventory adjustments and reconciliation (C03)", () => {
     await ownerPool.query(`
       truncate table
         inventory_reconciliations,
+        inventory_reservations,
         payables,
         supplier_invoices,
         inventory_movements,
@@ -170,6 +171,69 @@ describe("inventory adjustments and reconciliation (C03)", () => {
     return id;
   }
 
+  async function seedFefoInventory(): Promise<{
+    presentationId: string;
+    batchIds: string[];
+  }> {
+    const category = await catalog.createCategory(scope, {
+      name: "Inventario FEFO",
+      isControlled: false
+    });
+    const product = await catalog.createProduct(scope, {
+      categoryId: category.id,
+      name: "Producto FEFO"
+    });
+    const presentation = await catalog.createPresentation(scope, {
+      productId: product.id,
+      name: "Caja de dos unidades",
+      baseUnitFactor: 2,
+      isSellable: true
+    });
+    const supplier = await procurement.createSupplier(scope, { name: "Proveedor FEFO" });
+    const order = await procurement.createPurchaseOrder(scope, {
+      supplierId: supplier.id,
+      warehouseId,
+      lines: [{ presentationId: presentation.id, quantityBase: 30, unitCost: "1.0000" }]
+    });
+    const today = new Date();
+    const dateAfter = (days: number) => {
+      const date = new Date(today);
+      date.setUTCDate(date.getUTCDate() + days);
+      return date.toISOString().slice(0, 10);
+    };
+    await procurement.receive(scope, {
+      idempotencyKey: "fefo-seed-receipt",
+      supplierId: supplier.id,
+      purchaseOrderId: order.id,
+      warehouseId,
+      receivedAt: new Date().toISOString(),
+      lines: [
+        {
+          presentationId: presentation.id,
+          lotCode: "FEFO-EARLY",
+          expiresOn: dateAfter(30),
+          quantityBase: 10,
+          unitCost: "1.0000"
+        },
+        {
+          presentationId: presentation.id,
+          lotCode: "FEFO-LATE",
+          expiresOn: dateAfter(120),
+          quantityBase: 20,
+          unitCost: "1.0000"
+        }
+      ]
+    });
+    const batches = await ownerPool.query<{ id: string }>(
+      `select id
+       from inventory_batches
+       where tenant_id = $1 and presentation_id = $2
+       order by expires_on asc, id asc`,
+      [tenantId, presentation.id]
+    );
+    return { presentationId: presentation.id, batchIds: batches.rows.map((row) => row.id) };
+  }
+
   it("reconciles a count once and records an OUT movement plus audit", async () => {
     const batchId = await seedBatch();
     const first = await inventory.reconcile(scope, {
@@ -240,5 +304,180 @@ describe("inventory adjustments and reconciliation (C03)", () => {
     });
     expect(correction.deltaQuantity).toBe(2);
     expect(correction.quantityBase).toBe(9);
+  });
+
+  it("reserves across batches in FEFO order and replays the same payload", async () => {
+    const seeded = await seedFefoInventory();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const first = await inventory.reserveFefo(scope, {
+      idempotencyKey: "reserve-fefo-001",
+      warehouseId,
+      presentationId: seeded.presentationId,
+      quantityRequested: 8,
+      expiresAt
+    });
+    const replay = await inventory.reserveFefo(scope, {
+      idempotencyKey: "reserve-fefo-001",
+      warehouseId,
+      presentationId: seeded.presentationId,
+      quantityRequested: 8,
+      expiresAt
+    });
+
+    expect(replay).toEqual(first);
+    expect(first.totalBaseUnits).toBe(16);
+    expect(first.allocations.map((allocation) => allocation.batchId)).toEqual(seeded.batchIds);
+    expect(first.allocations.map((allocation) => allocation.quantityBase)).toEqual([10, 6]);
+    const balances = await ownerPool.query<{ batch_id: string; quantity_base: string; reserved_base: string }>(
+      `select batch_id, quantity_base, reserved_base
+       from inventory_balances
+       where tenant_id = $1 and warehouse_id = $2
+       order by batch_id`,
+      [tenantId, warehouseId]
+    );
+    const balancesByBatch = new Map(
+      balances.rows.map((row) => [row.batch_id, [row.quantity_base, row.reserved_base]])
+    );
+    const earlyBatchId = seeded.batchIds[0];
+    const lateBatchId = seeded.batchIds[1];
+    if (!earlyBatchId || !lateBatchId) {
+      throw new Error("Expected two FEFO batches.");
+    }
+    expect(balancesByBatch.get(earlyBatchId)).toEqual(["10", "10"]);
+    expect(balancesByBatch.get(lateBatchId)).toEqual(["20", "6"]);
+
+    await expect(
+      inventory.reserveFefo(scope, {
+        idempotencyKey: "reserve-fefo-001",
+        warehouseId,
+        presentationId: seeded.presentationId,
+        quantityRequested: 7,
+        expiresAt
+      })
+    ).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED" });
+  });
+
+  it("does not partially reserve insufficient stock and skips quarantined batches", async () => {
+    const seeded = await seedFefoInventory();
+    await ownerPool.query(
+      "update inventory_batches set status = 'QUARANTINE' where tenant_id = $1 and id = $2",
+      [tenantId, seeded.batchIds[0]]
+    );
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    await expect(
+      inventory.reserveFefo(scope, {
+        idempotencyKey: "reserve-fefo-insufficient",
+        warehouseId,
+        presentationId: seeded.presentationId,
+        quantityRequested: 11,
+        expiresAt
+      })
+    ).rejects.toThrow(/insufficient/i);
+    const balances = await ownerPool.query<{ quantity_base: string; reserved_base: string }>(
+      `select quantity_base, reserved_base
+       from inventory_balances
+       where tenant_id = $1 and warehouse_id = $2
+       order by batch_id`,
+      [tenantId, warehouseId]
+    );
+    expect(balances.rows.every((row) => row.reserved_base === "0")).toBe(true);
+  });
+
+  it("releases, consumes and expires reservations without double decrement", async () => {
+    const seeded = await seedFefoInventory();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const reservation = await inventory.reserveFefo(scope, {
+      idempotencyKey: "reserve-lifecycle-001",
+      warehouseId,
+      presentationId: seeded.presentationId,
+      quantityRequested: 2,
+      expiresAt
+    });
+    const reservationId = reservation.allocations[0]?.reservationId;
+    if (!reservationId) {
+      throw new Error("Expected a reservation allocation.");
+    }
+    const released = await inventory.releaseReservation(scope, {
+      reservationId,
+      idempotencyKey: "release-lifecycle-001"
+    });
+    const releasedReplay = await inventory.releaseReservation(scope, {
+      reservationId,
+      idempotencyKey: "release-lifecycle-001"
+    });
+    expect(releasedReplay).toEqual(released);
+    expect(released.status).toBe("RELEASED");
+
+    const consumedReservation = await inventory.reserveFefo(scope, {
+      idempotencyKey: "reserve-consume-001",
+      warehouseId,
+      presentationId: seeded.presentationId,
+      quantityRequested: 1,
+      expiresAt
+    });
+    const consumedId = consumedReservation.allocations[0]?.reservationId;
+    if (!consumedId) {
+      throw new Error("Expected a consumable reservation allocation.");
+    }
+    const consumed = await inventory.consumeReservation(scope, {
+      reservationId: consumedId,
+      idempotencyKey: "consume-lifecycle-001",
+      referenceType: "TEST_CONSUMPTION",
+      referenceId: "00000000-0000-4000-8000-000000000699"
+    });
+    expect(consumed.status).toBe("CONSUMED");
+    expect(consumed.quantityBase).toBe(2);
+
+    const expiring = await inventory.reserveFefo(scope, {
+      idempotencyKey: "reserve-expire-001",
+      warehouseId,
+      presentationId: seeded.presentationId,
+      quantityRequested: 1,
+      expiresAt
+    });
+    const expiringId = expiring.allocations[0]?.reservationId;
+    if (!expiringId) {
+      throw new Error("Expected an expiring reservation allocation.");
+    }
+    await ownerPool.query(
+      "update inventory_reservations set expires_at = now() - interval '1 minute' where tenant_id = $1 and id = $2",
+      [tenantId, expiringId]
+    );
+    const expired = await inventory.expireReservations(scope);
+    expect(expired.reservationIds).toContain(expiringId);
+    expect(expired.expiredCount).toBe(1);
+  });
+
+  it("serializes concurrent reservations so the last units cannot be oversold", async () => {
+    const seeded = await seedFefoInventory();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const attempts = await Promise.allSettled([
+      inventory.reserveFefo(scope, {
+        idempotencyKey: "reserve-concurrent-001",
+        warehouseId,
+        presentationId: seeded.presentationId,
+        quantityRequested: 8,
+        expiresAt
+      }),
+      inventory.reserveFefo(scope, {
+        idempotencyKey: "reserve-concurrent-002",
+        warehouseId,
+        presentationId: seeded.presentationId,
+        quantityRequested: 8,
+        expiresAt
+      })
+    ]);
+
+    expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+    expect(attempts.filter((attempt) => attempt.status === "rejected")).toHaveLength(1);
+    const balance = await ownerPool.query<{ quantity_base: string; reserved_base: string }>(
+      `select coalesce(sum(quantity_base), 0)::text as quantity_base,
+              coalesce(sum(reserved_base), 0)::text as reserved_base
+       from inventory_balances
+       where tenant_id = $1 and warehouse_id = $2`,
+      [tenantId, warehouseId]
+    );
+    expect(balance.rows[0]).toEqual({ quantity_base: "30", reserved_base: "16" });
   });
 });

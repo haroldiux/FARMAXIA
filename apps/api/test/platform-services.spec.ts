@@ -55,6 +55,7 @@ describe("platform transactional services", () => {
     await ownerPool.query(`
       truncate table
         inventory_reconciliations,
+        inventory_reservations,
         payables,
         supplier_invoices,
         inventory_movements,

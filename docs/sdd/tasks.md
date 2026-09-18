@@ -93,3 +93,16 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] F2-WEB.3 Exponer controller/module con permiso `catalog.manage`.
 - [x] F2-WEB.4 Implementar `/catalog` y enlazarlo desde el dashboard.
 - [x] F2-WEB.5 Verificar suite (29 pruebas), builds, Docker y contratos.
+
+## Lote C04
+
+- [x] C04.1 Escribir pruebas rojas PostgreSQL para FEFO por factor, reservas,
+  insuficiencia atómica, concurrencia y ciclo de vida.
+- [x] C04.2 Añadir `inventory_reservations`, constraints, migración `0009` y
+  RLS/privilegios mínimos.
+- [x] C04.3 Implementar `reserveFefo` con locks, idempotencia y auditoría.
+- [x] C04.4 Implementar liberar, consumir y expirar sin doble decremento.
+- [x] C04.5 Exponer `InventoryController`/`InventoryModule` con
+  `inventory.manage` y registrar `DatabaseModule` para servicios scoped.
+- [x] C04.6 Verificar suite completa, typecheck, builds, `drizzle-kit check`,
+  Docker y smoke HTTP; archivar y publicar.
