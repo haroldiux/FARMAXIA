@@ -67,7 +67,7 @@ Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog
 Las rutas no aceptan `tenantId` o `branchId` de autorización desde el cuerpo: el
 contexto proviene del access token y las consultas usan RLS.
 
-## Inventario operativo C04
+## Inventario operativo C04/C05
 
 | Ruta | Acceso y contrato |
 | --- | --- |
@@ -75,7 +75,14 @@ contexto proviene del access token y las consultas usan RLS.
 | `POST /api/v1/inventory/reservations/{reservationId}/release` | Requiere `inventory.manage`. Recibe una clave de idempotencia y libera la reserva activa; no modifica stock físico. |
 | `POST /api/v1/inventory/reservations/{reservationId}/consume` | Requiere `inventory.manage`. Recibe clave, `referenceType` y `referenceId`; consume la reserva, decrementa stock y registra movimiento `OUT`. |
 | `POST /api/v1/inventory/reservations/expire` | Requiere `inventory.manage`. Libera todas las reservas activas vencidas visibles en la sucursal y devuelve sus IDs. |
+| `GET /api/v1/inventory/expiry-alerts?warehouseId={id}&horizonDays={n}` | Requiere `inventory.manage`. Consulta lotes con existencia física que vencen dentro de 0–365 días; devuelve `EXPIRED`/`DUE_SOON` sin mutar stock. |
+| `POST /api/v1/inventory/batches/{batchId}/quarantine` | Requiere `inventory.manage`. Recibe `warehouseId`, `idempotencyKey`, `reasonCode`, `reason` y temperatura opcional/obligatoria para `COLD_CHAIN`; rechaza reservas activas. |
+| `POST /api/v1/inventory/batches/{batchId}/release-quarantine` | Requiere `inventory.manage`. Recibe `warehouseId`, `idempotencyKey` y `reason`; solo libera lotes no vencidos. |
+| `POST /api/v1/inventory/waste` | Requiere `inventory.manage`. Recibe almacén, lote, `quantityBase`, motivo y clave; registra `WASTE`/`OUT` sobre stock libre. |
+| `POST /api/v1/inventory/reconciliations` | Requiere `inventory.manage`. Expone el conteo físico idempotente de C03 con motivo y límite de reservas. |
 
 FEFO ignora lotes vencidos, en cuarentena o no disponibles y ordena por
 `expires_on ASC, batch_id ASC`. La asignación no devuelve costos y no decide la
-política comercial de proformas (D09) ni la valoración de inventario (D08).
+política comercial de proformas (D09) ni la valoración de inventario (D08). Las
+operaciones C05 registran eventos operativos y auditoría transaccional; no
+integran sensores ni notificaciones externas.

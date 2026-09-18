@@ -908,7 +908,11 @@ export const inventoryBatches = pgTable(
       table.presentationId,
       table.lotCode
     ),
-    check("inventory_batches_cost_non_negative_check", sql`${table.unitCost} >= 0`)
+    check("inventory_batches_cost_non_negative_check", sql`${table.unitCost} >= 0`),
+    check(
+      "inventory_batches_status_check",
+      sql`${table.status} in ('AVAILABLE', 'QUARANTINED', 'DISPOSED')`
+    )
   ]
 );
 
@@ -1081,6 +1085,57 @@ export const inventoryReservations = pgTable(
     check(
       "inventory_reservations_status_check",
       sql`${table.status} in ('ACTIVE', 'CONSUMED', 'RELEASED', 'EXPIRED')`
+    )
+  ]
+);
+
+export const inventoryOperationEvents = pgTable(
+  "inventory_operation_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    operationType: varchar("operation_type", { length: 32 }).notNull(),
+    reasonCode: varchar("reason_code", { length: 32 }),
+    reason: varchar("reason", { length: 255 }).notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }),
+    temperatureCelsius: numeric("temperature_celsius", { precision: 8, scale: 2 }),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "inventory_operation_events_tenant_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "inventory_operation_events_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    unique("inventory_operation_events_tenant_id_unique").on(table.tenantId, table.id),
+    unique("inventory_operation_events_tenant_idempotency_unique").on(
+      table.tenantId,
+      table.idempotencyKey
+    ),
+    index("inventory_operation_events_tenant_warehouse_created_idx").on(
+      table.tenantId,
+      table.warehouseId,
+      table.createdAt
+    ),
+    check(
+      "inventory_operation_events_type_check",
+      sql`${table.operationType} in ('QUARANTINE', 'RELEASE_QUARANTINE', 'WASTE')`
+    ),
+    check(
+      "inventory_operation_events_reason_code_check",
+      sql`${table.reasonCode} is null or ${table.reasonCode} in ('QUALITY', 'COLD_CHAIN', 'DAMAGE', 'OTHER')`
+    ),
+    check(
+      "inventory_operation_events_quantity_check",
+      sql`${table.quantityBase} is null or ${table.quantityBase} > 0`
     )
   ]
 );

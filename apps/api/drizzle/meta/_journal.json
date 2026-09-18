@@ -71,6 +71,13 @@
       "when": 1789745143062,
       "tag": "0009_productive_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789748085896,
+      "tag": "0010_wealthy_katie_power",
+      "breakpoints": true
     }
   ]
 }

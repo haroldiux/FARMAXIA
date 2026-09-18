@@ -53,6 +53,7 @@ describe("procurement and receiving service (C02)", () => {
       truncate table
         inventory_reconciliations,
         inventory_reservations,
+        inventory_operation_events,
         payables,
         supplier_invoices,
         inventory_movements,

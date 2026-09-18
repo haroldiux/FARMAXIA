@@ -267,7 +267,7 @@ Table inventory_batches {
   lot_code varchar [not null]
   expires_on date [not null]
   unit_cost numeric(18,4) [not null]
-  status varchar [not null]
+  status varchar [not null, note: 'AVAILABLE, QUARANTINED or DISPOSED']
   indexes { (tenant_id, presentation_id, lot_code) [unique] }
 }
 
@@ -344,6 +344,24 @@ Table inventory_reservations {
   consumed_at timestamptz
   released_at timestamptz
   created_at timestamptz [not null]
+}
+
+Table inventory_operation_events {
+  id uuid [pk]
+  tenant_id uuid [not null]
+  warehouse_id uuid [not null]
+  batch_id uuid [not null]
+  operation_type varchar [not null, note: 'QUARANTINE, RELEASE_QUARANTINE or WASTE']
+  reason_code varchar
+  reason varchar [not null]
+  quantity_base bigint
+  temperature_celsius numeric(8,2)
+  idempotency_key varchar [not null]
+  created_at timestamptz [not null]
+  indexes {
+    (tenant_id, idempotency_key) [unique]
+    (tenant_id, warehouse_id, created_at)
+  }
 }
 
 Table cash_shifts {
@@ -581,6 +599,8 @@ Ref: inventory_movements.batch_id > inventory_batches.id
 Ref: inventory_movements.warehouse_id > warehouses.id
 Ref: inventory_reconciliations.batch_id > inventory_batches.id
 Ref: inventory_reconciliations.warehouse_id > warehouses.id
+Ref: inventory_operation_events.batch_id > inventory_batches.id
+Ref: inventory_operation_events.warehouse_id > warehouses.id
 Ref: supplier_invoices.supplier_id > suppliers.id
 Ref: supplier_invoices.goods_receipt_id > goods_receipts.id
 Ref: payables.supplier_invoice_id > supplier_invoices.id

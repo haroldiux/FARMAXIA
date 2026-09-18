@@ -74,6 +74,7 @@ describe("authentication API", () => {
       truncate table
         inventory_reconciliations,
         inventory_reservations,
+        inventory_operation_events,
         payables,
         supplier_invoices,
         inventory_movements,

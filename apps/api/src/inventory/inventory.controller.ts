@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Post,
+  Query,
   Req,
   UnauthorizedException
 } from "@nestjs/common";
@@ -10,6 +12,11 @@ import { RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import {
   InventoryService,
+  type ExpiryAlertsInput,
+  type QuarantineInput,
+  type ReconcileInput,
+  type ReleaseQuarantineInput,
+  type WasteInput,
   type ConsumeReservationInput,
   type ReserveFefoInput,
   type ReservationLifecycleInput
@@ -26,6 +33,45 @@ function scopeFrom(request: AuthenticatedRequest) {
 @RequirePermissions("inventory.manage")
 export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
+
+  @Get("expiry-alerts")
+  listExpiryAlerts(
+    @Req() request: AuthenticatedRequest,
+    @Query() input: ExpiryAlertsInput
+  ) {
+    return this.inventory.listExpiryAlerts(scopeFrom(request), {
+      warehouseId: input.warehouseId,
+      horizonDays: Number(input.horizonDays)
+    });
+  }
+
+  @Post("batches/:batchId/quarantine")
+  quarantineBatch(
+    @Req() request: AuthenticatedRequest,
+    @Param("batchId") batchId: string,
+    @Body() input: Omit<QuarantineInput, "batchId">
+  ) {
+    return this.inventory.quarantineBatch(scopeFrom(request), { ...input, batchId });
+  }
+
+  @Post("batches/:batchId/release-quarantine")
+  releaseQuarantine(
+    @Req() request: AuthenticatedRequest,
+    @Param("batchId") batchId: string,
+    @Body() input: Omit<ReleaseQuarantineInput, "batchId">
+  ) {
+    return this.inventory.releaseQuarantine(scopeFrom(request), { ...input, batchId });
+  }
+
+  @Post("waste")
+  recordWaste(@Req() request: AuthenticatedRequest, @Body() input: WasteInput) {
+    return this.inventory.recordWaste(scopeFrom(request), input);
+  }
+
+  @Post("reconciliations")
+  reconcile(@Req() request: AuthenticatedRequest, @Body() input: ReconcileInput) {
+    return this.inventory.reconcile(scopeFrom(request), input);
+  }
 
   @Post("reservations/fefo")
   reserveFefo(

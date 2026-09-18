@@ -1,7 +1,7 @@
 # Estado de implementación — FARMAXIA
 
 **Actualizado:** 18 de septiembre de 2026
-**Fase actual:** F2 / C04 — reglas operativas de inventario.
+**Fase actual:** F3-WEB — vista operativa de inventario.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
@@ -19,7 +19,8 @@
 | C01 | Completada | Migración `0006_cool_payback.sql`, catálogo con FKs/RLS, búsqueda de barras, precio por sucursal y homologación preparada; 24 pruebas verdes. | Base disponible para compras, recepción y lotes. |
 | C02 | Completada | Migración `0007_swift_supernaut.sql`, proveedores, órdenes, recepción idempotente, lotes, saldos, movimiento `RECEIPT` y cuentas por pagar; 26 pruebas verdes. | Costeo/importación siguen provisionales hasta D08/D22. |
 | C03 | Completada | Migración `0008_messy_mauler.sql`, dirección `IN`/`OUT`, conciliación idempotente, ajuste atómico respetando reservas, auditoría y RLS; 28 pruebas verdes. | C04 aborda FEFO, reservas operativas y vencimientos; D08/D22 permanecen abiertas. |
-| C04 | En implementación | Motor FEFO transaccional con factor de presentación, reservas por lote, liberación/consumo/expiración idempotentes, auditoría y RLS en migración `0009_productive_human_torch.sql`. | La integración con proformas/ventas y la política comercial de reservas dependen de D09; D08/D22 siguen abiertas. |
+| C04 | Completada | Motor FEFO transaccional con factor de presentación, reservas por lote, liberación/consumo/expiración idempotentes, auditoría y RLS en migración `0009_productive_human_torch.sql`; 33 pruebas verdes. | La integración con proformas/ventas y la política comercial de reservas dependen de D09; D08/D22 siguen abiertas. |
+| C05 | Completada | Migración `0010_wealthy_katie_power.sql`, alertas de vencimiento, cuarentena/cadena de frío, mermas y conteos autorizados con idempotencia, auditoría y RLS; 37 pruebas verdes; change archivado. | Preparar F3-WEB; sensores, notificaciones, D08/D09/D22 siguen fuera de alcance. |
 | F1-WEB | Completada como base funcional | Login contra API, refresh/logout, dashboard protegido, contexto tenant/sucursal y permisos efectivos; builds Next y CORS verificados dentro de Docker. | CRUD de catálogo, inventario, ventas y caja se implementará por lotes posteriores. |
 
 ## Límites del lote B01
@@ -101,8 +102,23 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 - Servicio: `InventoryService` bloquea balances por `expires_on ASC, batch_id ASC`, mantiene `quantity_base` separado de `reserved_base`, registra movimientos OUT solo al consumir y audita cada transición.
 - Verificación: `pnpm --filter @farmaxia/api test` pasó con 33 pruebas; `tsc --noEmit`, build y `drizzle-kit check` pasaron; Docker aplicó la migración, registró las cuatro rutas C04 y el endpoint sin bearer respondió HTTP 401.
 
+## Evidencia C05
+
+- Red/Green: las pruebas nuevas comenzaron con métodos inexistentes para
+  alertas, cuarentena y merma; después verificaron 10 pruebas de inventario,
+  incluyendo replay, cadena de frío, reservas activas y stock libre.
+- Persistencia: `0010_wealthy_katie_power.sql` crea `inventory_operation_events`,
+  restringe estados de lote a `AVAILABLE`/`QUARANTINED`/`DISPOSED`, aplica RLS
+  forzada y concede privilegios mínimos.
+- Servicio: `InventoryService` calcula alertas sin mutación, bloquea lote/saldo
+  para cuarentena y merma, registra `WASTE`/`OUT` y expone reconciliación por
+  `inventory.manage`.
+- Verificación: suite API completa pasó con 37 pruebas; typecheck, builds,
+  `drizzle-kit check` y Compose pasaron; los cuatro servicios quedaron
+  healthy y el change se archivó en `openspec/changes/archive/2026-09-18-14-inventario-c05`.
+
 ## Próxima tarea
 
-Continuar C05 con alertas de vencimiento, cuarentena/frío, mermas y conteo físico
-autorizado. La integración comercial de reservas depende de D09; D08 y D22
-permanecen abiertas para costos/importación.
+Publicar C05 y luego iniciar F3-WEB para la vista de inventario; la integración
+comercial de reservas depende de D09 y D08/D22 permanecen abiertas para
+costos/importación.

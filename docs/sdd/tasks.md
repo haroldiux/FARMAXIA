@@ -106,3 +106,15 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
   `inventory.manage` y registrar `DatabaseModule` para servicios scoped.
 - [x] C04.6 Verificar suite completa, typecheck, builds, `drizzle-kit check`,
   Docker y smoke HTTP; archivar y publicar.
+
+## Lote C05
+
+- [x] C05.1 Escribir pruebas rojas PostgreSQL para alertas de vencimiento,
+  cuarentena/cadena de frío, mermas y operaciones idempotentes.
+- [x] C05.2 Añadir `inventory_operation_events`, estados de lote, migración
+  `0010`, RLS, privilegios mínimos y modelo DBML.
+- [x] C05.3 Implementar alertas scoped, cuarentena/liberación y merma con
+  locks, idempotencia y auditoría.
+- [x] C05.4 Exponer conteo físico y las operaciones C05 bajo `inventory.manage`.
+- [x] C05.5 Verificar suite completa (37 pruebas), typecheck, builds,
+  `drizzle-kit check`, migración y Docker; dejar listo para archivar.

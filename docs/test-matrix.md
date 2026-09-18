@@ -12,6 +12,16 @@
 | Resiliencia | T16, T24, T26 | Fallos tras commit, restauración aislada y offline solo si se aprueba. |
 | Evolución | T27 | Devoluciones ajustan beneficios una vez. |
 
+## Criterios C05
+
+- Las alertas de vencimiento respetan horizonte, orden, stock físico y RLS sin
+  persistir notificaciones.
+- Cuarentena/cadena de frío rechaza reservas activas, registra motivo y
+  temperatura cuando corresponde, y permite liberar solo lotes no vencidos.
+- Mermas decrementan únicamente stock libre y registran exactamente un evento,
+  movimiento `WASTE`/`OUT` y auditoría por clave idempotente.
+- El conteo físico expuesto conserva el límite de `reserved_base` y es replay-safe.
+
 ## Criterios B01
 
 - `GET /health` devuelve el contrato S01.

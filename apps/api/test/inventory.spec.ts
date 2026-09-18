@@ -52,6 +52,7 @@ describe("inventory adjustments and reconciliation (C03)", () => {
       truncate table
         inventory_reconciliations,
         inventory_reservations,
+        inventory_operation_events,
         payables,
         supplier_invoices,
         inventory_movements,
@@ -360,7 +361,7 @@ describe("inventory adjustments and reconciliation (C03)", () => {
   it("does not partially reserve insufficient stock and skips quarantined batches", async () => {
     const seeded = await seedFefoInventory();
     await ownerPool.query(
-      "update inventory_batches set status = 'QUARANTINE' where tenant_id = $1 and id = $2",
+      "update inventory_batches set status = 'QUARANTINED' where tenant_id = $1 and id = $2",
       [tenantId, seeded.batchIds[0]]
     );
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
@@ -479,5 +480,128 @@ describe("inventory adjustments and reconciliation (C03)", () => {
       [tenantId, warehouseId]
     );
     expect(balance.rows[0]).toEqual({ quantity_base: "30", reserved_base: "16" });
+  });
+
+  it("lists expiry alerts by scoped warehouse and inclusive horizon", async () => {
+    const seeded = await seedFefoInventory();
+
+    const alerts = await inventory.listExpiryAlerts(scope, {
+      warehouseId,
+      horizonDays: 45
+    });
+
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      batchId: seeded.batchIds[0],
+      status: "DUE_SOON",
+      quantityBase: 10,
+      reservedBase: 0,
+      availableQuantity: 10
+    });
+  });
+
+  it("quarantines and releases a cold-chain batch idempotently", async () => {
+    const batchId = await seedBatch();
+
+    const quarantined = await inventory.quarantineBatch(scope, {
+      idempotencyKey: "quarantine-cold-001",
+      warehouseId,
+      batchId,
+      reasonCode: "COLD_CHAIN",
+      reason: "Refrigerator excursion",
+      temperatureCelsius: 12.5
+    });
+    expect(quarantined.status).toBe("QUARANTINED");
+
+    const replay = await inventory.quarantineBatch(scope, {
+      idempotencyKey: "quarantine-cold-001",
+      warehouseId,
+      batchId,
+      reasonCode: "COLD_CHAIN",
+      reason: "Refrigerator excursion",
+      temperatureCelsius: 12.5
+    });
+    expect(replay).toEqual(quarantined);
+
+    const released = await inventory.releaseQuarantine(scope, {
+      idempotencyKey: "quarantine-release-001",
+      warehouseId,
+      batchId,
+      reason: "Quality review passed"
+    });
+    expect(released.status).toBe("AVAILABLE");
+
+    const row = await ownerPool.query<{ status: string }>(
+      "select status from inventory_batches where tenant_id = $1 and id = $2",
+      [tenantId, batchId]
+    );
+    expect(row.rows[0]?.status).toBe("AVAILABLE");
+  });
+
+  it("rejects quarantine while the batch has active reservations", async () => {
+    const seeded = await seedFefoInventory();
+    const reservedBatchId = seeded.batchIds[0];
+    if (!reservedBatchId) {
+      throw new Error("Expected a reserved batch.");
+    }
+    await inventory.reserveFefo(scope, {
+      idempotencyKey: "quarantine-reservation-seed",
+      warehouseId,
+      presentationId: seeded.presentationId,
+      quantityRequested: 1,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    });
+
+    await expect(
+      inventory.quarantineBatch(scope, {
+        idempotencyKey: "quarantine-reserved-001",
+        warehouseId,
+        batchId: reservedBatchId,
+        reasonCode: "QUALITY",
+        reason: "Packaging review"
+      })
+    ).rejects.toThrow();
+  });
+
+  it("records waste against free stock and never decrements reservations", async () => {
+    const batchId = await seedBatch();
+
+    const waste = await inventory.recordWaste(scope, {
+      idempotencyKey: "waste-001",
+      warehouseId,
+      batchId,
+      quantityBase: 3,
+      reason: "Broken packaging"
+    });
+    expect(waste.quantityBase).toBe(7);
+    expect(waste.reservedBase).toBe(0);
+
+    const replay = await inventory.recordWaste(scope, {
+      idempotencyKey: "waste-001",
+      warehouseId,
+      batchId,
+      quantityBase: 3,
+      reason: "Broken packaging"
+    });
+    expect(replay).toEqual(waste);
+
+    await expect(
+      inventory.recordWaste(scope, {
+        idempotencyKey: "waste-002",
+        warehouseId,
+        batchId,
+        quantityBase: 8,
+        reason: "Over disposal"
+      })
+    ).rejects.toThrow();
+
+    const movement = await ownerPool.query<{ movementType: string; quantityBase: string }>(
+      `select movement_type as "movementType", quantity_base as "quantityBase"
+       from inventory_movements
+       where tenant_id = $1 and batch_id = $2 and movement_type = 'WASTE'`,
+      [tenantId, batchId]
+    );
+    expect(movement.rows).toHaveLength(1);
+    expect(movement.rows[0]).toEqual({ movementType: "WASTE", quantityBase: "3" });
   });
 });

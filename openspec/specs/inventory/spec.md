@@ -56,8 +56,37 @@ Reservation, release, consumption and expiration MUST run inside the scoped
 database transaction and append an audit event. RLS and branch membership MUST
 prevent access to another tenant or warehouse branch.
 
+### Requirement: expiry alerts
+
+The system MUST expose scoped, read-only expiry alerts for a warehouse and an
+inclusive horizon from 0 through 365 days. Results MUST include lot, expiry
+date, batch status, physical quantity, reserved quantity and available
+quantity, and MUST be ordered by `expires_on ASC, batch_id ASC`. Batches with
+positive physical quantity are eligible for the alert even when quarantined;
+the alert MUST distinguish `EXPIRED` from `DUE_SOON` without persisting a
+notification or mutating stock.
+
+### Requirement: quarantine and cold-chain evidence
+
+An `AVAILABLE` batch MUST be quarantineable with a reason code of `QUALITY`,
+`COLD_CHAIN`, `DAMAGE` or `OTHER`. A cold-chain quarantine MUST accept a
+temperature measurement. The operation MUST reject active reservations, lock
+the scoped balance and batch, use idempotency, append an operation event and
+audit entry, and transition the batch to `QUARANTINED`. A non-expired
+quarantined batch MAY be released with a reason and returns to `AVAILABLE`.
+
+### Requirement: waste and authorized physical count
+
+A waste operation MUST accept a positive base quantity and reason, decrement
+only free stock (`quantity_base - reserved_base`), record a `WASTE`/`OUT`
+movement and an operation event atomically, and be replay-safe. It MUST never
+create a negative balance or decrement reservations. Physical counts MUST use
+the existing idempotent reconciliation contract, remain protected by
+`inventory.manage`, and preserve the reserved-stock floor.
+
 ## Out of scope
 
-C04 does not implement sales, proformas, cash, inter-branch transfers,
-quarantine workflows, controlled products or historical imports. D08 costing,
-D09 proforma/reservation policy and D22 import decisions remain open.
+C05 does not implement sales, proformas, cash, inter-branch transfers, sensor
+workers, external notifications, controlled products or historical imports.
+D08 costing, D09 proforma/reservation policy and D22 import decisions remain
+open.
