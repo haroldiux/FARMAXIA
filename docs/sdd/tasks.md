@@ -85,3 +85,11 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] F1-WEB.2 Implementar login, refresh y logout contra la API existente.
 - [x] F1-WEB.3 Implementar dashboard protegido con contexto y permisos efectivos.
 - [x] F1-WEB.4 Verificar responsive shell, builds, CORS y stack Docker.
+
+## Lote F2-WEB
+
+- [x] F2-WEB.1 Escribir prueba de listado agrupado por producto/presentación.
+- [x] F2-WEB.2 Implementar `CatalogService.listProducts` con búsqueda/paginación.
+- [x] F2-WEB.3 Exponer controller/module con permiso `catalog.manage`.
+- [x] F2-WEB.4 Implementar `/catalog` y enlazarlo desde el dashboard.
+- [x] F2-WEB.5 Verificar suite (29 pruebas), builds, Docker y contratos.

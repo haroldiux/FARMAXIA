@@ -174,3 +174,11 @@ token vive en `sessionStorage`; el refresh y logout usan `credentials: include`
 para conservar la cookie HttpOnly del backend. La UI presenta contexto y
 permisos reales, mientras los módulos sin rutas de dominio permanecen marcados
 como próximos.
+
+## Diseño F2-WEB: catálogo conectado
+
+`CatalogService.listProducts` agrupa presentaciones mediante `jsonb_agg` dentro
+de una consulta scoped. `CatalogController` expone lectura y altas bajo el guard
+global de autenticación y `catalog.manage`. `/catalog` usa `authenticatedFetch`,
+renderiza las presentaciones reales y ofrece alta de producto; no introduce aún
+precios, barras, homologaciones ni operaciones de inventario.

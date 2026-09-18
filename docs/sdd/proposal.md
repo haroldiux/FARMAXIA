@@ -94,3 +94,10 @@ Convertir la base Next.js en una experiencia web usable con login contra la API,
 sesión protegida y dashboard de contexto tenant/sucursal. La navegación deja
 claros los módulos futuros y no muestra saldos, ventas o estados fiscales que
 todavía no tengan endpoint.
+
+## Lote F2-WEB — primer módulo de catálogo conectado
+
+Conectar el backoffice al catálogo tenant-scoped existente mediante lectura
+agrupada de productos/presentaciones y alta básica protegida por
+`catalog.manage`. Precios, códigos, homologaciones e inventario siguen siendo
+flujos separados.

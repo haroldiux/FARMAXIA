@@ -55,6 +55,34 @@ export interface BarcodeLookup {
   priceCurrency: string | null;
 }
 
+export interface CatalogListQuery {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CatalogPresentationSummary {
+  presentationId: string;
+  name: string;
+  baseUnitFactor: number;
+  isSellable: boolean;
+}
+
+export interface CatalogProductSummary {
+  productId: string;
+  name: string;
+  activeIngredient: string | null;
+  categoryName: string | null;
+  presentations: CatalogPresentationSummary[];
+}
+
+export interface CatalogProductPage {
+  items: CatalogProductSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 interface CreatedRow {
   id: string;
 }
@@ -62,6 +90,10 @@ interface CreatedRow {
 interface HomologationRow extends CreatedRow {
   authority: string;
   externalCode: string;
+}
+
+interface ProductListRow extends CatalogProductSummary {
+  total: number;
 }
 
 function requiredText(value: string, field: string, maxLength: number): string {
@@ -215,6 +247,76 @@ export class CatalogService {
         [scope.tenantId, input.productId, authority, externalCode, externalDescription]
       );
       return rows[0] as HomologationRow;
+    });
+  }
+
+  async listProducts(scope: TenantScope, input: CatalogListQuery = {}): Promise<CatalogProductPage> {
+    const search = input.search?.trim() ?? "";
+    if (search.length > 120) {
+      throw new Error("Catalog search must be at most 120 characters.");
+    }
+    const limit = input.limit ?? 25;
+    const offset = input.offset ?? 0;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error("Catalog limit must be an integer between 1 and 100.");
+    }
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new Error("Catalog offset must be a non-negative integer.");
+    }
+
+    return this.database.withScope(scope, async (client) => {
+      const { rows } = await client.query<ProductListRow>(
+        `with filtered_products as (
+           select
+             product.id,
+             product.name,
+             product.active_ingredient as "activeIngredient",
+             category.name as "categoryName"
+           from products as product
+           left join product_categories as category
+             on category.tenant_id = product.tenant_id
+            and category.id = product.category_id
+           where product.tenant_id = $1
+             and product.is_active
+             and (
+               $2 = ''
+               or lower(product.name) like '%' || lower($2) || '%'
+               or lower(coalesce(product.active_ingredient, '')) like '%' || lower($2) || '%'
+             )
+         )
+         select
+           filtered.id as "productId",
+           filtered.name,
+           filtered."activeIngredient",
+           filtered."categoryName",
+           count(*) over()::int as total,
+           coalesce(
+             jsonb_agg(
+               jsonb_build_object(
+                 'presentationId', presentation.id,
+                 'name', presentation.name,
+                 'baseUnitFactor', presentation.base_unit_factor::int,
+                 'isSellable', presentation.is_sellable
+               ) order by presentation.name
+             ) filter (where presentation.id is not null),
+             '[]'::jsonb
+           ) as presentations
+         from filtered_products as filtered
+         left join product_presentations as presentation
+           on presentation.tenant_id = $1
+          and presentation.product_id = filtered.id
+         group by filtered.id, filtered.name, filtered."activeIngredient", filtered."categoryName"
+         order by filtered.name
+         limit $3 offset $4`,
+        [scope.tenantId, search, limit, offset]
+      );
+      const total = rows[0]?.total ?? 0;
+      return {
+        items: rows.map(({ total: _total, ...item }) => item),
+        total,
+        limit,
+        offset
+      };
     });
   }
 

@@ -54,3 +54,15 @@ Errores previstos: `400 VALIDATION_FAILED`, `403 FORBIDDEN`, `409 INSUFFICIENT_S
 - `GET /api/v1/fiscal-documents/{id}/status`: `fiscal.read`; muestra estado real sin inventar aceptación.
 
 Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `sales.read`, `sales.confirm`, `cash.manage`, `quotes.manage`, `documents.reprint`, `audit.read`.
+
+## Catálogo inicial
+
+| Ruta | Acceso y contrato |
+| --- | --- |
+| `GET /api/v1/catalog/products` | Requiere `catalog.manage` en la sucursal activa. Acepta `search`, `limit` (1–100) y `offset`; devuelve productos activos, principio activo, categoría y presentaciones tenant-scoped. |
+| `POST /api/v1/catalog/categories` | Requiere `catalog.manage`. Crea una categoría en el tenant del contexto. |
+| `POST /api/v1/catalog/products` | Requiere `catalog.manage`. Crea un producto; `name` es obligatorio y `activeIngredient` opcional. |
+| `POST /api/v1/catalog/products/{productId}/presentations` | Requiere `catalog.manage`. Crea una presentación con `name`, `baseUnitFactor` entero positivo e `isSellable`. |
+
+Las rutas no aceptan `tenantId` o `branchId` de autorización desde el cuerpo: el
+contexto proviene del access token y las consultas usan RLS.

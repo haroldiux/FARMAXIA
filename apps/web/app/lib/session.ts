@@ -58,6 +58,36 @@ async function refresh(): Promise<void> {
   storeToken(result.accessToken);
 }
 
+export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  let accessToken = token();
+  if (!accessToken) {
+    await refresh();
+    accessToken = token();
+  }
+  if (!accessToken) {
+    throw new Error("SESSION_REQUIRED");
+  }
+
+  const execute = (value: string) => fetch(`${apiUrl}${path}`, {
+    ...init,
+    headers: {
+      ...Object.fromEntries(new Headers(init.headers).entries()),
+      authorization: `Bearer ${value}`
+    },
+    credentials: "include"
+  });
+  let response = await execute(accessToken);
+  if (response.status === 401) {
+    await refresh();
+    const refreshedToken = token();
+    if (!refreshedToken) {
+      throw new Error("SESSION_EXPIRED");
+    }
+    response = await execute(refreshedToken);
+  }
+  return response;
+}
+
 async function me(): Promise<AuthSession> {
   const accessToken = token();
   if (!accessToken) {

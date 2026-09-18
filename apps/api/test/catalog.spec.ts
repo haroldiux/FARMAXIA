@@ -174,6 +174,37 @@ describe("catalog service (C01)", () => {
     expect(await catalog.findByBarcode(scope, "does-not-exist")).toBeNull();
   });
 
+  it("lists active products with their presentations inside the branch scope", async () => {
+    const category = await catalog.createCategory(scope, {
+      name: "Antibióticos",
+      isControlled: false
+    });
+    const product = await catalog.createProduct(scope, {
+      categoryId: category.id,
+      name: "Amoxicilina",
+      activeIngredient: "Amoxicilina 500 mg"
+    });
+    await catalog.createPresentation(scope, {
+      productId: product.id,
+      name: "Caja x 12 cápsulas",
+      baseUnitFactor: 12,
+      isSellable: true
+    });
+
+    const listed = await catalog.listProducts(scope, { search: "amoxi", limit: 10, offset: 0 });
+
+    expect(listed.total).toBe(1);
+    expect(listed.items[0]).toMatchObject({
+      productId: product.id,
+      name: "Amoxicilina",
+      activeIngredient: "Amoxicilina 500 mg",
+      categoryName: "Antibióticos"
+    });
+    expect(listed.items[0]?.presentations).toEqual([
+      expect.objectContaining({ name: "Caja x 12 cápsulas", baseUnitFactor: 12 })
+    ]);
+  });
+
   it("rejects an invalid factor, duplicate barcode and an inaccessible tenant scope", async () => {
     const category = await catalog.createCategory(scope, {
       name: "Vitaminas",

@@ -86,8 +86,14 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 - CORS: preflight desde `http://localhost:3000` respondió `204` con origen y credenciales permitidos.
 - Stack: las imágenes reconstruidas sirvieron API y web con HTTP 200; la regresión API quedó en 28 pruebas verdes.
 
+## Evidencia F2-WEB
+
+- Red/Green: `apps/api/test/catalog.spec.ts` comenzó fallando porque no existía `listProducts` y pasó después con búsqueda, paginación, categoría y presentaciones reales.
+- API: `CatalogController` expone listado y altas de categorías, productos y presentaciones bajo `catalog.manage`; el listado mantiene el alcance tenant/sucursal mediante `withScope` y solo devuelve productos activos.
+- Web: `/catalog` consume el API autenticado, permite buscar y dar de alta productos, y muestra presentaciones persistidas; no inventa precios, códigos de barras, homologaciones ni métricas.
+- Verificación: la suite API pasó con 29 pruebas; `tsc --noEmit` y builds de API/Web pasaron; las cuatro imágenes Docker reconstruidas quedaron saludables, `/catalog` respondió HTTP 200 y el endpoint de catálogo sin bearer respondió HTTP 401.
+
 ## Próxima tarea
 
-Iniciar el siguiente módulo funcional en paralelo con C04: catálogo y operaciones
-de inventario. C04 cubre FEFO, reservas operativas y reglas de vencimiento. D08
-y D22 permanecen abiertas para costos/importación.
+Iniciar operaciones de inventario y continuar C04 con FEFO, reservas operativas y
+reglas de vencimiento. D08 y D22 permanecen abiertas para costos/importación.

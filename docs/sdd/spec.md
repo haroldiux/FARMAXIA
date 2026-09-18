@@ -232,3 +232,10 @@ La web DEBE autenticar con `POST /api/v1/auth/login`, conservar el access token 
 `GET /api/v1/auth/me`. Una sesión inválida DEBE volver al login. El dashboard
 DEBE mostrar únicamente tenant, sucursal y permisos efectivos, y distinguir los
 módulos disponibles de los próximos.
+
+## S34 — catálogo web y API inicial
+
+La API DEBE listar productos activos agrupados con presentaciones, búsqueda y
+paginación bajo RLS, y DEBE proteger altas de categoría, producto y presentación
+con `catalog.manage`. La web `/catalog` DEBE consumir esa API, mostrar estados
+vacíos/errores y permitir alta básica sin presentar métricas ficticias.

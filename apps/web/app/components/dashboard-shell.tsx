@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { currentSession, logout, type AuthSession } from "../lib/session";
 
@@ -80,7 +81,10 @@ export function DashboardShell() {
         <nav className="main-nav" aria-label="Navegación principal">
           <p className="nav-label">Workspace</p>
           {navigation.map((item) => (
-            <button className={`nav-item ${item.active ? "is-active" : ""}`} disabled={!item.active} key={item.label} type="button">
+            item.label === "Catálogo" && session.permissions.includes("catalog.manage") ? <Link className="nav-item" href="/catalog" key={item.label}>
+              <span className="nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link> : <button className={`nav-item ${item.active ? "is-active" : ""}`} disabled={!item.active} key={item.label} type="button">
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
               {!item.active ? <small>Próximo</small> : null}
