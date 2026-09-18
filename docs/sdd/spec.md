@@ -224,3 +224,11 @@ y web. La API DEBE esperar dependencias saludables, ejecutar migraciones
 idempotentes y servir en el puerto 3001. La web DEBE usar el build standalone de
 Next.js y servir en el puerto 3000. Las imágenes DEBEN instalar desde el
 lockfile con Node 22 y no depender de artefactos del host.
+
+## S33 — backoffice inicial autenticado
+
+La web DEBE autenticar con `POST /api/v1/auth/login`, conservar el access token en
+`sessionStorage`, usar la cookie HttpOnly para refresh y validar el contexto con
+`GET /api/v1/auth/me`. Una sesión inválida DEBE volver al login. El dashboard
+DEBE mostrar únicamente tenant, sucursal y permisos efectivos, y distinguir los
+módulos disponibles de los próximos.

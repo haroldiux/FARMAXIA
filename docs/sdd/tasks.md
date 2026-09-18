@@ -78,3 +78,10 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] B07.2 Añadir servicios API/web, healthchecks y dependencias al Compose.
 - [x] B07.3 Ejecutar migraciones desde el arranque de la API.
 - [x] B07.4 Construir y verificar los cuatro contenedores con HTTP 200.
+
+## Lote F1-WEB
+
+- [x] F1-WEB.1 Habilitar CORS explícito para el origen web local.
+- [x] F1-WEB.2 Implementar login, refresh y logout contra la API existente.
+- [x] F1-WEB.3 Implementar dashboard protegido con contexto y permisos efectivos.
+- [x] F1-WEB.4 Verificar responsive shell, builds, CORS y stack Docker.

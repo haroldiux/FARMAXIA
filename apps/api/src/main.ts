@@ -10,6 +10,10 @@ async function bootstrap(): Promise<void> {
     AppModule,
     new FastifyAdapter()
   );
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+    credentials: true
+  });
   await app.register(fastifyCookie);
   const port = Number(process.env.PORT ?? 3001);
   await app.listen({ host: "0.0.0.0", port });

@@ -19,6 +19,7 @@
 | C01 | Completada | Migración `0006_cool_payback.sql`, catálogo con FKs/RLS, búsqueda de barras, precio por sucursal y homologación preparada; 24 pruebas verdes. | Base disponible para compras, recepción y lotes. |
 | C02 | Completada | Migración `0007_swift_supernaut.sql`, proveedores, órdenes, recepción idempotente, lotes, saldos, movimiento `RECEIPT` y cuentas por pagar; 26 pruebas verdes. | Costeo/importación siguen provisionales hasta D08/D22. |
 | C03 | Completada | Migración `0008_messy_mauler.sql`, dirección `IN`/`OUT`, conciliación idempotente, ajuste atómico respetando reservas, auditoría y RLS; 28 pruebas verdes. | C04 aborda FEFO, reservas operativas y vencimientos; D08/D22 permanecen abiertas. |
+| F1-WEB | Completada como base funcional | Login contra API, refresh/logout, dashboard protegido, contexto tenant/sucursal y permisos efectivos; builds Next y CORS verificados dentro de Docker. | CRUD de catálogo, inventario, ventas y caja se implementará por lotes posteriores. |
 
 ## Límites del lote B01
 
@@ -78,8 +79,15 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 - Ejecución: `docker compose up -d` levantó `postgres`, `redis`, `api` y `web`; la API aplicó migraciones automáticamente.
 - Healthchecks: `docker compose ps` mostró los cuatro servicios saludables; `GET /health` y `GET /` respondieron HTTP 200.
 
+## Evidencia F1-WEB
+
+- Web: `pnpm --filter @farmaxia/web exec tsc --noEmit` y `pnpm --filter @farmaxia/web build` pasaron con rutas `/` y `/dashboard`.
+- Sesión: el cliente usa login, refresh y logout contra los contratos existentes; el dashboard no inventa métricas ni entidades.
+- CORS: preflight desde `http://localhost:3000` respondió `204` con origen y credenciales permitidos.
+- Stack: las imágenes reconstruidas sirvieron API y web con HTTP 200; la regresión API quedó en 28 pruebas verdes.
+
 ## Próxima tarea
 
-Iniciar el frontend funcional en paralelo con C04, comenzando por las vistas
-autenticadas del backoffice; C04 cubre FEFO, reservas operativas y reglas de
-vencimiento. D08 y D22 permanecen abiertas para costos/importación.
+Iniciar el siguiente módulo funcional en paralelo con C04: catálogo y operaciones
+de inventario. C04 cubre FEFO, reservas operativas y reglas de vencimiento. D08
+y D22 permanecen abiertas para costos/importación.

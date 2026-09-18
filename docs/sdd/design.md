@@ -165,3 +165,12 @@ reproducible mediante pnpm y Node 22. API conserva Drizzle para ejecutar
 su runtime solo copia el servidor y estáticos de Next. Compose conecta la API a
 `postgres`/`redis` por DNS interno, publica 3001/3000 al host y usa healthchecks
 para ordenar el arranque.
+
+## Diseño F1-WEB: shell autenticada
+
+Next.js incorpora `LoginForm`, un cliente de sesión basado en
+`NEXT_PUBLIC_API_URL` y `DashboardShell` protegido por `/auth/me`. El access
+token vive en `sessionStorage`; el refresh y logout usan `credentials: include`
+para conservar la cookie HttpOnly del backend. La UI presenta contexto y
+permisos reales, mientras los módulos sin rutas de dominio permanecen marcados
+como próximos.

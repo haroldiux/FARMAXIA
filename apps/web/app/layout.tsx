@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FARMAXIA",
-  description: "Plataforma SaaS para farmacias"
+  title: "FARMAXIA · Operación inteligente",
+  description: "Backoffice multi-tenant para farmacias"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

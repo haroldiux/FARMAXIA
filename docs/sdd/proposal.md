@@ -87,3 +87,10 @@ Incorporar imágenes reproducibles para API y web y extender Compose para levant
 PostgreSQL, Redis, API NestJS y Next.js con healthchecks. La API ejecutará las
 migraciones al iniciar. Este lote no implica que las vistas funcionales de
 catálogo, ventas o POS ya estén construidas.
+
+## Lote F1-WEB — backoffice inicial autenticado
+
+Convertir la base Next.js en una experiencia web usable con login contra la API,
+sesión protegida y dashboard de contexto tenant/sucursal. La navegación deja
+claros los módulos futuros y no muestra saldos, ventas o estados fiscales que
+todavía no tengan endpoint.
