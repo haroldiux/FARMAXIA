@@ -52,6 +52,35 @@ export interface PurchaseOrderInput {
   lines: [{ presentationId: string; quantityBase: number; unitCost: string }];
 }
 
+export interface ReceiptLineInput {
+  presentationId: string;
+  lotCode: string;
+  expiresOn: string;
+  quantityBase: number;
+  unitCost: string;
+}
+
+export interface ReceiveInput {
+  idempotencyKey: string;
+  supplierId: string;
+  purchaseOrderId: string;
+  warehouseId: string;
+  receivedAt: string;
+  lines: ReceiptLineInput[];
+}
+
+export interface ReceiveResult {
+  receiptId: string;
+  lineCount: number;
+}
+
+export function procurementIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `procurement-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 async function parseError(response: Response): Promise<Error> {
   let message = "No pudimos completar la operación de compras.";
   try {
@@ -101,6 +130,17 @@ export function createPurchaseOrder(input: PurchaseOrderInput): Promise<{ id: st
   return request<{ id: string }>("/api/v1/procurement/purchase-orders", {
     method: "POST",
     headers: { "content-type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export function receivePurchaseOrder(input: ReceiveInput): Promise<ReceiveResult> {
+  return request<ReceiveResult>("/api/v1/procurement/receipts", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": input.idempotencyKey
+    },
     body: JSON.stringify(input)
   });
 }

@@ -25,7 +25,9 @@ function formatDate(value: string): string {
 }
 
 function statusLabel(status: string): string {
-  return status === "RECEIVED" ? "Recibida" : status === "CANCELED" ? "Cancelada" : "Enviada";
+  if (status === "RECEIVED") return "Recibida";
+  if (status === "PARTIALLY_RECEIVED") return "Recepción parcial";
+  return status === "CANCELED" ? "Cancelada" : "Enviada";
 }
 
 export default function ProcurementPage() {
@@ -141,7 +143,7 @@ export default function ProcurementPage() {
       await refresh();
       setOrderQuantity("1");
       setOrderUnitCost("");
-      setNotice("Orden creada. La recepción por lote se habilitará en el siguiente flujo.");
+      setNotice("Orden creada. Ya puedes registrar su recepción por lote.");
     } catch (reasonValue) {
       setError(reasonValue instanceof Error ? reasonValue.message : "No pudimos crear la orden.");
     } finally {
@@ -185,7 +187,7 @@ export default function ProcurementPage() {
           {orders.length ? <div className="order-list">{orders.map((order) => <article className="order-card" key={order.id}>
             <div className="order-card-head"><div><strong>{order.supplierName}</strong><small>{order.warehouseName} · {formatDate(order.orderedAt)}</small></div><span className={`order-status order-${order.status.toLowerCase()}`}>{statusLabel(order.status)}</span></div>
             <div className="order-lines">{order.lines.map((line) => <div className="order-line" key={`${order.id}-${line.presentationId}`}><span>{line.productName} · {line.presentationName}</span><strong>{line.quantityBase} u.</strong><small>BOB {line.unitCost}</small></div>)}</div>
-            <p className="order-id">Orden {order.id.slice(0, 8)}…</p>
+            <div className="order-card-foot"><p className="order-id">Orden {order.id.slice(0, 8)}…</p>{order.status !== "RECEIVED" && order.status !== "CANCELED" ? <Link className="row-action" href="/procurement/receiving">Recibir lotes</Link> : null}</div>
           </article>)}</div> : <div className="procurement-empty"><span className="empty-symbol">✦</span><h3>Aún no hay órdenes.</h3><p>Crea la primera para preparar la recepción de mercadería.</p></div>}
         </article>
 
@@ -202,7 +204,7 @@ export default function ProcurementPage() {
             <label className="field"><span>Producto y presentación</span><select required value={orderPresentationId} onChange={(event) => setOrderPresentationId(event.target.value)}><option value="">Selecciona presentación</option>{presentations.map((presentation) => <option key={presentation.presentationId} value={presentation.presentationId}>{presentation.productName} · {presentation.presentationName}</option>)}</select></label>
             <div className="procurement-field-grid"><label className="field"><span>Cantidad base</span><input min="1" required type="number" value={orderQuantity} onChange={(event) => setOrderQuantity(event.target.value)} /></label><label className="field"><span>Costo unitario</span><input required type="text" inputMode="decimal" value={orderUnitCost} onChange={(event) => setOrderUnitCost(event.target.value)} placeholder="0.0000" /></label></div>
             <button className="primary-button" disabled={saving || !suppliers.length || !presentations.length} type="submit">{saving ? "Creando…" : "Crear orden"}<span>↗</span></button>
-            <p className="form-note">Esta primera vista crea una línea por orden. La recepción física por lote llegará en el siguiente lote.</p>
+            <p className="form-note">Esta vista crea una línea por orden. Puedes dividir su recepción física en varios lotes.</p>
           </form></aside>
         </div>
       </section>

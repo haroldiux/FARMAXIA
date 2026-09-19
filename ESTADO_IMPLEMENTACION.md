@@ -1,7 +1,7 @@
 # Estado de implementación — FARMAXIA
 
-**Actualizado:** 18 de septiembre de 2026
-**Fase actual:** F4-WEB — compras y órdenes de abastecimiento.
+**Actualizado:** 19 de septiembre de 2026
+**Fase actual:** F5-WEB — recepción de compras por lote.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
@@ -24,6 +24,7 @@
 | F1-WEB | Completada como base funcional | Login contra API, refresh/logout, dashboard protegido, contexto tenant/sucursal y permisos efectivos; builds Next y CORS verificados dentro de Docker. | CRUD de catálogo, ventas y caja se implementará por lotes posteriores. |
 | F3-WEB | Completada | Cliente scoped y vista `/inventory` con almacenes de la sucursal activa, alertas FEFO a 7/30/90 días, estados de lote y acciones auditadas de cuarentena, liberación y merma; suite API en 38 pruebas; builds y smoke Docker verificados. | Reservas comerciales, sensores, notificaciones, D08/D09/D22 siguen fuera de alcance. |
 | F4-WEB | Completada | Controller y módulo HTTP de compras, listados scoped de proveedores/presentaciones/órdenes y vista `/procurement` con alta de proveedor y orden de una línea; suite API en 39 pruebas; builds y smoke Docker verificados. | Recepción por lote, facturas/CxP e importación se mantienen para lotes posteriores. |
+| F5-WEB | En verificación | Ruta protegida de recepción, estados `PARTIALLY_RECEIVED`/`RECEIVED`, bloqueo de orden contra sobre-recepción concurrente y vista `/procurement/receiving` con lotes repetibles. | Falta cerrar verificación Docker/smoke y publicación; facturas/CxP e importación siguen fuera de alcance. |
 
 ## Límites del lote B01
 
@@ -150,6 +151,6 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 
 ## Próxima tarea
 
-Continuar con F5-WEB para recepción por lote y conciliación física, o priorizar
-ventas y caja; la integración comercial de reservas depende de D09 y D08/D22
-permanecen abiertas para costos/importación.
+Cerrar verificación y publicación de F5-WEB; después priorizar ventas y caja.
+La integración comercial de reservas depende de D09 y D08/D22 permanecen
+abiertas para costos/importación.

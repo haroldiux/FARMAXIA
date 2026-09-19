@@ -6,6 +6,8 @@ import {
   type PresentationListResult,
   type PurchaseOrderInput,
   type PurchaseOrderListResult,
+  type ReceiveInput,
+  type ReceiveResult,
   type SupplierInput,
   type SupplierListResult
 } from "./procurement.service.js";
@@ -51,5 +53,13 @@ export class ProcurementController {
     @Body() input: PurchaseOrderInput
   ): Promise<{ id: string }> {
     return this.procurement.createPurchaseOrder(scopeFrom(request), input);
+  }
+
+  @Post("receipts")
+  receive(
+    @Req() request: AuthenticatedRequest,
+    @Body() input: ReceiveInput
+  ): Promise<ReceiveResult> {
+    return this.procurement.receive(scopeFrom(request), input);
   }
 }

@@ -131,6 +131,10 @@ interface QuantityRow {
   quantityBase: string;
 }
 
+interface CompletionRow {
+  isComplete: boolean;
+}
+
 interface BatchRow {
   id: string;
   expiresOn: string;
@@ -424,7 +428,8 @@ export class ProcurementService {
     const orderResult = await client.query<PurchaseOrderRow>(
       `select id, supplier_id as "supplierId", warehouse_id as "warehouseId", status
        from purchase_orders
-       where tenant_id = $1 and id = $2`,
+       where tenant_id = $1 and id = $2
+       for update`,
       [scope.tenantId, input.purchaseOrderId]
     );
     const order = requireRow(orderResult.rows[0], "Purchase order is not available in this scope.");
@@ -453,7 +458,7 @@ export class ProcurementService {
 
     for (const line of input.lines) {
       const ordered = await client.query<QuantityRow>(
-        `select quantity_base as "quantityBase"
+        `select coalesce(sum(quantity_base), 0)::text as "quantityBase"
          from purchase_order_items
          where tenant_id = $1 and purchase_order_id = $2 and presentation_id = $3`,
         [scope.tenantId, input.purchaseOrderId, line.presentationId]
@@ -531,10 +536,33 @@ export class ProcurementService {
       );
     }
 
-    await client.query(
-      `update purchase_orders set status = 'RECEIVED'
-       where tenant_id = $1 and id = $2`,
+    const completion = await client.query<CompletionRow>(
+      `select not exists (
+         select 1
+         from (
+           select presentation_id, sum(quantity_base) as ordered_base
+           from purchase_order_items
+           where tenant_id = $1 and purchase_order_id = $2
+           group by presentation_id
+         ) ordered
+         left join (
+           select item.presentation_id, sum(item.quantity_base) as received_base
+           from goods_receipt_items item
+           join goods_receipts receipt
+             on receipt.tenant_id = item.tenant_id
+            and receipt.id = item.goods_receipt_id
+           where receipt.tenant_id = $1 and receipt.purchase_order_id = $2
+           group by item.presentation_id
+         ) received on received.presentation_id = ordered.presentation_id
+         where coalesce(received.received_base, 0) < ordered.ordered_base
+       ) as "isComplete"`,
       [scope.tenantId, input.purchaseOrderId]
+    );
+    const isComplete = completion.rows[0]?.isComplete ?? false;
+    await client.query(
+      `update purchase_orders set status = $3
+       where tenant_id = $1 and id = $2`,
+      [scope.tenantId, input.purchaseOrderId, isComplete ? "RECEIVED" : "PARTIALLY_RECEIVED"]
     );
     return { statusCode: 201, body: { receiptId: receipt.id, lineCount: input.lines.length } };
   }

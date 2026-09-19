@@ -141,3 +141,13 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
   orden de una línea, listados y aviso de recepción diferida.
 - [x] F4-WEB.4 Verificar suite completa, builds, Docker, smoke y archivar/
   publicar el change.
+
+## Lote F5-WEB
+
+- [x] F5-WEB.1 Cubrir recepción parcial, replay idempotente y concurrencia con
+  pruebas PostgreSQL sobre el límite controller/servicio.
+- [x] F5-WEB.2 Exponer `POST /api/v1/procurement/receipts` bajo
+  `inventory.manage`, bloqueando la orden y distinguiendo estados parcial/final.
+- [x] F5-WEB.3 Implementar cliente tipado y `/procurement/receiving` con líneas
+  repetibles por lote, validación local y reintento idempotente.
+- [ ] F5-WEB.4 Completar verificación Docker/smoke y publicación autorizada.

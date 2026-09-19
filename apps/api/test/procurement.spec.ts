@@ -9,6 +9,7 @@ import { TenantDatabase, type TenantScope } from "../src/database/tenant-databas
 import {
   IdempotencyKeyReusedError
 } from "../src/transversal/idempotency.service.js";
+import { ProcurementController } from "../src/procurement/procurement.controller.js";
 import { ProcurementService } from "../src/procurement/procurement.service.js";
 
 const developmentDatabaseUrl =
@@ -41,6 +42,7 @@ const ownerPool = new Pool({ connectionString: testDatabaseUrl });
 const tenantDatabase = new TenantDatabase(testAppDatabaseUrl);
 const catalog = new CatalogService(tenantDatabase);
 const procurement = new ProcurementService(tenantDatabase);
+const procurementController = new ProcurementController(procurement);
 const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), "../drizzle");
 
 describe("procurement and receiving service (C02)", () => {
@@ -206,6 +208,142 @@ describe("procurement and receiving service (C02)", () => {
       [payable.payableId]
     );
     expect(payableRows.rows).toEqual([{ outstanding_amount: "25.0000" }]);
+  });
+
+  it("receives partial orders through the protected boundary and serializes cumulative totals", async () => {
+    const category = await catalog.createCategory(scope, {
+      name: "Recepción parcial",
+      isControlled: false
+    });
+    const product = await catalog.createProduct(scope, {
+      categoryId: category.id,
+      name: "Ibuprofeno",
+      activeIngredient: "Ibuprofeno 400 mg"
+    });
+    const presentation = await catalog.createPresentation(scope, {
+      productId: product.id,
+      name: "Caja x 10 tabletas",
+      baseUnitFactor: 10,
+      isSellable: true
+    });
+    const supplier = await procurement.createSupplier(scope, {
+      name: "Proveedor de recepción",
+      taxId: "5000020"
+    });
+    const purchaseOrder = await procurement.createPurchaseOrder(scope, {
+      supplierId: supplier.id,
+      warehouseId,
+      lines: [{ presentationId: presentation.id, quantityBase: 10, unitCost: "4.0000" }]
+    });
+    const request = { auth: scope } as never;
+    const partialInput = {
+      idempotencyKey: "receipt-boundary-partial",
+      supplierId: supplier.id,
+      purchaseOrderId: purchaseOrder.id,
+      warehouseId,
+      receivedAt: "2026-09-19T12:00:00.000Z",
+      lines: [{
+        presentationId: presentation.id,
+        lotCode: "PARTIAL-001",
+        expiresOn: "2027-12-31",
+        quantityBase: 4,
+        unitCost: "4.0000"
+      }]
+    } as const;
+
+    const partial = await procurementController.receive(request, partialInput);
+    const replay = await procurementController.receive(request, partialInput);
+    expect(replay).toEqual(partial);
+    expect(
+      (await ownerPool.query<{ status: string }>(
+        "select status from purchase_orders where tenant_id = $1 and id = $2",
+        [tenantId, purchaseOrder.id]
+      )).rows[0]?.status
+    ).toBe("PARTIALLY_RECEIVED");
+
+    await procurementController.receive(request, {
+      ...partialInput,
+      idempotencyKey: "receipt-boundary-complete",
+      receivedAt: "2026-09-20T12:00:00.000Z",
+      lines: [{ ...partialInput.lines[0], lotCode: "PARTIAL-002", quantityBase: 6 }]
+    });
+    expect(
+      (await ownerPool.query<{ status: string }>(
+        "select status from purchase_orders where tenant_id = $1 and id = $2",
+        [tenantId, purchaseOrder.id]
+      )).rows[0]?.status
+    ).toBe("RECEIVED");
+
+    const concurrentOrder = await procurement.createPurchaseOrder(scope, {
+      supplierId: supplier.id,
+      warehouseId,
+      lines: [{ presentationId: presentation.id, quantityBase: 10, unitCost: "4.0000" }]
+    });
+    const concurrentBase = {
+      supplierId: supplier.id,
+      purchaseOrderId: concurrentOrder.id,
+      warehouseId,
+      receivedAt: "2026-09-21T12:00:00.000Z",
+      lines: [{
+        presentationId: presentation.id,
+        lotCode: "CONCURRENT-A",
+        expiresOn: "2027-12-31",
+        quantityBase: 6,
+        unitCost: "4.0000"
+      }]
+    } as const;
+    const attempts = await Promise.allSettled([
+      procurementController.receive(request, {
+        ...concurrentBase,
+        idempotencyKey: "receipt-concurrent-a"
+      }),
+      procurementController.receive(request, {
+        ...concurrentBase,
+        idempotencyKey: "receipt-concurrent-b",
+        lines: [{ ...concurrentBase.lines[0], lotCode: "CONCURRENT-B" }]
+      })
+    ]);
+    expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
+    expect(attempts.filter((attempt) => attempt.status === "rejected")).toHaveLength(1);
+    const received = await ownerPool.query<{ quantity_base: string }>(
+      `select coalesce(sum(item.quantity_base), 0)::text as quantity_base
+       from goods_receipt_items item
+       join goods_receipts receipt
+         on receipt.tenant_id = item.tenant_id and receipt.id = item.goods_receipt_id
+       where receipt.tenant_id = $1 and receipt.purchase_order_id = $2`,
+      [tenantId, concurrentOrder.id]
+    );
+    expect(received.rows[0]?.quantity_base).toBe("6");
+
+    const otherBranchId = "00000000-0000-4000-8000-000000000571";
+    const otherWarehouseId = "00000000-0000-4000-8000-000000000581";
+    await ownerPool.query(
+      "insert into branches (id, tenant_id, legal_entity_id, code, name) values ($1, $2, $3, $4, $5)",
+      [otherBranchId, tenantId, legalEntityId, "RECEIVING-OTHER", "Other receiving branch"]
+    );
+    await ownerPool.query(
+      "insert into warehouses (id, tenant_id, branch_id, name) values ($1, $2, $3, $4)",
+      [otherWarehouseId, tenantId, otherBranchId, "Other receiving warehouse"]
+    );
+    await ownerPool.query(
+      "insert into user_branch_memberships (user_id, tenant_id, branch_id) values ($1, $2, $3)",
+      [userId, tenantId, otherBranchId]
+    );
+    const otherOrder = await procurement.createPurchaseOrder(
+      { ...scope, branchId: otherBranchId },
+      {
+        supplierId: supplier.id,
+        warehouseId: otherWarehouseId,
+        lines: [{ presentationId: presentation.id, quantityBase: 5, unitCost: "4.0000" }]
+      }
+    );
+    await expect(procurementController.receive(request, {
+      ...concurrentBase,
+      idempotencyKey: "receipt-other-branch",
+      purchaseOrderId: otherOrder.id,
+      warehouseId: otherWarehouseId,
+      lines: [{ ...concurrentBase.lines[0], lotCode: "OTHER-BRANCH", quantityBase: 5 }]
+    })).rejects.toThrow("Purchase order is not available in this scope.");
   });
 
   it("lists active suppliers and purchase orders scoped to the branch", async () => {

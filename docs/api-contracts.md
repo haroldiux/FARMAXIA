@@ -76,9 +76,13 @@ contexto proviene del access token y las consultas usan RLS.
 | `GET /api/v1/procurement/purchase-orders` | Requiere `inventory.manage`. Devuelve órdenes de almacenes de la sucursal activa, proveedor/almacén, estado, fecha y líneas con producto, presentación, cantidad base y costo unitario. |
 | `POST /api/v1/procurement/suppliers` | Requiere `inventory.manage`. Recibe `name` y `taxId` opcional; crea un proveedor activo y devuelve `{ id }`. |
 | `POST /api/v1/procurement/purchase-orders` | Requiere `inventory.manage`. Recibe `supplierId`, `warehouseId` y `lines` con presentación, cantidad base entera positiva y costo decimal; crea una orden `SUBMITTED` y devuelve `{ id }`. |
+| `POST /api/v1/procurement/receipts` | Requiere `inventory.manage`. Recibe una clave idempotente, orden/proveedor/almacén, fecha de recepción y líneas con presentación, lote, vencimiento, cantidad base y costo. Devuelve `{ receiptId, lineCount }`; una repetición idéntica no duplica inventario. |
 
-La recepción parcial/completa, los lotes y las facturas de proveedor no forman
-parte de F4-WEB; se implementarán en lotes posteriores sin inventar stock.
+F5-WEB permite recepciones parciales: la orden queda `PARTIALLY_RECEIVED` hasta
+que todas sus presentaciones completan la cantidad pedida y entonces pasa a
+`RECEIVED`. La operación bloquea la orden durante el cálculo acumulado para
+evitar sobre-recepción concurrente. Las facturas de proveedor siguen fuera de
+este flujo Web.
 
 ## Inventario operativo C04/C05
 
