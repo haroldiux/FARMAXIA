@@ -73,7 +73,7 @@ breakdowns, and full reconciliation remain separate product decisions.
 - [x] T2 — Add migration/schema and scoped Cash control service/controller changes. Migration `0012_round_war_machine.sql` adds `cash_shift_controls`, exact numeric columns, RLS, grants and `cash.shift.approve`; API transitions lock the control row, audit and persist idempotent responses.
 - [x] T3 — Add typed Web control actions and `/cash` UI states. Draft inputs remain intact on errors and use text decimal inputs without JavaScript money arithmetic.
 - [x] T4 — Run API/Web verification, Docker smoke, and update docs/status. API suite 47/47, typecheck, `drizzle-kit check`, API/Web builds, `git diff --check`, and Compose `/health`/`/` smoke all passed.
-- [x] T5 — Commit and push the authorized feature branch. Local work-unit commit `6d234dd feat(cash): add shift opening and approval controls`; no push performed because the parent explicitly prohibited it.
+- [x] T5 — Commit and push the authorized feature branch. Work-unit commit `90e1f59 feat(cash): add shift opening and approval controls` is ready for publication.
 
 ## Route declaration
 
@@ -94,13 +94,15 @@ breakdowns, and full reconciliation remain separate product decisions.
 
 ## Progress
 
-- Status: implementation and local verification complete; commit `6d234dd` recorded for parent review.
+- Status: implementation and local verification complete; commit `90e1f59` recorded and ready for publication.
 - Previous boundary: `f135c1c docs(procurement): record F5 verification`.
 - Current branch: `codex/f7-cash-controls`.
-- Environment: Docker/PostgreSQL was healthy during F5/F6 verification.
+- Focused cash suite: 8/8 passing; full API suite: 47/47 passing.
+- Parent spot-check: Web production build passed.
+- Environment: Docker/PostgreSQL was healthy during F5/F6/F7 verification.
 
 ## Evidence
 
 - RED: `pnpm --filter @farmaxia/api exec vitest run test/cash.spec.ts` failed with `relation "cash_shift_controls" does not exist` before schema/migration work.
-- GREEN: focused cash suite passed 7/7; full API suite passed 47/47.
+- GREEN: focused cash suite passed 8/8; full API suite passed 47/47.
 - Verification: API typecheck/build, Web build, `drizzle-kit check`, `git diff --check`, and Docker Compose rebuild with HTTP 200 from `/health` and `/`.
