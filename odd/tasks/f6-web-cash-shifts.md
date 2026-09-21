@@ -71,7 +71,7 @@ and assignment boundaries without inventing monetary policy.
 - [x] T2 — Add migration/schema and scoped Cash service/controller/module.
 - [x] T3 — Add typed Web client and `/cash` scheduling UI/navigation.
 - [x] T4 — Run API/Web verification, Docker smoke when available, and update docs/status.
-- [x] T5 — Commit as one work unit; no push performed (requires explicit authorization).
+- [x] T5 — Commit as work units and push the feature branch after authorization.
 
 ## Route declaration
 
@@ -92,7 +92,7 @@ and assignment boundaries without inventing monetary policy.
 
 ## Progress
 
-- Status: T1–T5 implemented; work-unit committed locally (no push authorized).
+- Status: T1–T5 implemented; work-unit committed and pushed after user authorization.
 - RED: focused Vitest discovered `cash.spec.ts` and failed because the Cash
   controller/service did not yet exist.
 - GREEN evidence: API source+test typecheck, API build, Web production build,
@@ -109,4 +109,5 @@ and assignment boundaries without inventing monetary policy.
 - Previous boundary: `4f91e64 feat(procurement): add receiving by lot`.
 - Current branch: `codex/f6-web-cash-shifts`.
 - Work-unit commit: this commit (`feat(cash): add configurable shift scheduling`).
+- Publication: `origin/codex/f6-web-cash-shifts`.
 - Environment: Docker Desktop/PostgreSQL became available; migration and health smoke passed.

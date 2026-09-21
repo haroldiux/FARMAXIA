@@ -162,4 +162,4 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
   al permiso efectivo.
 - [x] F6-WEB.4 Ejecutar la suite PostgreSQL y smoke Docker; suite enfocada
   11/11, typecheck/builds y `/health`/`/` smoke verdes. La publicación remota
-  queda separada y requiere autorización explícita.
+  quedó autorizada y publicada en `origin/codex/f6-web-cash-shifts`.
