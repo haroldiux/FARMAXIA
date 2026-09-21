@@ -160,5 +160,6 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
   módulo Cash protegido por `cash.manage`.
 - [x] F6-WEB.3 Implementar cliente tipado, `/cash` y navegación condicionada
   al permiso efectivo.
-- [ ] F6-WEB.4 Ejecutar la suite PostgreSQL y smoke Docker cuando el runtime
-  local vuelva a estar disponible; publicar solo con autorización.
+- [x] F6-WEB.4 Ejecutar la suite PostgreSQL y smoke Docker; suite enfocada
+  11/11, typecheck/builds y `/health`/`/` smoke verdes. La publicación remota
+  queda separada y requiere autorización explícita.

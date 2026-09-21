@@ -1,7 +1,7 @@
 # Estado de implementación — FARMAXIA
 
 **Actualizado:** 21 de septiembre de 2026
-**Fase actual:** F6-WEB — turnos configurables de caja, en verificación.
+**Fase actual:** F6-WEB — turnos configurables de caja, verificada localmente.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
@@ -25,7 +25,7 @@
 | F3-WEB | Completada | Cliente scoped y vista `/inventory` con almacenes de la sucursal activa, alertas FEFO a 7/30/90 días, estados de lote y acciones auditadas de cuarentena, liberación y merma; suite API en 38 pruebas; builds y smoke Docker verificados. | Reservas comerciales, sensores, notificaciones, D08/D09/D22 siguen fuera de alcance. |
 | F4-WEB | Completada | Controller y módulo HTTP de compras, listados scoped de proveedores/presentaciones/órdenes y vista `/procurement` con alta de proveedor y orden de una línea; suite API en 39 pruebas; builds y smoke Docker verificados. | Recepción por lote, facturas/CxP e importación se mantienen para lotes posteriores. |
 | F5-WEB | En verificación | Ruta protegida de recepción, estados `PARTIALLY_RECEIVED`/`RECEIVED`, bloqueo de orden contra sobre-recepción concurrente y vista `/procurement/receiving` con lotes repetibles. | Falta cerrar verificación Docker/smoke y publicación; facturas/CxP e importación siguen fuera de alcance. |
-| F6-WEB | En verificación | Migración `0011_hot_mongoose.sql`, turnos absolutos por caja, asignaciones múltiples, replay idempotente, bloqueo contra solapamiento concurrente y vista `/cash`; typecheck/builds verdes. | Suite PostgreSQL y smoke Docker bloqueados por puerto 5433 sin servicio; apertura/cierre monetario, recurrencia, ventas y conciliación quedan fuera. |
+| F6-WEB | Completada localmente | Migración `0011_hot_mongoose.sql`, turnos absolutos por caja, asignaciones múltiples, replay idempotente, bloqueo contra solapamiento concurrente y vista `/cash`; suite API enfocada 11/11, typecheck/builds y smoke Docker verdes. | Publicación remota pendiente; apertura/cierre monetario, recurrencia, ventas y conciliación quedan fuera. |
 
 ## Límites del lote B01
 
@@ -152,6 +152,7 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 
 ## Próxima tarea
 
-Cerrar la verificación PostgreSQL/Docker pendiente de F5-WEB y F6-WEB. Después,
-continuar caja con apertura/cierre monetario solo tras resolver D08/D14; ventas
-y la integración comercial de reservas continúan dependiendo de D09.
+Cerrar la verificación PostgreSQL/Docker pendiente de F5-WEB y publicar los
+lotes autorizados. Después, continuar caja con apertura/cierre monetario solo
+tras resolver D08/D14; ventas y la integración comercial de reservas continúan
+dependiendo de D09.
