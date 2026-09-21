@@ -174,5 +174,4 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] F7-WEB.3 Exponer operaciones API idempotentes y cliente/UI `/cash` para
   abrir, contar, mostrar pendientes y aprobar cierres.
 - [x] F7-WEB.4 Completar suite 47/47, builds, Docker/smoke, actualizar estado y
-    cerrar con commit `90e1f59`; publicación remota queda pendiente de la
-    autorización de entrega.
+    publicar `origin/codex/f7-cash-controls` tras autorización de entrega.
