@@ -55,6 +55,24 @@ Errores previstos: `400 VALIDATION_FAILED`, `403 FORBIDDEN`, `409 INSUFFICIENT_S
 
 Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `sales.read`, `sales.confirm`, `cash.manage`, `quotes.manage`, `documents.reprint`, `audit.read`.
 
+## Turnos de caja F6-WEB
+
+Todas las rutas requieren `cash.manage` y usan exclusivamente el tenant y la
+sucursal de la sesión.
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET /api/v1/cash/registers` | Devuelve `{ items }` con las cajas activas de la sucursal, ordenadas por código. |
+| `GET /api/v1/cash/eligible-users` | Devuelve únicamente `id` y `displayName` de usuarios activos con membresía en la sucursal. No expone credenciales. |
+| `GET /api/v1/cash/shifts` | Lista turnos fechados con caja, intervalo absoluto, estado y personas asignadas. |
+| `POST /api/v1/cash/shifts` | Recibe `idempotencyKey`, `cashRegisterId`, `scheduledStartAt`, `scheduledEndAt` y uno o más `userIds`. Crea un turno `SCHEDULED`; la misma clave/cuerpo reproduce el resultado. |
+
+Los intervalos son semiabiertos `[inicio, fin)`: horarios adyacentes están
+permitidos y cualquier solapamiento en una misma caja responde
+`409 CASH_SHIFT_OVERLAP`. La caja se bloquea dentro de la transacción para
+serializar creaciones concurrentes. Este lote no abre ni cierra caja y no
+registra importes, ventas o conciliaciones.
+
 ## Catálogo inicial
 
 | Ruta | Acceso y contrato |

@@ -151,3 +151,14 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] F5-WEB.3 Implementar cliente tipado y `/procurement/receiving` con líneas
   repetibles por lote, validación local y reintento idempotente.
 - [ ] F5-WEB.4 Completar verificación Docker/smoke y publicación autorizada.
+
+## Lote F6-WEB
+
+- [x] F6-WEB.1 Escribir prueba roja PostgreSQL para turnos fechados,
+  asignaciones múltiples, replay y solapamiento secuencial/concurrente.
+- [x] F6-WEB.2 Añadir migración `0011`, RLS, directorio mínimo de usuarios y
+  módulo Cash protegido por `cash.manage`.
+- [x] F6-WEB.3 Implementar cliente tipado, `/cash` y navegación condicionada
+  al permiso efectivo.
+- [ ] F6-WEB.4 Ejecutar la suite PostgreSQL y smoke Docker cuando el runtime
+  local vuelva a estar disponible; publicar solo con autorización.

@@ -14,7 +14,8 @@ export default defineConfig({
       "test/platform-services.spec.ts",
       "test/catalog.spec.ts",
       "test/procurement.spec.ts",
-      "test/inventory.spec.ts"
+      "test/inventory.spec.ts",
+      "test/cash.spec.ts"
     ],
     fileParallelism: false
   }

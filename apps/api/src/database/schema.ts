@@ -254,6 +254,11 @@ export const cashRegisters = pgTable(
       foreignColumns: [branches.tenantId, branches.id]
     }),
     unique("cash_registers_tenant_id_id_unique").on(table.tenantId, table.id),
+    unique("cash_registers_tenant_branch_id_unique").on(
+      table.tenantId,
+      table.branchId,
+      table.id
+    ),
     unique("cash_registers_tenant_branch_code_unique").on(
       table.tenantId,
       table.branchId,
@@ -297,6 +302,88 @@ export const userBranchMemberships = pgTable(
       name: "user_branch_memberships_tenant_branch_fk",
       columns: [table.tenantId, table.branchId],
       foreignColumns: [branches.tenantId, branches.id]
+    })
+  ]
+);
+
+export const cashShifts = pgTable(
+  "cash_shifts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    cashRegisterId: uuid("cash_register_id").notNull(),
+    scheduledStartAt: timestamp("scheduled_start_at", { withTimezone: true }).notNull(),
+    scheduledEndAt: timestamp("scheduled_end_at", { withTimezone: true }).notNull(),
+    status: varchar("status", { length: 24 }).default("SCHEDULED").notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "cash_shifts_tenant_branch_register_fk",
+      columns: [table.tenantId, table.branchId, table.cashRegisterId],
+      foreignColumns: [cashRegisters.tenantId, cashRegisters.branchId, cashRegisters.id]
+    }),
+    foreignKey({
+      name: "cash_shifts_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
+    }),
+    unique("cash_shifts_tenant_branch_id_unique").on(
+      table.tenantId,
+      table.branchId,
+      table.id
+    ),
+    index("cash_shifts_register_schedule_idx").on(
+      table.tenantId,
+      table.branchId,
+      table.cashRegisterId,
+      table.scheduledStartAt,
+      table.scheduledEndAt
+    ),
+    check(
+      "cash_shifts_schedule_check",
+      sql`${table.scheduledEndAt} > ${table.scheduledStartAt}`
+    ),
+    check(
+      "cash_shifts_status_check",
+      sql`${table.status} in ('SCHEDULED', 'CANCELED')`
+    )
+  ]
+);
+
+export const cashShiftUsers = pgTable(
+  "cash_shift_users",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    cashShiftId: uuid("cash_shift_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    primaryKey({
+      name: "cash_shift_users_pk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId, table.userId]
+    }),
+    foreignKey({
+      name: "cash_shift_users_shift_fk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId],
+      foreignColumns: [cashShifts.tenantId, cashShifts.branchId, cashShifts.id]
+    }),
+    foreignKey({
+      name: "cash_shift_users_membership_fk",
+      columns: [table.userId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
     })
   ]
 );
