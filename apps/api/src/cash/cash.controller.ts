@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Req, UnauthorizedException } from "@nestjs/common";
 import { RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import {
@@ -7,7 +7,11 @@ import {
   type CashShiftListResult,
   type CashShiftSummary,
   type CreateCashShiftInput,
-  type EligibleCashUserListResult
+  type EligibleCashUserListResult,
+  type OpenCashShiftInput,
+  type CountCashShiftInput,
+  type ApproveCashShiftInput,
+  type CashShiftControlSummary
 } from "./cash.service.js";
 
 function scopeFrom(request: AuthenticatedRequest) {
@@ -45,5 +49,33 @@ export class CashController {
     @Body() input: CreateCashShiftInput
   ): Promise<CashShiftSummary> {
     return this.cash.createShift(scopeFrom(request), input);
+  }
+
+  @Post("shifts/:shiftId/open")
+  open(
+    @Req() request: AuthenticatedRequest,
+    @Param("shiftId") shiftId: string,
+    @Body() input: OpenCashShiftInput
+  ): Promise<CashShiftControlSummary> {
+    return this.cash.openShift(scopeFrom(request), shiftId, input);
+  }
+
+  @Post("shifts/:shiftId/count")
+  count(
+    @Req() request: AuthenticatedRequest,
+    @Param("shiftId") shiftId: string,
+    @Body() input: CountCashShiftInput
+  ): Promise<CashShiftControlSummary> {
+    return this.cash.countShift(scopeFrom(request), shiftId, input);
+  }
+
+  @Post("shifts/:shiftId/approve")
+  @RequirePermissions("cash.manage", "cash.shift.approve")
+  approve(
+    @Req() request: AuthenticatedRequest,
+    @Param("shiftId") shiftId: string,
+    @Body() input: ApproveCashShiftInput
+  ): Promise<CashShiftControlSummary> {
+    return this.cash.approveShift(scopeFrom(request), shiftId, input);
   }
 }

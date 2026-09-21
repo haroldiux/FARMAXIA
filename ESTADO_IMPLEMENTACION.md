@@ -1,7 +1,7 @@
 # Estado de implementación — FARMAXIA
 
 **Actualizado:** 21 de septiembre de 2026
-**Fase actual:** F6-WEB — turnos configurables de caja, verificada localmente.
+**Fase actual:** F7-WEB — controles monetarios de apertura, conteo y cierre, verificada localmente.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
@@ -26,6 +26,7 @@
 | F4-WEB | Completada | Controller y módulo HTTP de compras, listados scoped de proveedores/presentaciones/órdenes y vista `/procurement` con alta de proveedor y orden de una línea; suite API en 39 pruebas; builds y smoke Docker verificados. | Recepción por lote, facturas/CxP e importación se mantienen para lotes posteriores. |
 | F5-WEB | Completada | Ruta protegida de recepción, estados `PARTIALLY_RECEIVED`/`RECEIVED`, bloqueo de orden contra sobre-recepción concurrente y vista `/procurement/receiving` con lotes repetibles; suite focalizada de procurement 4/4, builds API/Web y smoke Docker verdes. Rama publicada en `origin/codex/f5-web-receiving`; facturas/CxP e importación siguen fuera de alcance. |
 | F6-WEB | Completada | Migración `0011_hot_mongoose.sql`, turnos absolutos por caja, asignaciones múltiples, replay idempotente, bloqueo contra solapamiento concurrente y vista `/cash`; suite API enfocada 11/11, typecheck/builds y smoke Docker verdes. Rama publicada en `origin/codex/f6-web-cash-shifts`; apertura/cierre monetario, recurrencia, ventas y conciliación quedan fuera. |
+| F7-WEB | Completada localmente | Migración `0012_round_war_machine.sql`, controles 1:1 con estados `OPEN`/`PENDING_APPROVAL`/`CLOSED`, decimales exactos, locks, RLS, auditoría, idempotencia y acciones `/cash`; suite cash 8/8, API 47/47, typecheck, builds, Drizzle check, diff check y smoke Docker verdes. Commit local `6d234dd`; no publicado. |
 
 ## Límites del lote B01
 
@@ -152,6 +153,5 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
 
 ## Próxima tarea
 
-Publicar los lotes autorizados. Después, continuar caja con apertura/cierre
-monetario solo tras resolver D08/D14; ventas y la integración comercial de
-reservas continúan dependiendo de D09.
+Esperar revisión del parent antes de cualquier publicación; ventas y la
+integración comercial de reservas continúan dependiendo de D09.

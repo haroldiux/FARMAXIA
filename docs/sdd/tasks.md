@@ -164,3 +164,14 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] F6-WEB.4 Ejecutar la suite PostgreSQL y smoke Docker; suite enfocada
   11/11, typecheck/builds y `/health`/`/` smoke verdes. La publicación remota
   quedó autorizada y publicada en `origin/codex/f6-web-cash-shifts`.
+
+## Lote F7-WEB
+
+- [x] F7-WEB.1 Escribir pruebas rojas para apertura, conteo, diferencias
+  positivas/negativas, aprobación, replay e aislamiento.
+- [x] F7-WEB.2 Añadir `cash_shift_controls`, `cash.shift.approve`, RLS,
+  decimales `numeric(18,4)`, locks y auditoría.
+- [x] F7-WEB.3 Exponer operaciones API idempotentes y cliente/UI `/cash` para
+  abrir, contar, mostrar pendientes y aprobar cierres.
+- [x] F7-WEB.4 Completar suite 47/47, builds, Docker/smoke, actualizar estado y
+  cerrar con commit local `6d234dd`; no se realizó push sin autorización explícita.

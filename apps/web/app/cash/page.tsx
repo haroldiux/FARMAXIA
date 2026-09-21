@@ -4,10 +4,13 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import {
   cashShiftIdempotencyKey,
+  approveCashShift,
+  countCashShift,
   createCashShift,
   listCashRegisters,
   listCashShifts,
   listEligibleCashUsers,
+  openCashShift,
   type CashRegister,
   type CashShift,
   type EligibleCashUser
@@ -34,6 +37,9 @@ export default function CashPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [openingDrafts, setOpeningDrafts] = useState<Record<string, string>>({});
+  const [countingDrafts, setCountingDrafts] = useState<Record<string, string>>({});
+  const [controlBusy, setControlBusy] = useState<string | null>(null);
 
   async function refresh(): Promise<void> {
     const [registerResult, userResult, shiftResult] = await Promise.all([
@@ -114,6 +120,70 @@ export default function CashPage() {
     }
   }
 
+  function decimal(value: string): boolean {
+    return /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/.test(value.trim());
+  }
+
+  async function handleOpen(shift: CashShift): Promise<void> {
+    const openingAmountBob = openingDrafts[shift.id]?.trim() ?? "";
+    if (!decimal(openingAmountBob)) {
+      setError("El monto inicial debe ser un decimal no negativo con hasta 4 decimales.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setControlBusy(`${shift.id}:open`);
+    try {
+      await openCashShift(shift.id, { idempotencyKey: cashShiftIdempotencyKey(), openingAmountBob });
+      await refresh();
+      setOpeningDrafts((current) => ({ ...current, [shift.id]: "" }));
+      setNotice("Turno abierto. El monto inicial será la base esperada del conteo.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos abrir el turno.");
+    } finally {
+      setControlBusy(null);
+    }
+  }
+
+  async function handleCount(shift: CashShift): Promise<void> {
+    const countedAmountBob = countingDrafts[shift.id]?.trim() ?? "";
+    if (!decimal(countedAmountBob)) {
+      setError("El conteo debe ser un decimal no negativo con hasta 4 decimales.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setControlBusy(`${shift.id}:count`);
+    try {
+      await countCashShift(shift.id, { idempotencyKey: cashShiftIdempotencyKey(), countedAmountBob });
+      await refresh();
+      setCountingDrafts((current) => ({ ...current, [shift.id]: "" }));
+      setNotice("Conteo guardado. Las diferencias distintas de cero requieren aprobación.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos guardar el conteo.");
+    } finally {
+      setControlBusy(null);
+    }
+  }
+
+  async function handleApprove(shift: CashShift): Promise<void> {
+    setError(null);
+    setNotice(null);
+    setControlBusy(`${shift.id}:approve`);
+    try {
+      await approveCashShift(shift.id, {
+        idempotencyKey: cashShiftIdempotencyKey(),
+        approvalNote: "Diferencia revisada por supervisor"
+      });
+      await refresh();
+      setNotice("Diferencia aprobada y turno cerrado.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos aprobar la diferencia.");
+    } finally {
+      setControlBusy(null);
+    }
+  }
+
   async function signOut(): Promise<void> {
     await logout();
     window.location.assign("/");
@@ -151,6 +221,23 @@ export default function CashPage() {
             <div className="cash-shift-card-head"><strong>{shift.cashRegisterCode}</strong><span>{shift.status === "SCHEDULED" ? "Programado" : "Cancelado"}</span></div>
             <p>{formatTimestamp(shift.scheduledStartAt)} → {formatTimestamp(shift.scheduledEndAt)}</p>
             <div className="cash-assignees">{shift.users.map((user) => <span key={user.id}>{user.displayName}</span>)}</div>
+            <div className="cash-control" aria-live="polite">
+              {!shift.control ? <>
+                <div className="cash-control-heading"><strong>Control de caja</strong><span>Sin abrir</span></div>
+                {shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action">
+                  <label className="field"><span>Monto inicial (BOB)</span><input type="text" inputMode="decimal" placeholder="0.0000" value={openingDrafts[shift.id] ?? ""} onChange={(event) => setOpeningDrafts((current) => ({ ...current, [shift.id]: event.target.value }))} /></label>
+                  <button className="secondary-button" disabled={controlBusy === `${shift.id}:open`} onClick={() => void handleOpen(shift)} type="button">{controlBusy === `${shift.id}:open` ? "Abriendo…" : "Abrir turno"}</button>
+                </div> : <p className="form-note">Solo una persona asignada puede abrir este turno.</p>}
+              </> : <>
+                <div className="cash-control-heading"><strong>Control de caja</strong><span className={`cash-control-status cash-control-status-${shift.control.status.toLowerCase()}`}>{shift.control.status === "OPEN" ? "Abierto" : shift.control.status === "PENDING_APPROVAL" ? "Pendiente de aprobación" : "Cerrado"}</span></div>
+                <p className="cash-control-values">Esperado: <strong>{shift.control.expectedAmountBob} BOB</strong>{shift.control.differenceAmountBob !== null ? <> · Diferencia: <strong>{shift.control.differenceAmountBob} BOB</strong></> : null}</p>
+                {shift.control.status === "OPEN" && shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action">
+                  <label className="field"><span>Conteo final (BOB)</span><input type="text" inputMode="decimal" placeholder="0.0000" value={countingDrafts[shift.id] ?? ""} onChange={(event) => setCountingDrafts((current) => ({ ...current, [shift.id]: event.target.value }))} /></label>
+                  <button className="secondary-button" disabled={controlBusy === `${shift.id}:count`} onClick={() => void handleCount(shift)} type="button">{controlBusy === `${shift.id}:count` ? "Guardando…" : "Guardar conteo"}</button>
+                </div> : null}
+                {shift.control.status === "PENDING_APPROVAL" && session.permissions.includes("cash.shift.approve") ? <div className="cash-control-action"><p className="form-note">La diferencia requiere una revisión supervisora.</p><button className="secondary-button" disabled={controlBusy === `${shift.id}:approve`} onClick={() => void handleApprove(shift)} type="button">{controlBusy === `${shift.id}:approve` ? "Aprobando…" : "Aprobar y cerrar"}</button></div> : null}
+              </>}
+            </div>
           </article>)}</div> : <div className="procurement-empty"><span className="empty-symbol">◇</span><h3>Aún no hay turnos.</h3><p>Programa el primero cuando tengas una caja activa y personal asignable.</p></div>}
         </article>
 

@@ -63,6 +63,7 @@ describe("tenancy schema", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        cash_shift_controls,
         cash_shift_users,
         cash_shifts,
         inventory_reconciliations,
@@ -100,6 +101,9 @@ describe("tenancy schema", () => {
         permissions,
         roles,
         user_branch_memberships,
+        cash_shift_controls,
+        cash_shift_users,
+        cash_shifts,
         cash_registers,
         warehouses,
         branches,

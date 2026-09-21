@@ -18,6 +18,28 @@ export interface CashShift {
   scheduledEndAt: string;
   status: "SCHEDULED" | "CANCELED";
   users: EligibleCashUser[];
+  control?: CashShiftControl;
+}
+
+export type CashShiftControlStatus = "OPEN" | "PENDING_APPROVAL" | "CLOSED";
+
+export interface CashShiftControl {
+  id: string;
+  cashShiftId: string;
+  openingAmountBob: string;
+  expectedAmountBob: string;
+  countedAmountBob: string | null;
+  differenceAmountBob: string | null;
+  status: CashShiftControlStatus;
+  openedByUserId: string;
+  openedAt: string;
+  countedByUserId: string | null;
+  countedAt: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  closedByUserId: string | null;
+  closedAt: string | null;
+  approvalNote: string | null;
 }
 
 export interface CreateCashShiftInput {
@@ -26,6 +48,21 @@ export interface CreateCashShiftInput {
   scheduledStartAt: string;
   scheduledEndAt: string;
   userIds: string[];
+}
+
+export interface OpenCashShiftInput {
+  idempotencyKey: string;
+  openingAmountBob: string;
+}
+
+export interface CountCashShiftInput {
+  idempotencyKey: string;
+  countedAmountBob: string;
+}
+
+export interface ApproveCashShiftInput {
+  idempotencyKey: string;
+  approvalNote?: string;
 }
 
 export function cashShiftIdempotencyKey(): string {
@@ -86,6 +123,30 @@ export function createCashShift(input: CreateCashShiftInput): Promise<CashShift>
       "content-type": "application/json",
       "idempotency-key": input.idempotencyKey
     },
+    body: JSON.stringify(input)
+  });
+}
+
+export function openCashShift(shiftId: string, input: OpenCashShiftInput): Promise<CashShiftControl> {
+  return request(`/api/v1/cash/shifts/${shiftId}/open`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": input.idempotencyKey },
+    body: JSON.stringify(input)
+  });
+}
+
+export function countCashShift(shiftId: string, input: CountCashShiftInput): Promise<CashShiftControl> {
+  return request(`/api/v1/cash/shifts/${shiftId}/count`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": input.idempotencyKey },
+    body: JSON.stringify(input)
+  });
+}
+
+export function approveCashShift(shiftId: string, input: ApproveCashShiftInput): Promise<CashShiftControl> {
+  return request(`/api/v1/cash/shifts/${shiftId}/approve`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": input.idempotencyKey },
     body: JSON.stringify(input)
   });
 }

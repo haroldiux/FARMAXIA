@@ -53,7 +53,7 @@ Errores previstos: `400 VALIDATION_FAILED`, `403 FORBIDDEN`, `409 INSUFFICIENT_S
 - `POST /api/v1/commercial-documents/{id}/reprint`: `documents.reprint`; no muta venta, pago o stock.
 - `GET /api/v1/fiscal-documents/{id}/status`: `fiscal.read`; muestra estado real sin inventar aceptación.
 
-Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `sales.read`, `sales.confirm`, `cash.manage`, `quotes.manage`, `documents.reprint`, `audit.read`.
+Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `sales.read`, `sales.confirm`, `cash.manage`, `cash.shift.approve`, `quotes.manage`, `documents.reprint`, `audit.read`.
 
 ## Turnos de caja F6-WEB
 
@@ -72,6 +72,23 @@ permitidos y cualquier solapamiento en una misma caja responde
 `409 CASH_SHIFT_OVERLAP`. La caja se bloquea dentro de la transacción para
 serializar creaciones concurrentes. Este lote no abre ni cierra caja y no
 registra importes, ventas o conciliaciones.
+
+## Controles monetarios F7-WEB
+
+Las operaciones conservan el aislamiento tenant/sucursal y usan valores BOB
+como cadenas decimales exactas (`numeric(18,4)` en PostgreSQL). El importe
+esperado es únicamente el fondo inicial; no se deriva de ventas ni pagos.
+
+| Ruta | Acceso y contrato |
+| --- | --- |
+| `POST /api/v1/cash/shifts/{id}/open` | Requiere `cash.manage` y asignación activa. Recibe `{ idempotencyKey, openingAmountBob }` y crea un control `OPEN` una sola vez. |
+| `POST /api/v1/cash/shifts/{id}/count` | Requiere `cash.manage` y asignación activa. Recibe `{ idempotencyKey, countedAmountBob }`; calcula en SQL `counted - expected`. Cero cierra directamente y cualquier otra diferencia deja `PENDING_APPROVAL`. |
+| `POST /api/v1/cash/shifts/{id}/approve` | Requiere `cash.manage` y `cash.shift.approve`. Recibe `{ idempotencyKey, approvalNote? }`; solo un supervisor autorizado cierra un control `PENDING_APPROVAL`. |
+
+`GET /api/v1/cash/shifts` puede incluir `control` con estado, importes exactos,
+diferencia y actores/fechas. Las operaciones son idempotentes por clave y
+serializan sobre el control; todos los cambios generan auditoría. Reutilizar una
+clave con otro cuerpo responde `409 IDEMPOTENCY_KEY_REUSED`.
 
 ## Catálogo inicial
 

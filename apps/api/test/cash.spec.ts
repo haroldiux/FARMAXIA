@@ -36,11 +36,15 @@ const actorId = "00000000-0000-4000-8000-000000000705";
 const secondUserId = "00000000-0000-4000-8000-000000000706";
 const otherBranchUserId = "00000000-0000-4000-8000-000000000707";
 const inactiveUserId = "00000000-0000-4000-8000-000000000708";
+const supervisorId = "00000000-0000-4000-8000-000000000712";
+const supervisorRoleId = "00000000-0000-4000-8000-000000000713";
 const registerId = "00000000-0000-4000-8000-000000000709";
 const secondRegisterId = "00000000-0000-4000-8000-000000000710";
 const otherBranchRegisterId = "00000000-0000-4000-8000-000000000711";
 
 const scope: TenantScope = { tenantId, branchId, userId: actorId };
+const secondScope: TenantScope = { tenantId, branchId, userId: secondUserId };
+const supervisorScope: TenantScope = { tenantId, branchId, userId: supervisorId };
 const otherScope: TenantScope = { tenantId, branchId: otherBranchId, userId: actorId };
 const ownerPool = new Pool({ connectionString: testDatabaseUrl });
 const database = new TenantDatabase(testAppDatabaseUrl);
@@ -56,6 +60,7 @@ describe("configurable cash shifts (F6-WEB)", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        cash_shift_controls,
         cash_shift_users,
         cash_shifts,
         inventory_reconciliations,
@@ -120,14 +125,31 @@ describe("configurable cash shifts (F6-WEB)", () => {
        values ($1, 'actor@cash.test', 'Ada Cash', 'not-a-password', true),
               ($2, 'second@cash.test', 'Bruno Cash', 'not-a-password', true),
               ($3, 'other@cash.test', 'Celia Other', 'not-a-password', true),
-              ($4, 'inactive@cash.test', 'Inactive Cash', 'not-a-password', false)`,
-      [actorId, secondUserId, otherBranchUserId, inactiveUserId]
+              ($4, 'inactive@cash.test', 'Inactive Cash', 'not-a-password', false),
+              ($5, 'supervisor@cash.test', 'Dana Supervisor', 'not-a-password', true)`,
+      [actorId, secondUserId, otherBranchUserId, inactiveUserId, supervisorId]
     );
     await ownerPool.query(
       `insert into user_branch_memberships (user_id, tenant_id, branch_id)
-       values ($1, $4, $5), ($1, $4, $6), ($2, $4, $5), ($3, $4, $6), ($7, $4, $5)`,
-      [actorId, secondUserId, otherBranchUserId, tenantId, branchId, otherBranchId, inactiveUserId]
+       values ($1, $4, $5), ($1, $4, $6), ($2, $4, $5), ($3, $4, $6), ($7, $4, $5), ($8, $4, $5)`,
+      [actorId, secondUserId, otherBranchUserId, tenantId, branchId, otherBranchId, inactiveUserId, supervisorId]
     );
+    await ownerPool.query(
+      "insert into permissions (code, description) values ('cash.shift.approve', 'Approve non-zero cash shift differences')"
+    );
+    await ownerPool.query("insert into roles (id, tenant_id, code) values ($1, $2, 'cash-supervisor')", [
+      supervisorRoleId,
+      tenantId
+    ]);
+    await ownerPool.query(
+      "insert into role_permissions (role_id, permission_code) values ($1, 'cash.shift.approve')",
+      [supervisorRoleId]
+    );
+    await ownerPool.query("insert into user_roles (user_id, tenant_id, role_id) values ($1, $2, $3)", [
+      supervisorId,
+      tenantId,
+      supervisorRoleId
+    ]);
     await ownerPool.query(
       `insert into cash_registers (id, tenant_id, branch_id, code, is_active)
        values ($1, $4, $5, 'CAJA-1', true),
@@ -152,7 +174,8 @@ describe("configurable cash shifts (F6-WEB)", () => {
     await expect(cash.listEligibleUsers(scope)).resolves.toEqual({
       items: [
         { id: actorId, displayName: "Ada Cash" },
-        { id: secondUserId, displayName: "Bruno Cash" }
+        { id: secondUserId, displayName: "Bruno Cash" },
+        { id: supervisorId, displayName: "Dana Supervisor" }
       ]
     });
 
@@ -269,5 +292,162 @@ describe("configurable cash shifts (F6-WEB)", () => {
     await expect(cash.listRegisters(otherScope)).resolves.toEqual({
       items: [{ id: otherBranchRegisterId, code: "CAJA-OTHER" }]
     });
+  });
+
+  it("opens, counts, and closes a zero-difference shift with exact decimals", async () => {
+    const shift = await cash.createShift(scope, {
+      idempotencyKey: "cash-control-shift-zero",
+      cashRegisterId: registerId,
+      scheduledStartAt: "2026-09-26T12:00:00.000Z",
+      scheduledEndAt: "2026-09-26T20:00:00.000Z",
+      userIds: [actorId]
+    });
+    const opened = await cash.openShift(scope, shift.id, {
+      idempotencyKey: "cash-control-open-zero",
+      openingAmountBob: "100.1250"
+    });
+    expect(opened).toMatchObject({
+      cashShiftId: shift.id,
+      openingAmountBob: "100.1250",
+      expectedAmountBob: "100.1250",
+      status: "OPEN"
+    });
+    expect(await cash.openShift(scope, shift.id, {
+      idempotencyKey: "cash-control-open-zero",
+      openingAmountBob: "100.1250"
+    })).toEqual(opened);
+    const closed = await cash.countShift(scope, shift.id, {
+      idempotencyKey: "cash-control-count-zero",
+      countedAmountBob: "100.1250"
+    });
+    expect(closed).toMatchObject({
+      status: "CLOSED",
+      countedAmountBob: "100.1250",
+      differenceAmountBob: "0.0000"
+    });
+  });
+
+  it("requires supervisor approval for non-zero differences", async () => {
+    const shift = await cash.createShift(scope, {
+      idempotencyKey: "cash-control-shift-difference",
+      cashRegisterId: registerId,
+      scheduledStartAt: "2026-09-27T12:00:00.000Z",
+      scheduledEndAt: "2026-09-27T20:00:00.000Z",
+      userIds: [actorId]
+    });
+    await cash.openShift(scope, shift.id, {
+      idempotencyKey: "cash-control-open-difference",
+      openingAmountBob: "100.0000"
+    });
+    const pending = await cash.countShift(scope, shift.id, {
+      idempotencyKey: "cash-control-count-difference",
+      countedAmountBob: "99.5000"
+    });
+    expect(pending).toMatchObject({ status: "PENDING_APPROVAL", differenceAmountBob: "-0.5000" });
+    await expect(cash.approveShift(scope, shift.id, {
+      idempotencyKey: "cash-control-approve-denied",
+      approvalNote: "Not a supervisor"
+    })).rejects.toThrow();
+    const approved = await cash.approveShift(supervisorScope, shift.id, {
+      idempotencyKey: "cash-control-approve-difference",
+      approvalNote: "Reviewed variance"
+    });
+    expect(approved).toMatchObject({ status: "CLOSED", approvalNote: "Reviewed variance" });
+    expect(await cash.approveShift(supervisorScope, shift.id, {
+      idempotencyKey: "cash-control-approve-difference",
+      approvalNote: "Reviewed variance"
+    })).toEqual(approved);
+
+    const positiveShift = await cash.createShift(scope, {
+      idempotencyKey: "cash-control-shift-positive",
+      cashRegisterId: secondRegisterId,
+      scheduledStartAt: "2026-09-27T21:00:00.000Z",
+      scheduledEndAt: "2026-09-28T05:00:00.000Z",
+      userIds: [actorId]
+    });
+    await cash.openShift(scope, positiveShift.id, {
+      idempotencyKey: "cash-control-open-positive",
+      openingAmountBob: "100.0000"
+    });
+    await expect(cash.countShift(scope, positiveShift.id, {
+      idempotencyKey: "cash-control-count-positive",
+      countedAmountBob: "100.5000"
+    })).resolves.toMatchObject({ status: "PENDING_APPROVAL", differenceAmountBob: "0.5000" });
+  });
+
+  it("denies opening from an unassigned user and isolates controls by branch", async () => {
+    const shift = await cash.createShift(scope, {
+      idempotencyKey: "cash-control-shift-scope",
+      cashRegisterId: registerId,
+      scheduledStartAt: "2026-09-29T12:00:00.000Z",
+      scheduledEndAt: "2026-09-29T20:00:00.000Z",
+      userIds: [actorId]
+    });
+    await expect(cash.openShift(secondScope, shift.id, {
+      idempotencyKey: "cash-control-open-unassigned",
+      openingAmountBob: "1.0000"
+    })).rejects.toThrow();
+    await cash.openShift(scope, shift.id, {
+      idempotencyKey: "cash-control-open-scope",
+      openingAmountBob: "1.0000"
+    });
+    await expect(cash.listShifts(otherScope)).resolves.toEqual({ items: [] });
+  });
+
+  it("serializes a concurrent count and approval on the control row", async () => {
+    const shift = await cash.createShift(scope, {
+      idempotencyKey: "cash-control-shift-concurrent",
+      cashRegisterId: registerId,
+      scheduledStartAt: "2026-09-30T12:00:00.000Z",
+      scheduledEndAt: "2026-09-30T20:00:00.000Z",
+      userIds: [actorId]
+    });
+    await cash.openShift(scope, shift.id, {
+      idempotencyKey: "cash-control-open-concurrent",
+      openingAmountBob: "100.0000"
+    });
+    const [countResult, approvalResult] = await Promise.allSettled([
+      cash.countShift(scope, shift.id, {
+        idempotencyKey: "cash-control-count-concurrent",
+        countedAmountBob: "99.0000"
+      }),
+      cash.approveShift(supervisorScope, shift.id, {
+        idempotencyKey: "cash-control-approve-concurrent"
+      })
+    ]);
+    expect(countResult.status).toBe("fulfilled");
+    expect(["fulfilled", "rejected"]).toContain(approvalResult.status);
+    const listed = await cash.listShifts(scope);
+    expect(["PENDING_APPROVAL", "CLOSED"]).toContain(listed.items[0]?.control?.status);
+  });
+
+  it("rejects malformed money and conflicting control replays", async () => {
+    const shift = await cash.createShift(scope, {
+      idempotencyKey: "cash-control-shift-invalid",
+      cashRegisterId: registerId,
+      scheduledStartAt: "2026-09-28T12:00:00.000Z",
+      scheduledEndAt: "2026-09-28T20:00:00.000Z",
+      userIds: [actorId]
+    });
+    await expect(cash.openShift(scope, shift.id, {
+      idempotencyKey: "cash-control-open-invalid",
+      openingAmountBob: "1.23456"
+    })).rejects.toThrow();
+    await cash.openShift(scope, shift.id, {
+      idempotencyKey: "cash-control-open-valid",
+      openingAmountBob: "10.0000"
+    });
+    await expect(cash.countShift(scope, shift.id, {
+      idempotencyKey: "cash-control-count-invalid",
+      countedAmountBob: "-1.0000"
+    })).rejects.toThrow();
+    await cash.countShift(scope, shift.id, {
+      idempotencyKey: "cash-control-count-valid",
+      countedAmountBob: "10.0000"
+    });
+    await expect(cash.countShift(scope, shift.id, {
+      idempotencyKey: "cash-control-count-valid",
+      countedAmountBob: "11.0000"
+    })).rejects.toBeInstanceOf(IdempotencyKeyReusedError);
   });
 });

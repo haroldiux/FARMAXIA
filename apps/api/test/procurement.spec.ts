@@ -53,6 +53,7 @@ describe("procurement and receiving service (C02)", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        cash_shift_controls,
         cash_shift_users,
         cash_shifts,
         inventory_reconciliations,
@@ -90,6 +91,9 @@ describe("procurement and receiving service (C02)", () => {
         permissions,
         roles,
         user_branch_memberships,
+        cash_shift_controls,
+        cash_shift_users,
+        cash_shifts,
         cash_registers,
         warehouses,
         branches,

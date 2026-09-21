@@ -388,6 +388,100 @@ export const cashShiftUsers = pgTable(
   ]
 );
 
+export const cashShiftControls = pgTable(
+  "cash_shift_controls",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    cashShiftId: uuid("cash_shift_id").notNull(),
+    openingAmountBob: numeric("opening_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    expectedAmountBob: numeric("expected_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    countedAmountBob: numeric("counted_amount_bob", { precision: 18, scale: 4 }),
+    differenceAmountBob: numeric("difference_amount_bob", { precision: 18, scale: 4 }),
+    status: varchar("status", { length: 24 }).default("OPEN").notNull(),
+    openedByUserId: uuid("opened_by_user_id").notNull(),
+    openedAt: timestamp("opened_at", { withTimezone: true }).defaultNow().notNull(),
+    countedByUserId: uuid("counted_by_user_id"),
+    countedAt: timestamp("counted_at", { withTimezone: true }),
+    approvedByUserId: uuid("approved_by_user_id"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    closedByUserId: uuid("closed_by_user_id"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    approvalNote: varchar("approval_note", { length: 500 }),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "cash_shift_controls_shift_fk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId],
+      foreignColumns: [cashShifts.tenantId, cashShifts.branchId, cashShifts.id]
+    }),
+    foreignKey({
+      name: "cash_shift_controls_opened_membership_fk",
+      columns: [table.openedByUserId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
+    }),
+    foreignKey({
+      name: "cash_shift_controls_counted_membership_fk",
+      columns: [table.countedByUserId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
+    }),
+    foreignKey({
+      name: "cash_shift_controls_approved_membership_fk",
+      columns: [table.approvedByUserId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
+    }),
+    foreignKey({
+      name: "cash_shift_controls_closed_membership_fk",
+      columns: [table.closedByUserId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
+    }),
+    unique("cash_shift_controls_tenant_branch_id_unique").on(
+      table.tenantId,
+      table.branchId,
+      table.id
+    ),
+    unique("cash_shift_controls_tenant_branch_shift_unique").on(
+      table.tenantId,
+      table.branchId,
+      table.cashShiftId
+    ),
+    check(
+      "cash_shift_controls_status_check",
+      sql`${table.status} in ('OPEN', 'PENDING_APPROVAL', 'CLOSED')`
+    ),
+    check(
+      "cash_shift_controls_opening_nonnegative_check",
+      sql`${table.openingAmountBob} >= 0 and ${table.expectedAmountBob} >= 0`
+    ),
+    check(
+      "cash_shift_controls_counted_nonnegative_check",
+      sql`${table.countedAmountBob} is null or ${table.countedAmountBob} >= 0`
+    ),
+    check(
+      "cash_shift_controls_difference_check",
+      sql`${table.differenceAmountBob} is null or (${table.countedAmountBob} is not null and ${table.differenceAmountBob} = ${table.countedAmountBob} - ${table.expectedAmountBob})`
+    )
+  ]
+);
+
 export const roles = pgTable(
   "roles",
   {

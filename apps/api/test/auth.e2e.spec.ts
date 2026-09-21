@@ -72,6 +72,7 @@ describe("authentication API", () => {
   beforeEach(async () => {
     await ownerPool.query(`
       truncate table
+        cash_shift_controls,
         cash_shift_users,
         cash_shifts,
         inventory_reconciliations,
@@ -109,6 +110,9 @@ describe("authentication API", () => {
         permissions,
         roles,
         user_branch_memberships,
+        cash_shift_controls,
+        cash_shift_users,
+        cash_shifts,
         cash_registers,
         warehouses,
         branches,

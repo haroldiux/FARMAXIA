@@ -33,6 +33,43 @@ export interface CashShiftSummary {
   scheduledEndAt: string;
   status: "SCHEDULED" | "CANCELED";
   users: EligibleCashUser[];
+  control?: CashShiftControlSummary;
+}
+
+export type CashShiftControlStatus = "OPEN" | "PENDING_APPROVAL" | "CLOSED";
+
+export interface CashShiftControlSummary {
+  id: string;
+  cashShiftId: string;
+  openingAmountBob: string;
+  expectedAmountBob: string;
+  countedAmountBob: string | null;
+  differenceAmountBob: string | null;
+  status: CashShiftControlStatus;
+  openedByUserId: string;
+  openedAt: string;
+  countedByUserId: string | null;
+  countedAt: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  closedByUserId: string | null;
+  closedAt: string | null;
+  approvalNote: string | null;
+}
+
+export interface OpenCashShiftInput {
+  idempotencyKey: string;
+  openingAmountBob: string;
+}
+
+export interface CountCashShiftInput {
+  idempotencyKey: string;
+  countedAmountBob: string;
+}
+
+export interface ApproveCashShiftInput {
+  idempotencyKey: string;
+  approvalNote?: string;
 }
 
 export interface CashRegisterListResult {
@@ -60,10 +97,29 @@ interface ShiftUserRow extends EligibleCashUser {
   cashShiftId: string;
 }
 
-interface StoredIdempotency {
+interface ControlRow {
+  id: string;
+  cashShiftId: string;
+  openingAmountBob: string;
+  expectedAmountBob: string;
+  countedAmountBob: string | null;
+  differenceAmountBob: string | null;
+  status: CashShiftControlStatus;
+  openedByUserId: string;
+  openedAt: Date | string;
+  countedByUserId: string | null;
+  countedAt: Date | string | null;
+  approvedByUserId: string | null;
+  approvedAt: Date | string | null;
+  closedByUserId: string | null;
+  closedAt: Date | string | null;
+  approvalNote: string | null;
+}
+
+interface StoredIdempotency<T> {
   requestHash: string;
   statusCode: number;
-  responsePayload: CashShiftSummary;
+  responsePayload: T;
 }
 
 export class CashShiftOverlapError extends ConflictException {
@@ -96,6 +152,16 @@ function timestamp(value: string, field: string): Date {
 
 function iso(value: Date | string): string {
   return new Date(value).toISOString();
+}
+
+const moneyPattern = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/;
+
+function money(value: string, field: string): string {
+  const normalized = value?.trim();
+  if (!normalized || !moneyPattern.test(normalized)) {
+    throw new BadRequestException(`${field} must be a non-negative decimal with at most 4 places.`);
+  }
+  return normalized;
 }
 
 @Injectable()
@@ -151,7 +217,7 @@ export class CashService {
       await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
         `${scope.tenantId}:${operation}:${normalized.idempotencyKey}`
       ]);
-      const existing = await this.findIdempotency(
+      const existing = await this.findIdempotency<CashShiftSummary>(
         client,
         operation,
         normalized.idempotencyKey
@@ -181,6 +247,211 @@ export class CashService {
       );
       return result;
     });
+  }
+
+  async openShift(
+    scope: TenantScope,
+    shiftId: string,
+    input: OpenCashShiftInput
+  ): Promise<CashShiftControlSummary> {
+    const normalizedShiftId = requiredText(shiftId, "Cash shift ID", 64);
+    const idempotencyKey = requiredText(input.idempotencyKey, "Idempotency key", 255);
+    const openingAmountBob = money(input.openingAmountBob, "Opening amount");
+    return this.controlIdempotent(
+      scope,
+      "cash.open_shift",
+      idempotencyKey,
+      { shiftId: normalizedShiftId, openingAmountBob },
+      async (client) => {
+        const shift = await client.query<{ id: string }>(
+          `select shift.id
+           from cash_shifts shift
+           where shift.tenant_id = $1 and shift.branch_id = $2 and shift.id = $3
+             and shift.status = 'SCHEDULED'
+             and exists (
+               select 1 from cash_shift_users assignment
+               join users app_user on app_user.id = assignment.user_id
+               where assignment.tenant_id = shift.tenant_id
+                 and assignment.branch_id = shift.branch_id
+                 and assignment.cash_shift_id = shift.id
+                 and assignment.user_id = $4 and app_user.is_active = true
+             )
+           for update`,
+          [scope.tenantId, scope.branchId, normalizedShiftId, scope.userId]
+        );
+        if (!shift.rows[0]) {
+          throw new BadRequestException("The shift is not scheduled for an active assigned user.");
+        }
+        const existing = await client.query("select 1 from cash_shift_controls where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3", [scope.tenantId, scope.branchId, normalizedShiftId]);
+        if (existing.rowCount) {
+          throw new ConflictException("The cash shift has already been opened.");
+        }
+        const inserted = await client.query<{ id: string }>(
+          `insert into cash_shift_controls (
+             tenant_id, branch_id, cash_shift_id, opening_amount_bob,
+             expected_amount_bob, status, opened_by_user_id
+           ) values ($1, $2, $3, $4, $4, 'OPEN', $5)
+           returning id`,
+          [scope.tenantId, scope.branchId, normalizedShiftId, openingAmountBob, scope.userId]
+        );
+        const control = await this.readControl(client, scope, normalizedShiftId, true);
+        if (!control) throw new Error("Cash shift control was not created.");
+        await this.audit.recordInTransaction(client, scope, {
+          action: "cash.shift_opened",
+          entityType: "cash_shift_control",
+          entityId: inserted.rows[0]?.id ?? control.id,
+          payload: { openingAmountBob, expectedAmountBob: openingAmountBob }
+        });
+        return { statusCode: 201, body: control };
+      }
+    );
+  }
+
+  async countShift(
+    scope: TenantScope,
+    shiftId: string,
+    input: CountCashShiftInput
+  ): Promise<CashShiftControlSummary> {
+    const normalizedShiftId = requiredText(shiftId, "Cash shift ID", 64);
+    const idempotencyKey = requiredText(input.idempotencyKey, "Idempotency key", 255);
+    const countedAmountBob = money(input.countedAmountBob, "Counted amount");
+    return this.controlIdempotent(
+      scope,
+      "cash.count_shift",
+      idempotencyKey,
+      { shiftId: normalizedShiftId, countedAmountBob },
+      async (client) => {
+        const control = await this.readControl(client, scope, normalizedShiftId, true);
+        if (!control || control.status !== "OPEN") {
+          throw new ConflictException("Only an open cash shift can be counted.");
+        }
+        await this.assertAssignedActiveUser(client, scope, normalizedShiftId);
+        const updated = await client.query(
+          `update cash_shift_controls
+           set counted_amount_bob = $4::numeric,
+               difference_amount_bob = $4::numeric - expected_amount_bob,
+               status = case when $4::numeric = expected_amount_bob then 'CLOSED' else 'PENDING_APPROVAL' end,
+               counted_by_user_id = $5::uuid,
+               counted_at = now(),
+               closed_by_user_id = case when $4::numeric = expected_amount_bob then $5::uuid else null end,
+               closed_at = case when $4::numeric = expected_amount_bob then now() else null end
+           where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3
+           returning id`,
+          [scope.tenantId, scope.branchId, normalizedShiftId, countedAmountBob, scope.userId]
+        );
+        if (!updated.rows[0]) throw new Error("Cash shift count was not saved.");
+        const result = await this.readControl(client, scope, normalizedShiftId, true);
+        if (!result) throw new Error("Cash shift control disappeared after count.");
+        await this.audit.recordInTransaction(client, scope, {
+          action: "cash.shift_counted",
+          entityType: "cash_shift_control",
+          entityId: result.id,
+          payload: {
+            countedAmountBob: result.countedAmountBob,
+            differenceAmountBob: result.differenceAmountBob,
+            status: result.status
+          }
+        });
+        return { statusCode: 200, body: result };
+      }
+    );
+  }
+
+  async approveShift(
+    scope: TenantScope,
+    shiftId: string,
+    input: ApproveCashShiftInput
+  ): Promise<CashShiftControlSummary> {
+    const normalizedShiftId = requiredText(shiftId, "Cash shift ID", 64);
+    const idempotencyKey = requiredText(input.idempotencyKey, "Idempotency key", 255);
+    const approvalNote = input.approvalNote?.trim() || null;
+    if (approvalNote && approvalNote.length > 500) {
+      throw new BadRequestException("Approval note must be at most 500 characters.");
+    }
+    return this.controlIdempotent(
+      scope,
+      "cash.approve_shift",
+      idempotencyKey,
+      { shiftId: normalizedShiftId, approvalNote },
+      async (client) => {
+        await this.assertPermission(client, scope, "cash.shift.approve");
+        const control = await this.readControl(client, scope, normalizedShiftId, true);
+        if (!control || control.status !== "PENDING_APPROVAL") {
+          throw new ConflictException("Only a pending cash shift difference can be approved.");
+        }
+        const updated = await client.query(
+          `update cash_shift_controls
+           set status = 'CLOSED', approved_by_user_id = $4::uuid, approved_at = now(),
+               closed_by_user_id = $4::uuid, closed_at = now(), approval_note = $5::varchar
+           where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3
+           returning id`,
+          [scope.tenantId, scope.branchId, normalizedShiftId, scope.userId, approvalNote]
+        );
+        if (!updated.rows[0]) throw new Error("Cash shift approval was not saved.");
+        const result = await this.readControl(client, scope, normalizedShiftId, true);
+        if (!result) throw new Error("Cash shift control disappeared after approval.");
+        await this.audit.recordInTransaction(client, scope, {
+          action: "cash.shift_approved",
+          entityType: "cash_shift_control",
+          entityId: result.id,
+          payload: { differenceAmountBob: result.differenceAmountBob, approvalNote }
+        });
+        return { statusCode: 200, body: result };
+      }
+    );
+  }
+
+  private async controlIdempotent<T>(
+    scope: TenantScope,
+    operation: string,
+    idempotencyKey: string,
+    payload: unknown,
+    action: (client: PoolClient) => Promise<{ statusCode: number; body: T }>
+  ): Promise<T> {
+    return this.database.withScope(scope, async (client) => {
+      await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+        `${scope.tenantId}:${scope.branchId}:${operation}:${idempotencyKey}`
+      ]);
+      const requestHash = computePayloadHash(payload);
+      const existing = await this.findIdempotency<T>(client, operation, idempotencyKey);
+      if (existing) {
+        if (existing.requestHash !== requestHash) throw new IdempotencyKeyReusedError();
+        return existing.responsePayload;
+      }
+      const result = await action(client);
+      await client.query(
+        `insert into idempotency_records (
+          tenant_id, branch_id, user_id, operation, idempotency_key,
+          request_hash, status_code, response_payload
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [scope.tenantId, scope.branchId, scope.userId, operation, idempotencyKey, requestHash, result.statusCode, JSON.stringify(result.body)]
+      );
+      return result.body;
+    });
+  }
+
+  private async assertAssignedActiveUser(client: PoolClient, scope: TenantScope, shiftId: string) {
+    const result = await client.query(
+      `select 1 from cash_shift_users assignment
+       join users app_user on app_user.id = assignment.user_id
+       where assignment.tenant_id = $1 and assignment.branch_id = $2
+         and assignment.cash_shift_id = $3 and assignment.user_id = $4
+         and app_user.is_active = true`,
+      [scope.tenantId, scope.branchId, shiftId, scope.userId]
+    );
+    if (!result.rowCount) throw new BadRequestException("The user is not assigned to this cash shift.");
+  }
+
+  private async assertPermission(client: PoolClient, scope: TenantScope, permission: string) {
+    const result = await client.query(
+      `select 1
+       from user_roles user_role
+       join role_permissions role_permission on role_permission.role_id = user_role.role_id
+       where user_role.user_id = $1 and user_role.tenant_id = $2
+         and role_permission.permission_code = $3`,
+      [scope.userId, scope.tenantId, permission]
+    );
+    if (!result.rowCount) throw new ConflictException("The user is not authorized to approve cash shifts.");
   }
 
   private normalize(input: CreateCashShiftInput): CreateCashShiftInput & {
@@ -213,12 +484,12 @@ export class CashService {
     };
   }
 
-  private async findIdempotency(
+  private async findIdempotency<T>(
     client: PoolClient,
     operation: string,
     idempotencyKey: string
-  ): Promise<StoredIdempotency | undefined> {
-    const result = await client.query<StoredIdempotency>(
+  ): Promise<StoredIdempotency<T> | undefined> {
+    const result = await client.query<StoredIdempotency<T>>(
       `select request_hash as "requestHash",
               status_code as "statusCode",
               response_payload as "responsePayload"
@@ -228,6 +499,31 @@ export class CashService {
       [operation, idempotencyKey]
     );
     return result.rows[0];
+  }
+
+  private async readControl(
+    client: PoolClient,
+    scope: TenantScope,
+    shiftId: string,
+    forUpdate = false
+  ): Promise<CashShiftControlSummary | undefined> {
+    const lock = forUpdate ? " for update" : "";
+    const result = await client.query<ControlRow>(
+      `select id, cash_shift_id as "cashShiftId", opening_amount_bob::text as "openingAmountBob",
+              expected_amount_bob::text as "expectedAmountBob", counted_amount_bob::text as "countedAmountBob",
+              difference_amount_bob::text as "differenceAmountBob", status,
+              opened_by_user_id as "openedByUserId", opened_at as "openedAt",
+              counted_by_user_id as "countedByUserId", counted_at as "countedAt",
+              approved_by_user_id as "approvedByUserId", approved_at as "approvedAt",
+              closed_by_user_id as "closedByUserId", closed_at as "closedAt",
+              approval_note as "approvalNote"
+       from cash_shift_controls
+       where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3${lock}`,
+      [scope.tenantId, scope.branchId, shiftId]
+    );
+    const row = result.rows[0];
+    if (!row) return undefined;
+    return this.mapControl(row);
   }
 
   private async insertShift(
@@ -360,16 +656,54 @@ export class CashService {
        order by app_user.display_name asc, app_user.id asc`,
       [scope.tenantId, scope.branchId, shiftIds]
     );
-    return shifts.rows.map((shift) => ({
-      id: shift.id,
-      cashRegisterId: shift.cashRegisterId,
-      cashRegisterCode: shift.cashRegisterCode,
-      scheduledStartAt: iso(shift.scheduledStartAt),
-      scheduledEndAt: iso(shift.scheduledEndAt),
-      status: shift.status,
-      users: users.rows
-        .filter((user) => user.cashShiftId === shift.id)
-        .map(({ cashShiftId: _cashShiftId, ...user }) => user)
-    }));
+    const controls = await client.query<ControlRow>(
+      `select id, cash_shift_id as "cashShiftId", opening_amount_bob::text as "openingAmountBob",
+              expected_amount_bob::text as "expectedAmountBob", counted_amount_bob::text as "countedAmountBob",
+              difference_amount_bob::text as "differenceAmountBob", status,
+              opened_by_user_id as "openedByUserId", opened_at as "openedAt",
+              counted_by_user_id as "countedByUserId", counted_at as "countedAt",
+              approved_by_user_id as "approvedByUserId", approved_at as "approvedAt",
+              closed_by_user_id as "closedByUserId", closed_at as "closedAt",
+              approval_note as "approvalNote"
+       from cash_shift_controls
+       where tenant_id = $1 and branch_id = $2 and cash_shift_id = any($3::uuid[])`,
+      [scope.tenantId, scope.branchId, shiftIds]
+    );
+    return shifts.rows.map((shift) => {
+      const control = controls.rows.find((candidate) => candidate.cashShiftId === shift.id);
+      return {
+        id: shift.id,
+        cashRegisterId: shift.cashRegisterId,
+        cashRegisterCode: shift.cashRegisterCode,
+        scheduledStartAt: iso(shift.scheduledStartAt),
+        scheduledEndAt: iso(shift.scheduledEndAt),
+        status: shift.status,
+        users: users.rows
+          .filter((user) => user.cashShiftId === shift.id)
+          .map(({ cashShiftId: _cashShiftId, ...user }) => user),
+        ...(control ? { control: this.mapControl(control) } : {})
+      };
+    });
+  }
+
+  private mapControl(row: ControlRow): CashShiftControlSummary {
+    return {
+      id: row.id,
+      cashShiftId: row.cashShiftId,
+      openingAmountBob: row.openingAmountBob,
+      expectedAmountBob: row.expectedAmountBob,
+      countedAmountBob: row.countedAmountBob,
+      differenceAmountBob: row.differenceAmountBob,
+      status: row.status,
+      openedByUserId: row.openedByUserId,
+      openedAt: iso(row.openedAt),
+      countedByUserId: row.countedByUserId,
+      countedAt: row.countedAt ? iso(row.countedAt) : null,
+      approvedByUserId: row.approvedByUserId,
+      approvedAt: row.approvedAt ? iso(row.approvedAt) : null,
+      closedByUserId: row.closedByUserId,
+      closedAt: row.closedAt ? iso(row.closedAt) : null,
+      approvalNote: row.approvalNote
+    };
   }
 }
