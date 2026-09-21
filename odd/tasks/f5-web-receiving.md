@@ -52,7 +52,7 @@ small rollback boundary and avoids inventing accounting policy.
 - [x] T1 — Red test for the receipt controller/service boundary and replay.
 - [x] T2 — Add scoped receipt route and typed Web client contract.
 - [x] T3 — Implement receiving page and procurement navigation link.
-- [ ] T4 — Run verification, update docs/status, commit, and push.
+- [x] T4 — Run focused verification, update docs/status, and commit; no push performed (requires explicit authorization).
 
 ## Route declaration
 
@@ -71,12 +71,16 @@ the 400-line advisory boundary is exceeded.
 
 ## Progress
 
-- Status: T1–T3 implemented; T4 verification and delivery remain.
+- Status: T1–T4 implemented; focused verification is green and the follow-up is committed locally.
 - Evidence: controller-boundary coverage includes replay, partial/final status,
   and concurrent cumulative enforcement; API/Web production builds pass.
-- Verification: API source+test typecheck, API build, Web build, and
-  `git diff --check` pass. Focused/full PostgreSQL suites are blocked because
-  port 5433 refuses connections and Docker Desktop is not running.
+- RED: the focused procurement suite initially failed before test execution
+  because PostgreSQL refused to truncate tables referenced by the new F6 cash
+  shift foreign keys.
+- GREEN: adding `cash_shift_users` and `cash_shifts` to the fixture truncation
+  order made all 4 focused procurement tests pass. API/Web builds and Docker
+  health smoke also pass (`/health` and `/` return 200).
+- Follow-up work-unit commit: this commit (`test(procurement): restore F5 fixture isolation`).
 - Previous boundary: `e330523 feat(web): add procurement workspace`.
 - Implementation work unit: `feat(procurement): add receiving by lot`.
 

@@ -150,7 +150,8 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
   `inventory.manage`, bloqueando la orden y distinguiendo estados parcial/final.
 - [x] F5-WEB.3 Implementar cliente tipado y `/procurement/receiving` con líneas
   repetibles por lote, validación local y reintento idempotente.
-- [ ] F5-WEB.4 Completar verificación Docker/smoke y publicación autorizada.
+- [x] F5-WEB.4 Completar verificación focalizada PostgreSQL, builds y Docker/smoke;
+  publicación remota queda pendiente de autorización explícita.
 
 ## Lote F6-WEB
 
