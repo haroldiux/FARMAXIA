@@ -151,7 +151,7 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
 - [x] F5-WEB.3 Implementar cliente tipado y `/procurement/receiving` con líneas
   repetibles por lote, validación local y reintento idempotente.
 - [x] F5-WEB.4 Completar verificación focalizada PostgreSQL, builds y Docker/smoke;
-  publicación remota queda pendiente de autorización explícita.
+    publicación autorizada en `origin/codex/f5-web-receiving`.
 
 ## Lote F6-WEB
 

@@ -52,7 +52,7 @@ small rollback boundary and avoids inventing accounting policy.
 - [x] T1 — Red test for the receipt controller/service boundary and replay.
 - [x] T2 — Add scoped receipt route and typed Web client contract.
 - [x] T3 — Implement receiving page and procurement navigation link.
-- [x] T4 — Run focused verification, update docs/status, and commit; no push performed (requires explicit authorization).
+- [x] T4 — Run focused verification, update docs/status, commit, and publish after authorization.
 
 ## Route declaration
 
@@ -71,7 +71,7 @@ the 400-line advisory boundary is exceeded.
 
 ## Progress
 
-- Status: T1–T4 implemented; focused verification is green and the follow-up is committed locally.
+- Status: T1–T4 implemented; focused verification is green and the follow-up is committed and published.
 - Evidence: controller-boundary coverage includes replay, partial/final status,
   and concurrent cumulative enforcement; API/Web production builds pass.
 - RED: the focused procurement suite initially failed before test execution
@@ -81,6 +81,7 @@ the 400-line advisory boundary is exceeded.
   order made all 4 focused procurement tests pass. API/Web builds and Docker
   health smoke also pass (`/health` and `/` return 200).
 - Follow-up work-unit commit: this commit (`test(procurement): restore F5 fixture isolation`).
+- Publication: `origin/codex/f5-web-receiving` at `4f91e64`.
 - Previous boundary: `e330523 feat(web): add procurement workspace`.
 - Implementation work unit: `feat(procurement): add receiving by lot`.
 
