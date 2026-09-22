@@ -70,9 +70,10 @@ FEFO, reservation, reconciliation, and branch-scoped mutation behavior.
 - [x] T3 — Add typed Web client, `/inventory/report` hierarchy/subtotals, and
   permission-conditioned navigation.
 - [ ] T4 — Run API/Web verification, Docker smoke when available, and update
-  status/test documentation.
-- [x] T5 — Commit the authorized feature branch work unit; push remains explicitly
-  out of scope for this agent.
+  status/test documentation. Static checks pass; PostgreSQL/Docker remain
+  unavailable in this environment.
+- [x] T5 — Commit and push the authorized feature branch (`2893a1b`) to
+  `origin/codex/f9-global-inventory-report`.
 
 ## Route declaration
 
@@ -93,11 +94,12 @@ FEFO, reservation, reconciliation, and branch-scoped mutation behavior.
 
 ## Progress
 
-- Status: implementation complete; live PostgreSQL/Compose verification blocked by unavailable local services.
+- Status: implementation and authorized publication complete; live
+  PostgreSQL/Compose verification remains blocked by unavailable local services.
 - Previous boundary: `8eaf9ff docs(catalog): record F8 publication`.
 - Current branch: `codex/f9-global-inventory-report`.
-- Publication: pending; no push performed.
-- Work-unit commit: `74bab91 feat(inventory): add tenant-wide stock report`.
+- Publication: `origin/codex/f9-global-inventory-report`.
+- Work-unit commit: `2893a1b feat(inventory): add tenant-wide stock report`.
 
 ## Evidence
 
@@ -106,5 +108,5 @@ FEFO, reservation, reconciliation, and branch-scoped mutation behavior.
   refused connections; the test assertions remain pending against a live database.
 - GREEN source checks: API `tsc --noEmit` and Web production build passed; Web
   exposes `/inventory/report`.
-- Pending: focused PostgreSQL tests, full API build, migration/RLS execution,
-  Docker health/smoke, and remote publication.
+- Pending: focused PostgreSQL tests, migration/RLS execution, and Docker
+  health/smoke; API/Web static verification passed.
