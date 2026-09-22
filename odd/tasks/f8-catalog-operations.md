@@ -77,7 +77,8 @@ avoiding premature coupling to checkout, FEFO consumption, or valuation.
 - [ ] T4 — Run PostgreSQL API integration and Docker smoke; typechecks/builds,
   API/Web compilation, docs and status updates are complete, but Docker/Postgres
   are unavailable in this environment.
-- [x] T5 — Commit the authorized feature branch without pushing (`71ce744`).
+- [x] T5 — Commit and push the authorized feature branch (`66855fa`) to
+  `origin/codex/f8-catalog-operations`.
 
 ## Route declaration
 
@@ -98,7 +99,8 @@ avoiding premature coupling to checkout, FEFO consumption, or valuation.
 
 ## Progress
 
-- Status: implementation complete pending unavailable PostgreSQL/Docker checks.
+- Status: implementation and authorized publication complete; PostgreSQL/Docker
+  checks remain pending because the local services are unavailable.
 - RED: added F8 assertions before implementation; focused API suite could not
   execute because `localhost:5433` refused connections.
 - GREEN/static proof: `pnpm --filter @farmaxia/api exec tsc --noEmit --project tsconfig.json`,
@@ -108,5 +110,5 @@ avoiding premature coupling to checkout, FEFO consumption, or valuation.
   Docker Desktop Linux engine pipe is unavailable.
 - Previous boundary: `1801a63 docs(cash): record F7 publication`.
 - Current branch: `codex/f8-catalog-operations`.
-- Work-unit commit: `71ce744 feat(catalog): add pricing and barcode workflows`.
-- Publication: intentionally pending; this task must not push.
+- Work-unit commit: `66855fa feat(catalog): add pricing and barcode workflows`.
+- Publication: `origin/codex/f8-catalog-operations`.
