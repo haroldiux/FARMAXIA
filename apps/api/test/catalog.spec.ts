@@ -210,6 +210,84 @@ describe("catalog service (C01)", () => {
     ]);
   });
 
+  it("rejects same-scope overlapping prices while allowing an adjacent interval and branch precedence", async () => {
+    const product = await catalog.createProduct(scope, { name: "Ibuprofeno" });
+    const presentation = await catalog.createPresentation(scope, {
+      productId: product.id,
+      name: "Caja x 10",
+      baseUnitFactor: 10,
+      isSellable: true
+    });
+    const global = await catalog.createPriceList(scope, { name: "General vigente", currency: "BOB" });
+    const branch = await catalog.createPriceList(scope, {
+      name: "Sucursal vigente",
+      currency: "BOB",
+      branchId
+    });
+
+    await catalog.setPrice(scope, {
+      priceListId: global.id,
+      presentationId: presentation.id,
+      amount: "10.0000",
+      validFrom: new Date("2026-01-01T00:00:00.000Z"),
+      validTo: new Date("2026-02-01T00:00:00.000Z")
+    });
+    await expect(catalog.setPrice(scope, {
+      priceListId: global.id,
+      presentationId: presentation.id,
+      amount: "11.0000",
+      validFrom: new Date("2026-01-15T00:00:00.000Z")
+    })).rejects.toThrow("overlap");
+    await catalog.setPrice(scope, {
+      priceListId: global.id,
+      presentationId: presentation.id,
+      amount: "11.0000",
+      validFrom: new Date("2026-02-01T00:00:00.000Z")
+    });
+    await catalog.setPrice(scope, {
+      priceListId: branch.id,
+      presentationId: presentation.id,
+      amount: "12.5000",
+      validFrom: new Date("2026-01-01T00:00:00.000Z")
+    });
+    await catalog.registerBarcode(scope, { presentationId: presentation.id, barcode: "780000000003" });
+
+    expect(await catalog.listPriceLists(scope)).toEqual({
+      items: expect.arrayContaining([
+        expect.objectContaining({ id: global.id, branchId: null, currency: "BOB" }),
+        expect.objectContaining({ id: branch.id, branchId, currency: "BOB" })
+      ])
+    });
+    await expect(catalog.findByBarcode(scope, "780000000003", new Date("2026-01-20T00:00:00.000Z")))
+      .resolves.toMatchObject({ priceAmount: "12.5000", priceCurrency: "BOB" });
+  });
+
+  it("replays operational catalog mutations once and records their audit event", async () => {
+    const product = await catalog.createProduct(scope, { name: "Loratadina" });
+    const presentation = await catalog.createPresentation(scope, {
+      productId: product.id,
+      name: "Tabletas x 10",
+      baseUnitFactor: 10,
+      isSellable: true
+    });
+    const input = {
+      presentationId: presentation.id,
+      barcode: "780000000004",
+      idempotencyKey: "catalog-barcode-001"
+    };
+
+    const first = await catalog.registerBarcode(scope, input);
+    const replay = await catalog.registerBarcode(scope, input);
+
+    expect(replay).toEqual(first);
+    await expect(catalog.registerBarcode(scope, { ...input, barcode: "780000000005" }))
+      .rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED" });
+    await expect(ownerPool.query(
+      "select action, payload->>'barcode' as barcode from audit_events where tenant_id = $1",
+      [tenantId]
+    )).resolves.toMatchObject({ rows: [{ action: "catalog.barcode_registered", barcode: "780000000004" }] });
+  });
+
   it("rejects an invalid factor, duplicate barcode and an inaccessible tenant scope", async () => {
     const category = await catalog.createCategory(scope, {
       name: "Vitaminas",

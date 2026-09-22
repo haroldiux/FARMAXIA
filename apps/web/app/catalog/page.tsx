@@ -3,6 +3,15 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { authenticatedFetch, currentSession, logout, type AuthSession } from "../lib/session";
+import {
+  createPriceList,
+  findBarcode,
+  listPriceLists,
+  registerBarcode,
+  setPrice,
+  type BarcodeLookup,
+  type CatalogPriceList
+} from "../lib/catalog";
 
 interface Presentation {
   presentationId: string;
@@ -37,13 +46,24 @@ export default function CatalogPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [priceLists, setPriceLists] = useState<CatalogPriceList[]>([]);
+  const [priceListName, setPriceListName] = useState("");
+  const [priceCurrency, setPriceCurrency] = useState("BOB");
+  const [priceListBranchScope, setPriceListBranchScope] = useState(false);
+  const [selectedPriceListId, setSelectedPriceListId] = useState("");
+  const [selectedPresentationId, setSelectedPresentationId] = useState("");
+  const [priceAmount, setPriceAmount] = useState("");
+  const [priceValidFrom, setPriceValidFrom] = useState("");
+  const [priceValidTo, setPriceValidTo] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [barcodeLookup, setBarcodeLookup] = useState<BarcodeLookup | null>(null);
 
   useEffect(() => {
     currentSession()
       .then(async (value) => {
         setSession(value);
         try {
-          await loadProducts("");
+          await Promise.all([loadProducts(""), loadPriceLists()]);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : "No pudimos cargar el catálogo.");
         }
@@ -65,6 +85,12 @@ export default function CatalogPage() {
       throw new Error(response.status === 403 ? "Tu sesión no tiene permiso para consultar el catálogo." : "No pudimos cargar el catálogo.");
     }
     setProducts((await response.json()) as ProductPage);
+  }
+
+  async function loadPriceLists(): Promise<void> {
+    const lists = await listPriceLists();
+    setPriceLists(lists);
+    setSelectedPriceListId((current) => current || lists[0]?.id || "");
   }
 
   async function submitSearch(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -102,6 +128,81 @@ export default function CatalogPage() {
       setError(reason instanceof Error ? reason.message : "No pudimos guardar el producto.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function createCatalogPriceList(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await createPriceList({
+        name: priceListName,
+        currency: priceCurrency,
+        branchId: priceListBranchScope ? session?.branchId : undefined
+      });
+      setPriceListName("");
+      setNotice("Lista de precios creada para esta organización.");
+      await loadPriceLists();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos crear la lista de precios.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function savePrice(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await setPrice({
+        priceListId: selectedPriceListId,
+        presentationId: selectedPresentationId,
+        amount: priceAmount,
+        validFrom: new Date(priceValidFrom).toISOString(),
+        validTo: priceValidTo ? new Date(priceValidTo).toISOString() : undefined
+      });
+      setPriceAmount("");
+      setPriceValidFrom("");
+      setPriceValidTo("");
+      setNotice("Precio vigente registrado sin alterar el historial.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos registrar el precio.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveBarcode(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await registerBarcode({ presentationId: selectedPresentationId, barcode });
+      setNotice("Código de barras registrado para la presentación seleccionada.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos registrar el código de barras.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function lookupBarcode(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    try {
+      const found = await findBarcode(barcode);
+      setBarcodeLookup(found);
+      if (!found) {
+        setNotice("No encontramos un producto activo con ese código de barras.");
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos consultar el código de barras.");
     }
   }
 
@@ -157,6 +258,40 @@ export default function CatalogPage() {
           </form> : <p className="empty-copy">Tu sesión puede consultar el catálogo, pero no tiene permiso para crear productos.</p>}
         </aside>
       </div>
+      <section className="catalog-layout" aria-label="Precios y códigos de barras">
+        <section className="product-list-panel">
+          <div className="panel-heading"><div><p className="section-kicker">Precios operativos</p><h2>Vigencias y listas</h2></div><span className="panel-count">{priceLists.length.toString().padStart(2, "0")}</span></div>
+          {canManage ? <div className="product-form">
+            <form onSubmit={createCatalogPriceList}>
+              <label className="field"><span>Nueva lista</span><input required value={priceListName} onChange={(event) => setPriceListName(event.target.value)} placeholder="Ej. Lista general" /></label>
+              <label className="field"><span>Moneda ISO</span><input required maxLength={3} value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value.toUpperCase())} /></label>
+              <label className="field"><span><input type="checkbox" checked={priceListBranchScope} onChange={(event) => setPriceListBranchScope(event.target.checked)} /> Solo esta sucursal</span></label>
+              <button className="secondary-button" disabled={saving} type="submit">Crear lista</button>
+            </form>
+            <form onSubmit={savePrice}>
+              <label className="field"><span>Lista activa</span><select required value={selectedPriceListId} onChange={(event) => setSelectedPriceListId(event.target.value)}><option value="">Selecciona una lista</option>{priceLists.map((list) => <option key={list.id} value={list.id}>{list.name} · {list.currency}{list.branchId ? " · sucursal" : " · global"}</option>)}</select></label>
+              <label className="field"><span>Presentación</span><select required value={selectedPresentationId} onChange={(event) => setSelectedPresentationId(event.target.value)}><option value="">Selecciona una presentación</option>{products.items.flatMap((product) => product.presentations.map((presentation) => <option key={presentation.presentationId} value={presentation.presentationId}>{product.name} · {presentation.name}</option>))}</select></label>
+              <label className="field"><span>Monto exacto</span><input required inputMode="decimal" pattern="\d+(\.\d{1,4})?" value={priceAmount} onChange={(event) => setPriceAmount(event.target.value)} placeholder="12.5000" /></label>
+              <label className="field"><span>Válido desde</span><input required type="datetime-local" value={priceValidFrom} onChange={(event) => setPriceValidFrom(event.target.value)} /></label>
+              <label className="field"><span>Válido hasta <small>opcional</small></span><input type="datetime-local" value={priceValidTo} onChange={(event) => setPriceValidTo(event.target.value)} /></label>
+              <p className="form-note">Las vigencias de una misma presentación y alcance no se superponen. La lista de sucursal prevalece sobre la global.</p>
+              <button className="primary-button" disabled={saving || !priceLists.length} type="submit">{saving ? "Guardando…" : "Registrar precio"}<span>↗</span></button>
+            </form>
+          </div> : <p className="empty-copy">Tu sesión puede consultar el catálogo, pero no tiene permiso para administrar sus precios.</p>}
+        </section>
+        <aside className="create-product-panel">
+          <div className="panel-heading"><div><p className="section-kicker">Lectura rápida</p><h2>Código de barras</h2></div><span className="sparkle">⌁</span></div>
+          <form className="product-form" onSubmit={lookupBarcode}>
+            <label className="field"><span>Código</span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="780000000001" /></label>
+            <button className="secondary-button" type="submit">Buscar código</button>
+          </form>
+          {canManage ? <form className="product-form" onSubmit={saveBarcode}>
+            <label className="field"><span>Presentación a registrar</span><select required value={selectedPresentationId} onChange={(event) => setSelectedPresentationId(event.target.value)}><option value="">Selecciona una presentación</option>{products.items.flatMap((product) => product.presentations.map((presentation) => <option key={presentation.presentationId} value={presentation.presentationId}>{product.name} · {presentation.name}</option>))}</select></label>
+            <button className="primary-button" disabled={saving} type="submit">Registrar código<span>↗</span></button>
+          </form> : null}
+          {barcodeLookup ? <div className="catalog-empty"><h3>{barcodeLookup.productName}</h3><p>{barcodeLookup.presentationName} · {barcodeLookup.baseUnitFactor} unidades</p><p>{barcodeLookup.priceAmount ? `${barcodeLookup.priceAmount} ${barcodeLookup.priceCurrency}` : "Sin precio vigente"}</p></div> : null}
+        </aside>
+      </section>
     </main>
   );
 }

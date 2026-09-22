@@ -1,6 +1,12 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
+import { AuditService } from "../transversal/audit.service.js";
+import {
+  IdempotencyKeyReusedError,
+  IdempotencyService,
+  type IdempotentExecutionResult
+} from "../transversal/idempotency.service.js";
 
 export interface CatalogCategoryInput {
   name: string;
@@ -24,6 +30,7 @@ export interface CatalogPriceListInput {
   name: string;
   currency: string;
   branchId?: string;
+  idempotencyKey?: string;
 }
 
 export interface CatalogPriceInput {
@@ -32,6 +39,7 @@ export interface CatalogPriceInput {
   amount: string;
   validFrom: Date;
   validTo?: Date;
+  idempotencyKey?: string;
 }
 
 export interface CatalogHomologationInput {
@@ -44,6 +52,7 @@ export interface CatalogHomologationInput {
 export interface BarcodeInput {
   presentationId: string;
   barcode: string;
+  idempotencyKey?: string;
 }
 
 export interface BarcodeLookup {
@@ -84,6 +93,17 @@ export interface CatalogProductPage {
   offset: number;
 }
 
+export interface CatalogPriceListSummary {
+  id: string;
+  name: string;
+  currency: string;
+  branchId: string | null;
+}
+
+export interface CatalogPriceListPage {
+  items: CatalogPriceListSummary[];
+}
+
 interface CreatedRow {
   id: string;
 }
@@ -93,14 +113,40 @@ interface HomologationRow extends CreatedRow {
   externalCode: string;
 }
 
+export class CatalogValidationError extends BadRequestException {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class CatalogPriceOverlapError extends ConflictException {
+  readonly code = "CATALOG_PRICE_OVERLAP";
+
+  constructor() {
+    super({ code: "CATALOG_PRICE_OVERLAP", message: "Price interval overlaps an existing price in the same scope." });
+  }
+}
+
+export class CatalogIdempotencyKeyReusedError extends ConflictException {
+  readonly code = "IDEMPOTENCY_KEY_REUSED";
+
+  constructor() {
+    super({ code: "IDEMPOTENCY_KEY_REUSED", message: "Idempotency key reused with conflicting request payload." });
+  }
+}
+
 interface ProductListRow extends CatalogProductSummary {
   total: number;
+}
+
+interface PriceListScopeRow {
+  branchId: string | null;
 }
 
 function requiredText(value: string, field: string, maxLength: number): string {
   const normalized = value.trim();
   if (!normalized || normalized.length > maxLength) {
-    throw new Error(`${field} must be non-empty and at most ${maxLength} characters.`);
+    throw new CatalogValidationError(`${field} must be non-empty and at most ${maxLength} characters.`);
   }
   return normalized;
 }
@@ -108,7 +154,7 @@ function requiredText(value: string, field: string, maxLength: number): string {
 function amountText(value: string): string {
   const normalized = value.trim();
   if (!/^\d+(?:\.\d{1,4})?$/.test(normalized)) {
-    throw new Error("Price amount must be a non-negative decimal with up to four places.");
+    throw new CatalogValidationError("Price amount must be a non-negative decimal with up to four places.");
   }
   return normalized;
 }
@@ -116,20 +162,23 @@ function amountText(value: string): string {
 function validCurrency(value: string): string {
   const normalized = value.trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(normalized)) {
-    throw new Error("Currency must be a three-letter ISO code.");
+    throw new CatalogValidationError("Currency must be a three-letter ISO code.");
   }
   return normalized;
 }
 
 function validFactor(value: number): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error("Base unit factor must be a positive safe integer.");
+    throw new CatalogValidationError("Base unit factor must be a positive safe integer.");
   }
   return value;
 }
 
 @Injectable()
 export class CatalogService {
+  private readonly idempotency = new IdempotencyService();
+  private readonly audit = new AuditService();
+
   constructor(private readonly database: TenantDatabase) {}
 
   async createCategory(scope: TenantScope, input: CatalogCategoryInput): Promise<CreatedRow> {
@@ -182,52 +231,184 @@ export class CatalogService {
 
   async registerBarcode(scope: TenantScope, input: BarcodeInput): Promise<CreatedRow> {
     const barcode = requiredText(input.barcode, "Barcode", 80);
-    return this.database.withScope(scope, async (client) => {
-      const { rows } = await client.query<CreatedRow>(
-        `insert into product_barcodes (tenant_id, presentation_id, barcode)
-         values ($1, $2, $3)
-         returning id`,
-        [scope.tenantId, input.presentationId, barcode]
-      );
-      return rows[0] as CreatedRow;
-    });
+    const presentationId = requiredText(input.presentationId, "Presentation ID", 64);
+    return this.executeMutation(
+      scope,
+      "catalog.register_barcode",
+      input.idempotencyKey,
+      { barcode, presentationId },
+      async (client) => {
+        const { rows } = await client.query<CreatedRow>(
+          `insert into product_barcodes (tenant_id, presentation_id, barcode)
+           values ($1, $2, $3)
+           returning id`,
+          [scope.tenantId, presentationId, barcode]
+        );
+        const created = this.requireCreated(rows[0]);
+        await this.audit.recordInTransaction(client, {
+          action: "catalog.barcode_registered",
+          entityType: "product_barcode",
+          entityId: created.id,
+          payload: { barcode, presentationId }
+        });
+        return created;
+      }
+    );
   }
 
   async createPriceList(scope: TenantScope, input: CatalogPriceListInput): Promise<CreatedRow> {
     const name = requiredText(input.name, "Price list name", 120);
     const currency = validCurrency(input.currency);
     if (input.branchId && input.branchId !== scope.branchId) {
-      throw new Error("Price list branch must match the active branch scope.");
+      throw new CatalogValidationError("Price list branch must match the active branch scope.");
     }
+    const branchId = input.branchId ?? null;
+    return this.executeMutation(
+      scope,
+      "catalog.create_price_list",
+      input.idempotencyKey,
+      { name, currency, branchId },
+      async (client) => {
+        const { rows } = await client.query<CreatedRow>(
+          `insert into price_lists (tenant_id, branch_id, name, currency)
+           values ($1, $2, $3, $4)
+           returning id`,
+          [scope.tenantId, branchId, name, currency]
+        );
+        const created = this.requireCreated(rows[0]);
+        await this.audit.recordInTransaction(client, {
+          action: "catalog.price_list_created",
+          entityType: "price_list",
+          entityId: created.id,
+          payload: { name, currency, branchId }
+        });
+        return created;
+      }
+    );
+  }
+
+  async listPriceLists(scope: TenantScope): Promise<CatalogPriceListPage> {
     return this.database.withScope(scope, async (client) => {
-      const { rows } = await client.query<CreatedRow>(
-        `insert into price_lists (tenant_id, branch_id, name, currency)
-         values ($1, $2, $3, $4)
-         returning id`,
-        [scope.tenantId, input.branchId ?? null, name, currency]
+      const { rows } = await client.query<CatalogPriceListSummary>(
+        `select id, name, currency, branch_id as "branchId"
+         from price_lists
+         where tenant_id = $1
+           and is_active
+           and (branch_id is null or branch_id = $2)
+         order by case when branch_id = $2 then 0 else 1 end, name asc, id asc`,
+        [scope.tenantId, scope.branchId]
       );
-      return rows[0] as CreatedRow;
+      return { items: rows };
     });
   }
 
   async setPrice(scope: TenantScope, input: CatalogPriceInput): Promise<CreatedRow> {
     const amount = amountText(input.amount);
     if (!(input.validFrom instanceof Date) || Number.isNaN(input.validFrom.getTime())) {
-      throw new Error("Price validFrom must be a valid date.");
+      throw new CatalogValidationError("Price validFrom must be a valid date.");
     }
-    if (input.validTo && input.validTo <= input.validFrom) {
-      throw new Error("Price validTo must be later than validFrom.");
+    if (input.validTo && (!(input.validTo instanceof Date) || Number.isNaN(input.validTo.getTime()) || input.validTo <= input.validFrom)) {
+      throw new CatalogValidationError("Price validTo must be later than validFrom.");
     }
-    return this.database.withScope(scope, async (client) => {
-      const { rows } = await client.query<CreatedRow>(
-        `insert into presentation_prices
-           (tenant_id, price_list_id, presentation_id, amount, valid_from, valid_to)
-         values ($1, $2, $3, $4, $5, $6)
-         returning id`,
-        [scope.tenantId, input.priceListId, input.presentationId, amount, input.validFrom, input.validTo ?? null]
+    const priceListId = requiredText(input.priceListId, "Price list ID", 64);
+    const presentationId = requiredText(input.presentationId, "Presentation ID", 64);
+    const validFrom = input.validFrom.toISOString();
+    const validTo = input.validTo?.toISOString() ?? null;
+    return this.executeMutation(
+      scope,
+      "catalog.set_price",
+      input.idempotencyKey,
+      { amount, priceListId, presentationId, validFrom, validTo },
+      async (client) => {
+        const scopeResult = await client.query<PriceListScopeRow>(
+          `select branch_id as "branchId"
+           from price_lists
+           where tenant_id = $1 and id = $2 and is_active
+           for key share`,
+          [scope.tenantId, priceListId]
+        );
+        const priceList = scopeResult.rows[0];
+        if (!priceList) {
+          throw new CatalogValidationError("Price list is not available in the active branch scope.");
+        }
+        await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          `${scope.tenantId}:${presentationId}:${priceList.branchId ?? "global"}`
+        ]);
+        const overlap = await client.query<{ id: string }>(
+          `select price.id
+           from presentation_prices as price
+           join price_lists as list
+             on list.tenant_id = price.tenant_id and list.id = price.price_list_id
+           where price.tenant_id = $1
+             and price.presentation_id = $2
+             and list.branch_id is not distinct from $3::uuid
+             and price.valid_from < coalesce($5::timestamptz, 'infinity'::timestamptz)
+             and coalesce(price.valid_to, 'infinity'::timestamptz) > $4::timestamptz
+           limit 1`,
+          [scope.tenantId, presentationId, priceList.branchId, validFrom, validTo]
+        );
+        if (overlap.rows[0]) {
+          throw new CatalogPriceOverlapError();
+        }
+        const { rows } = await client.query<CreatedRow>(
+          `insert into presentation_prices
+             (tenant_id, price_list_id, presentation_id, amount, valid_from, valid_to)
+           values ($1, $2, $3, $4, $5, $6)
+           returning id`,
+          [scope.tenantId, priceListId, presentationId, amount, validFrom, validTo]
+        );
+        const created = this.requireCreated(rows[0]);
+        await this.audit.recordInTransaction(client, {
+          action: "catalog.price_set",
+          entityType: "presentation_price",
+          entityId: created.id,
+          payload: { amount, priceListId, presentationId, validFrom, validTo, branchId: priceList.branchId }
+        });
+        return created;
+      }
+    );
+  }
+
+  private requireCreated(row: CreatedRow | undefined): CreatedRow {
+    if (!row) {
+      throw new Error("Catalog mutation did not return its created record.");
+    }
+    return row;
+  }
+
+  private async executeMutation<T>(
+    scope: TenantScope,
+    operation: string,
+    idempotencyKey: string | undefined,
+    payload: Record<string, unknown>,
+    action: (client: PoolClient) => Promise<T>
+  ): Promise<T> {
+    try {
+      if (!idempotencyKey) {
+        return await this.database.withScope(scope, action);
+      }
+      const result = await this.idempotency.execute(
+        this.database,
+        scope,
+        operation,
+        requiredText(idempotencyKey, "Idempotency key", 200),
+        payload,
+        async (client): Promise<IdempotentExecutionResult<T>> => ({
+          statusCode: 201,
+          body: await action(client)
+        })
       );
-      return rows[0] as CreatedRow;
-    });
+      return (result.body ?? result.data) as T;
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReusedError) {
+        throw new CatalogIdempotencyKeyReusedError();
+      }
+      const databaseCode = (error as { code?: string }).code;
+      if (databaseCode === "23505") {
+        throw new ConflictException("Catalog record already exists in this tenant.");
+      }
+      throw error;
+    }
   }
 
   async addHomologation(

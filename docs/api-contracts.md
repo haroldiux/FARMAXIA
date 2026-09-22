@@ -139,3 +139,25 @@ FEFO ignora lotes vencidos, en cuarentena o no disponibles y ordena por
 política comercial de proformas (D09) ni la valoración de inventario (D08). Las
 operaciones C05 registran eventos operativos y auditoría transaccional; no
 integran sensores ni notificaciones externas.
+
+
+## Operación de catálogo F8
+
+Todas las rutas de esta sección requieren `catalog.manage`, identidad autenticada y
+el alcance tenant/sucursal del access token. Las mutaciones requieren
+`Idempotency-Key` o `idempotencyKey`; una repetición idéntica devuelve el resultado
+original y una clave con otro cuerpo responde `409 IDEMPOTENCY_KEY_REUSED`.
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET /api/v1/catalog/price-lists` | Devuelve `{ items }` de listas activas globales y de la sucursal activa; cada lista incluye `id`, `name`, `currency` y `branchId`. |
+| `POST /api/v1/catalog/price-lists` | Recibe `name`, `currency` ISO y `branchId` opcional. Una lista de sucursal solo puede referir la sucursal activa; omitirlo crea una lista global. |
+| `POST /api/v1/catalog/prices` | Recibe `priceListId`, `presentationId`, `amount` decimal como cadena, `validFrom` y `validTo` ISO opcional. `amount` acepta hasta cuatro decimales y se conserva como `numeric(18,4)`. |
+| `POST /api/v1/catalog/barcodes` | Recibe `presentationId` y `barcode`; el código es único por tenant. |
+| `GET /api/v1/catalog/barcodes/{barcode}` | Devuelve producto, presentación y precio vigente o `null`. Prioriza la lista de la sucursal activa sobre la global. |
+
+Las vigencias son intervalos semiabiertos `[validFrom, validTo)`: intervalos
+adyacentes son válidos y dos intervalos del mismo producto/presentación y alcance
+(global o la misma sucursal) responden `409 CATALOG_PRICE_OVERLAP`. Cada mutación
+operativa registra auditoría transaccional. Ninguna ruta de F8 crea ventas,
+movimientos, FEFO, valoración ni reportes globales de inventario.

@@ -46,3 +46,16 @@ No se marca una prueba aprobada sin comando, salida y evidencia real.
 - Un job o archivo de tenant/sucursal A no es visible ni relacionable desde B.
 - Cada clave de caché contiene tenant y sucursal, y rechaza segmentos vacíos o
   ambiguos.
+
+
+## Criterios F8
+
+- El catálogo rechaza intervalos solapados del mismo producto/presentación y
+  alcance, permite el borde adyacente y mantiene la precedencia de sucursal
+  sobre lista global.
+- Las mutaciones de lista, precio y código de barras son idempotentes, generan
+  auditoría y no escapan su tenant o sucursal bajo RLS.
+- Los montos se transportan como cadenas decimales de hasta cuatro posiciones;
+  la Web no convierte importes a `number`.
+- La consulta por código devuelve solo productos/presentaciones activos y el
+  precio vigente del alcance de la sesión.
