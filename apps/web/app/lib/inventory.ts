@@ -10,6 +10,39 @@ export interface WarehouseList {
   items: Warehouse[];
 }
 
+export interface TenantStockReportItem {
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  warehouseId: string;
+  warehouseName: string;
+  productId: string;
+  productName: string;
+  presentationId: string;
+  presentationName: string;
+  physical: string;
+  reserved: string;
+  available: string;
+}
+
+export interface TenantStockReportSubtotal {
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  physical: string;
+  reserved: string;
+  available: string;
+}
+
+export interface TenantStockReport {
+  items: TenantStockReportItem[];
+  branchSubtotals: TenantStockReportSubtotal[];
+  tenantTotal: { physical: string; reserved: string; available: string };
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type ExpiryAlertStatus = "EXPIRED" | "DUE_SOON";
 export type BatchStatus = "AVAILABLE" | "QUARANTINED" | "DISPOSED";
 
@@ -78,6 +111,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function listWarehouses(): Promise<WarehouseList> {
   return request<WarehouseList>("/api/v1/inventory/warehouses");
+}
+
+export async function listTenantStockReport(input: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<TenantStockReport> {
+  const params = new URLSearchParams();
+  if (input.search?.trim()) params.set("search", input.search.trim());
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.offset !== undefined) params.set("offset", String(input.offset));
+  const query = params.toString();
+  return request<TenantStockReport>(`/api/v1/inventory/reports/tenant-stock${query ? `?${query}` : ""}`);
 }
 
 export async function listExpiryAlerts(

@@ -20,7 +20,9 @@ import {
   type WasteInput,
   type ConsumeReservationInput,
   type ReserveFefoInput,
-  type ReservationLifecycleInput
+  type ReservationLifecycleInput,
+  type TenantStockReportInput,
+  type TenantStockReportResult
 } from "./inventory.service.js";
 
 function scopeFrom(request: AuthenticatedRequest) {
@@ -38,6 +40,19 @@ export class InventoryController {
   @Get("warehouses")
   listWarehouses(@Req() request: AuthenticatedRequest): Promise<WarehouseListResult> {
     return this.inventory.listWarehouses(scopeFrom(request));
+  }
+
+  @Get("reports/tenant-stock")
+  @RequirePermissions("inventory.report.global")
+  tenantStockReport(
+    @Req() request: AuthenticatedRequest,
+    @Query() input: TenantStockReportInput
+  ): Promise<TenantStockReportResult> {
+    return this.inventory.listTenantStockReport(scopeFrom(request), {
+      search: input.search,
+      limit: input.limit === undefined ? undefined : Number(input.limit),
+      offset: input.offset === undefined ? undefined : Number(input.offset)
+    });
   }
 
   @Get("expiry-alerts")

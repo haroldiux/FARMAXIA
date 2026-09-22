@@ -175,3 +175,14 @@ B02 empieza únicamente después de verificar B01. Creará tenant, sucursales, a
   abrir, contar, mostrar pendientes y aprobar cierres.
 - [x] F7-WEB.4 Completar suite 47/47, builds, Docker/smoke, actualizar estado y
     publicar `origin/codex/f7-cash-controls` tras autorización de entrega.
+
+## Lote F9-WEB
+
+- [x] F9-WEB.1 Escribir pruebas rojas para permiso global, agregación cross-branch,
+  RLS, reserva, aislamiento tenant, búsqueda, paginación y cadenas exactas.
+- [x] F9-WEB.2 Añadir `inventory.report.global`, políticas RLS SELECT-only y ruta
+  `GET /api/v1/inventory/reports/tenant-stock` sin tocar mutaciones existentes.
+- [x] F9-WEB.3 Implementar cliente tipado, `/inventory/report`, jerarquía,
+  subtotales, total, estados vacío/error y navegación condicionada.
+- [ ] F9-WEB.4 Completar suite PostgreSQL, builds, smoke Docker y registrar la
+  publicación de `codex/f9-global-inventory-report` cuando el entorno esté disponible.

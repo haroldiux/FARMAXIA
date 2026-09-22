@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import {
@@ -49,6 +49,45 @@ export interface WarehouseSummary {
 
 export interface WarehouseListResult {
   items: WarehouseSummary[];
+}
+
+export interface TenantStockReportInput {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface TenantStockReportItem {
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  warehouseId: string;
+  warehouseName: string;
+  productId: string;
+  productName: string;
+  presentationId: string;
+  presentationName: string;
+  physical: string;
+  reserved: string;
+  available: string;
+}
+
+export interface TenantStockReportSubtotal {
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  physical: string;
+  reserved: string;
+  available: string;
+}
+
+export interface TenantStockReportResult {
+  items: TenantStockReportItem[];
+  branchSubtotals: TenantStockReportSubtotal[];
+  tenantTotal: { physical: string; reserved: string; available: string };
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export type QuarantineReasonCode = "QUALITY" | "COLD_CHAIN" | "DAMAGE" | "OTHER";
@@ -218,6 +257,14 @@ interface ReservationBalanceRow {
   reservedBase: string;
 }
 
+interface TenantStockReportRow extends TenantStockReportItem {}
+interface TenantStockReportTotalRow {
+  physical: string | null;
+  reserved: string | null;
+  available: string | null;
+}
+interface TenantStockReportCountRow { total: string }
+
 function text(value: string, field: string, maxLength: number): string {
   const normalized = value.trim();
   if (!normalized || normalized.length > maxLength) {
@@ -299,6 +346,16 @@ function requireRow<T>(row: T | undefined, message: string): T {
   return row;
 }
 
+function reportPage(value: number | undefined, field: string, fallback: number, max: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (!Number.isSafeInteger(value) || value < 0 || value > max) {
+    throw new Error(`${field} must be an integer between 0 and ${max}.`);
+  }
+  return value;
+}
+
 @Injectable()
 export class InventoryService {
   private readonly idempotency = new IdempotencyService();
@@ -370,6 +427,84 @@ export class InventoryService {
         [scope.tenantId, scope.branchId]
       );
       return { items: result.rows };
+    });
+  }
+
+  async listTenantStockReport(
+    scope: TenantScope,
+    input: TenantStockReportInput = {}
+  ): Promise<TenantStockReportResult> {
+    const search = input.search?.trim() ?? "";
+    if (search.length > 120) {
+      throw new Error("Search must be at most 120 characters.");
+    }
+    const limit = reportPage(input.limit, "Limit", 50, 100);
+    const offset = reportPage(input.offset, "Offset", 0, 100_000_000);
+
+    return this.database.withScope(scope, async (client) => {
+      const permission = await client.query(
+        `select 1
+         from user_roles ur
+         join role_permissions rp on rp.role_id = ur.role_id
+         where ur.user_id = $1 and ur.tenant_id = $2
+           and rp.permission_code = 'inventory.report.global'
+         limit 1`,
+        [scope.userId, scope.tenantId]
+      );
+      if (permission.rowCount !== 1) {
+        throw new ForbiddenException("The user is not authorized to read global inventory reports.");
+      }
+
+      const detailCte = `
+        with detail as (
+          select br.id as "branchId", br.code as "branchCode", br.name as "branchName",
+                 w.id as "warehouseId", w.name as "warehouseName",
+                 p.id as "productId", p.name as "productName",
+                 pp.id as "presentationId", pp.name as "presentationName",
+                 sum(ib.quantity_base)::text as physical,
+                 sum(ib.reserved_base)::text as reserved,
+                 (sum(ib.quantity_base) - sum(ib.reserved_base))::text as available
+          from inventory_balances ib
+          join warehouses w on w.tenant_id = ib.tenant_id and w.id = ib.warehouse_id
+          join branches br on br.tenant_id = w.tenant_id and br.id = w.branch_id
+          join inventory_batches b on b.tenant_id = ib.tenant_id and b.id = ib.batch_id
+          join product_presentations pp on pp.tenant_id = b.tenant_id and pp.id = b.presentation_id
+          join products p on p.tenant_id = pp.tenant_id and p.id = pp.product_id
+          where ib.tenant_id = $1
+            and ib.quantity_base > 0
+            and ($2 = '' or concat_ws(' ', br.code, br.name, w.name, p.name, pp.name) ilike '%' || $2 || '%')
+          group by br.id, br.code, br.name, w.id, w.name, p.id, p.name, pp.id, pp.name
+        )`;
+      const order = ` order by "branchName", "branchId", "warehouseName", "warehouseId",
+                              "productName", "productId", "presentationName", "presentationId"`;
+      const values = [scope.tenantId, search];
+      const [details, count, subtotals, total] = await Promise.all([
+        client.query<TenantStockReportRow>(`${detailCte} select * from detail${order} limit $3 offset $4`, [...values, limit, offset]),
+        client.query<TenantStockReportCountRow>(`${detailCte} select count(*)::text as total from detail`, values),
+        client.query<TenantStockReportSubtotal>(`${detailCte}
+          select "branchId", "branchCode", "branchName", sum(physical::numeric)::text as physical,
+                 sum(reserved::numeric)::text as reserved, sum(available::numeric)::text as available
+          from detail group by "branchId", "branchCode", "branchName"
+          order by "branchName", "branchId"`, values),
+        client.query<TenantStockReportTotalRow>(`${detailCte}
+          select coalesce(sum(physical::numeric), 0)::text as physical,
+                 coalesce(sum(reserved::numeric), 0)::text as reserved,
+                 coalesce(sum(available::numeric), 0)::text as available
+          from detail`, values)
+      ]);
+      const summary = total.rows[0] ?? { physical: "0", reserved: "0", available: "0" };
+      return {
+        items: details.rows,
+        branchSubtotals: subtotals.rows,
+        tenantTotal: {
+          physical: summary.physical ?? "0",
+          reserved: summary.reserved ?? "0",
+          available: summary.available ?? "0"
+        },
+        total: Number(count.rows[0]?.total ?? "0"),
+        limit,
+        offset
+      };
     });
   }
 

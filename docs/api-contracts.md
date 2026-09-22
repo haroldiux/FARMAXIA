@@ -53,7 +53,7 @@ Errores previstos: `400 VALIDATION_FAILED`, `403 FORBIDDEN`, `409 INSUFFICIENT_S
 - `POST /api/v1/commercial-documents/{id}/reprint`: `documents.reprint`; no muta venta, pago o stock.
 - `GET /api/v1/fiscal-documents/{id}/status`: `fiscal.read`; muestra estado real sin inventar aceptación.
 
-Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `sales.read`, `sales.confirm`, `cash.manage`, `cash.shift.approve`, `quotes.manage`, `documents.reprint`, `audit.read`.
+Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `inventory.report.global`, `sales.read`, `sales.confirm`, `cash.manage`, `cash.shift.approve`, `quotes.manage`, `documents.reprint`, `audit.read`.
 
 ## Turnos de caja F6-WEB
 
@@ -133,6 +133,17 @@ este flujo Web.
 | `POST /api/v1/inventory/batches/{batchId}/release-quarantine` | Requiere `inventory.manage`. Recibe `warehouseId`, `idempotencyKey` y `reason`; solo libera lotes no vencidos. |
 | `POST /api/v1/inventory/waste` | Requiere `inventory.manage`. Recibe almacén, lote, `quantityBase`, motivo y clave; registra `WASTE`/`OUT` sobre stock libre. |
 | `POST /api/v1/inventory/reconciliations` | Requiere `inventory.manage`. Expone el conteo físico idempotente de C03 con motivo y límite de reservas. |
+
+### Reporte global F9-WEB
+
+`GET /api/v1/inventory/reports/tenant-stock` requiere `inventory.report.global`
+y es estrictamente de lectura. Acepta `search`, `limit` (1–100, por defecto 50) y
+`offset`; ordena de forma estable por sucursal, almacén, producto y presentación.
+Devuelve `{ items, branchSubtotals, tenantTotal, total, limit, offset }`. Cada fila
+incluye esa jerarquía y `physical`, `reserved` y `available` como cadenas exactas
+de unidades base; `available = physical - reserved`. Los totales se calculan sobre
+el conjunto filtrado completo, aunque `items` esté paginado. Solo se incluyen filas
+con existencia física positiva y nunca se concede acceso de escritura.
 
 FEFO ignora lotes vencidos, en cuarentena o no disponibles y ordena por
 `expires_on ASC, batch_id ASC`. La asignación no devuelve costos y no decide la

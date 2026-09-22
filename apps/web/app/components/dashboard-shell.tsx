@@ -9,6 +9,7 @@ const navigation = [
   { label: "Resumen", icon: "01", active: true },
   { label: "Catálogo", icon: "02", active: false },
   { label: "Inventario", icon: "03", active: false },
+  { label: "Reporte global", icon: "07", active: false },
   { label: "Compras", icon: "04", active: false },
   { label: "Ventas y caja", icon: "05", active: false },
   { label: "Auditoría", icon: "06", active: false }
@@ -85,6 +86,9 @@ export function DashboardShell() {
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
             </Link> : item.label === "Inventario" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/inventory" key={item.label}>
+              <span className="nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link> : item.label === "Reporte global" && session.permissions.includes("inventory.report.global") ? <Link className="nav-item" href="/inventory/report" key={item.label}>
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
             </Link> : item.label === "Compras" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/procurement" key={item.label}>

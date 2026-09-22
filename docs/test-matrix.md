@@ -11,6 +11,7 @@
 | Regencia/traspasos | T20, T21 | Se habilitan tras D13/D15. |
 | Resiliencia | T16, T24, T26 | Fallos tras commit, restauración aislada y offline solo si se aprueba. |
 | Evolución | T27 | Devoluciones ajustan beneficios una vez. |
+| Reporte global de inventario | F9 | Permiso dedicado, agregación cross-branch, RLS cross-tenant, reservas, paginación y cadenas exactas. |
 
 ## Criterios C05
 
@@ -59,3 +60,12 @@ No se marca una prueba aprobada sin comando, salida y evidencia real.
   la Web no convierte importes a `number`.
 - La consulta por código devuelve solo productos/presentaciones activos y el
   precio vigente del alcance de la sesión.
+
+## Criterios F9
+
+- El permiso `inventory.report.global` permite leer todas las sucursales del
+  tenant sin ampliar `inventory.manage` ni modificar inventario.
+- Las filas, subtotales y total reconcilian físico, reservado y disponible como
+  cadenas exactas; búsqueda y paginación conservan orden determinista.
+- RLS oculta saldos, lotes, productos, presentaciones, almacenes y sucursales de
+  otros tenants, incluso ante SQL directo con el rol de aplicación.
