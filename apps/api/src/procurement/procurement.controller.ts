@@ -3,6 +3,10 @@ import { RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import {
   ProcurementService,
+  type SupplierInvoiceInput,
+  type SupplierInvoiceListResult,
+  type InvoiceResult,
+  type GoodsReceiptListResult,
   type PresentationListResult,
   type PurchaseOrderInput,
   type PurchaseOrderListResult,
@@ -61,5 +65,23 @@ export class ProcurementController {
     @Body() input: ReceiveInput
   ): Promise<ReceiveResult> {
     return this.procurement.receive(scopeFrom(request), input);
+  }
+
+  @Get("invoices")
+  listSupplierInvoices(@Req() request: AuthenticatedRequest): Promise<SupplierInvoiceListResult> {
+    return this.procurement.listSupplierInvoices(scopeFrom(request));
+  }
+
+  @Get("receipts")
+  listGoodsReceipts(@Req() request: AuthenticatedRequest): Promise<GoodsReceiptListResult> {
+    return this.procurement.listGoodsReceipts(scopeFrom(request));
+  }
+
+  @Post("invoices")
+  createSupplierInvoice(
+    @Req() request: AuthenticatedRequest,
+    @Body() input: SupplierInvoiceInput
+  ): Promise<InvoiceResult> {
+    return this.procurement.createSupplierInvoice(scopeFrom(request), input);
   }
 }

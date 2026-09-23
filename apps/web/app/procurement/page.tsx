@@ -183,7 +183,7 @@ export default function ProcurementPage() {
 
       <section className="procurement-layout">
         <article className="procurement-orders panel">
-          <div className="panel-heading"><div><p className="section-kicker">Ordenes de compra</p><h2>Abastecimiento en curso</h2></div><span className="panel-count">{orders.length.toString().padStart(2, "0")}</span></div>
+          <div className="panel-heading"><div><p className="section-kicker">Ordenes de compra</p><h2>Abastecimiento en curso</h2></div><div><Link className="row-action" href="/procurement/invoices">Ver facturas</Link><span className="panel-count">{orders.length.toString().padStart(2, "0")}</span></div></div>
           {orders.length ? <div className="order-list">{orders.map((order) => <article className="order-card" key={order.id}>
             <div className="order-card-head"><div><strong>{order.supplierName}</strong><small>{order.warehouseName} · {formatDate(order.orderedAt)}</small></div><span className={`order-status order-${order.status.toLowerCase()}`}>{statusLabel(order.status)}</span></div>
             <div className="order-lines">{order.lines.map((line) => <div className="order-line" key={`${order.id}-${line.presentationId}`}><span>{line.productName} · {line.presentationName}</span><strong>{line.quantityBase} u.</strong><small>BOB {line.unitCost}</small></div>)}</div>

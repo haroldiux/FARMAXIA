@@ -91,6 +91,7 @@ export interface PurchaseOrderListResult {
 }
 
 export interface SupplierInvoiceInput {
+  idempotencyKey: string;
   supplierId: string;
   goodsReceiptId: string;
   invoiceNumber: string;
@@ -103,6 +104,38 @@ export interface SupplierInvoiceInput {
 export interface InvoiceResult {
   invoiceId: string;
   payableId: string;
+}
+
+export interface SupplierInvoiceSummary {
+  invoiceId: string;
+  supplierId: string;
+  supplierName: string;
+  goodsReceiptId: string | null;
+  invoiceNumber: string;
+  issuedOn: string;
+  currency: string;
+  totalAmount: string;
+  dueOn: string;
+  originalAmount: string;
+  outstandingAmount: string;
+  status: "OPEN" | "PAID" | "OVERDUE";
+}
+
+export interface SupplierInvoiceListResult {
+  items: SupplierInvoiceSummary[];
+}
+
+export interface GoodsReceiptSummary {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  purchaseOrderId: string;
+  receivedAt: string;
+  lineCount: number;
+}
+
+export interface GoodsReceiptListResult {
+  items: GoodsReceiptSummary[];
 }
 
 interface CreatedRow {
@@ -139,6 +172,30 @@ interface BatchRow {
   id: string;
   expiresOn: string;
   unitCost: string;
+}
+
+interface SupplierInvoiceRow {
+  invoiceId: string;
+  supplierId: string;
+  supplierName: string;
+  goodsReceiptId: string | null;
+  invoiceNumber: string;
+  issuedOn: string;
+  currency: string;
+  totalAmount: string;
+  dueOn: string;
+  originalAmount: string;
+  outstandingAmount: string;
+  status: "OPEN" | "PAID" | "OVERDUE";
+}
+
+interface GoodsReceiptRow {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  purchaseOrderId: string;
+  receivedAt: string | Date;
+  lineCount: number;
 }
 
 function text(value: string, field: string, maxLength: number): string {
@@ -353,38 +410,127 @@ export class ProcurementService {
     scope: TenantScope,
     input: SupplierInvoiceInput
   ): Promise<InvoiceResult> {
+    const idempotencyKey = text(input.idempotencyKey, "Idempotency key", 255);
     const invoiceNumber = text(input.invoiceNumber, "Invoice number", 80);
     const issuedOn = dateOnly(input.issuedOn, "Issued date");
     const dueOn = dateOnly(input.dueOn, "Due date");
     const totalAmount = cost(input.totalAmount, "Invoice total");
     const currencyCode = currency(input.currency);
+    const normalized = {
+      supplierId: input.supplierId,
+      goodsReceiptId: input.goodsReceiptId,
+      invoiceNumber,
+      issuedOn,
+      currency: currencyCode,
+      totalAmount,
+      dueOn
+    };
+    const result = await this.idempotency.execute(
+      this.database,
+      scope,
+      "procurement.supplier-invoice",
+      idempotencyKey,
+      normalized,
+      async (client) => {
+        const receipt = await client.query<{ supplierId: string }>(
+          `select supplier_id as "supplierId"
+           from goods_receipts
+           where tenant_id = $1 and id = $2`,
+          [scope.tenantId, input.goodsReceiptId]
+        );
+        const receiptRow = requireRow(receipt.rows[0], "Goods receipt is not available in this scope.");
+        if (receiptRow.supplierId !== input.supplierId) {
+          throw new Error("Supplier invoice supplier must match the goods receipt.");
+        }
+        const invoice = await client.query<CreatedRow>(
+          `insert into supplier_invoices
+             (tenant_id, supplier_id, goods_receipt_id, invoice_number, issued_on,
+              currency, total_amount)
+           values ($1, $2, $3, $4, $5, $6, $7)
+           returning id`,
+          [
+            scope.tenantId,
+            input.supplierId,
+            input.goodsReceiptId,
+            invoiceNumber,
+            issuedOn,
+            currencyCode,
+            totalAmount
+          ]
+        );
+        const createdInvoice = requireRow(invoice.rows[0], "Supplier invoice was not created.");
+        const payable = await client.query<CreatedRow>(
+          `insert into payables
+             (tenant_id, supplier_invoice_id, due_on, original_amount, outstanding_amount)
+           values ($1, $2, $3, $4, $4)
+           returning id`,
+          [scope.tenantId, createdInvoice.id, dueOn, totalAmount]
+        );
+        const createdPayable = requireRow(payable.rows[0], "Payable was not created.");
+        return { statusCode: 201, body: { invoiceId: createdInvoice.id, payableId: createdPayable.id } };
+      }
+    );
+    return (result.body ?? result.data) as InvoiceResult;
+  }
+
+  async listSupplierInvoices(scope: TenantScope): Promise<SupplierInvoiceListResult> {
     return this.database.withScope(scope, async (client) => {
-      const invoice = await client.query<CreatedRow>(
-        `insert into supplier_invoices
-           (tenant_id, supplier_id, goods_receipt_id, invoice_number, issued_on,
-            currency, total_amount)
-         values ($1, $2, $3, $4, $5, $6, $7)
-         returning id`,
-        [
-          scope.tenantId,
-          input.supplierId,
-          input.goodsReceiptId,
-          invoiceNumber,
-          issuedOn,
-          currencyCode,
-          totalAmount
-        ]
+      const result = await client.query<SupplierInvoiceRow>(
+        `select invoice.id as "invoiceId",
+                invoice.supplier_id as "supplierId",
+                supplier.name as "supplierName",
+                invoice.goods_receipt_id as "goodsReceiptId",
+                invoice.invoice_number as "invoiceNumber",
+                invoice.issued_on as "issuedOn",
+                invoice.currency,
+                invoice.total_amount::text as "totalAmount",
+                payable.due_on as "dueOn",
+                payable.original_amount::text as "originalAmount",
+                payable.outstanding_amount::text as "outstandingAmount",
+                case
+                  when payable.outstanding_amount = 0 then 'PAID'
+                  when payable.due_on < current_date then 'OVERDUE'
+                  else 'OPEN'
+                end as status
+         from supplier_invoices invoice
+         join suppliers supplier
+           on supplier.tenant_id = invoice.tenant_id and supplier.id = invoice.supplier_id
+         join payables payable
+           on payable.tenant_id = invoice.tenant_id and payable.supplier_invoice_id = invoice.id
+         where invoice.tenant_id = $1
+         order by payable.due_on asc, invoice.issued_on asc, invoice.id asc`,
+        [scope.tenantId]
       );
-      const createdInvoice = requireRow(invoice.rows[0], "Supplier invoice was not created.");
-      const payable = await client.query<CreatedRow>(
-        `insert into payables
-           (tenant_id, supplier_invoice_id, due_on, original_amount, outstanding_amount)
-         values ($1, $2, $3, $4, $4)
-         returning id`,
-        [scope.tenantId, createdInvoice.id, dueOn, totalAmount]
+      return { items: result.rows };
+    });
+  }
+
+  async listGoodsReceipts(scope: TenantScope): Promise<GoodsReceiptListResult> {
+    return this.database.withScope(scope, async (client) => {
+      const result = await client.query<GoodsReceiptRow>(
+        `select receipt.id,
+                receipt.supplier_id as "supplierId",
+                supplier.name as "supplierName",
+                receipt.purchase_order_id as "purchaseOrderId",
+                receipt.received_at as "receivedAt",
+                count(item.id)::int as "lineCount"
+         from goods_receipts receipt
+         join suppliers supplier
+           on supplier.tenant_id = receipt.tenant_id and supplier.id = receipt.supplier_id
+         left join goods_receipt_items item
+           on item.tenant_id = receipt.tenant_id and item.goods_receipt_id = receipt.id
+         where receipt.tenant_id = $1
+         group by receipt.id, receipt.supplier_id, supplier.name,
+                  receipt.purchase_order_id, receipt.received_at
+         order by receipt.received_at desc, receipt.id desc`,
+        [scope.tenantId]
       );
-      const createdPayable = requireRow(payable.rows[0], "Payable was not created.");
-      return { invoiceId: createdInvoice.id, payableId: createdPayable.id };
+      return {
+        items: result.rows.map((row) => ({
+          ...row,
+          receivedAt: new Date(row.receivedAt).toISOString()
+        }))
+      };
     });
   }
 

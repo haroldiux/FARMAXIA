@@ -74,6 +74,49 @@ export interface ReceiveResult {
   lineCount: number;
 }
 
+export interface GoodsReceipt {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  purchaseOrderId: string;
+  receivedAt: string;
+  lineCount: number;
+}
+
+export interface GoodsReceiptList {
+  items: GoodsReceipt[];
+}
+
+export interface SupplierInvoice {
+  invoiceId: string;
+  supplierId: string;
+  supplierName: string;
+  goodsReceiptId: string | null;
+  invoiceNumber: string;
+  issuedOn: string;
+  currency: string;
+  totalAmount: string;
+  dueOn: string;
+  originalAmount: string;
+  outstandingAmount: string;
+  status: "OPEN" | "PAID" | "OVERDUE";
+}
+
+export interface SupplierInvoiceList {
+  items: SupplierInvoice[];
+}
+
+export interface SupplierInvoiceInput {
+  idempotencyKey: string;
+  supplierId: string;
+  goodsReceiptId: string;
+  invoiceNumber: string;
+  issuedOn: string;
+  currency: string;
+  totalAmount: string;
+  dueOn: string;
+}
+
 export function procurementIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -116,6 +159,22 @@ export function listPresentations(): Promise<PresentationList> {
 
 export function listPurchaseOrders(): Promise<PurchaseOrderList> {
   return request<PurchaseOrderList>("/api/v1/procurement/purchase-orders");
+}
+
+export function listGoodsReceipts(): Promise<GoodsReceiptList> {
+  return request<GoodsReceiptList>("/api/v1/procurement/receipts");
+}
+
+export function listSupplierInvoices(): Promise<SupplierInvoiceList> {
+  return request<SupplierInvoiceList>("/api/v1/procurement/invoices");
+}
+
+export function createSupplierInvoice(input: SupplierInvoiceInput): Promise<{ invoiceId: string; payableId: string }> {
+  return request<{ invoiceId: string; payableId: string }>("/api/v1/procurement/invoices", {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": input.idempotencyKey },
+    body: JSON.stringify(input)
+  });
 }
 
 export function createSupplier(input: { name: string; taxId?: string }): Promise<{ id: string }> {

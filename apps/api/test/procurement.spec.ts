@@ -201,6 +201,7 @@ describe("procurement and receiving service (C02)", () => {
     ).rejects.toBeInstanceOf(IdempotencyKeyReusedError);
 
     const payable = await procurement.createSupplierInvoice(scope, {
+      idempotencyKey: "invoice-001",
       supplierId: supplier.id,
       goodsReceiptId: first.receiptId,
       invoiceNumber: "INV-001",
@@ -214,6 +215,37 @@ describe("procurement and receiving service (C02)", () => {
       [payable.payableId]
     );
     expect(payableRows.rows).toEqual([{ outstanding_amount: "25.0000" }]);
+
+    const invoices = await procurement.listSupplierInvoices(scope);
+    expect(invoices.items).toMatchObject([{
+      invoiceId: payable.invoiceId,
+      supplierId: supplier.id,
+      goodsReceiptId: first.receiptId,
+      invoiceNumber: "INV-001",
+      totalAmount: "25.0000",
+      originalAmount: "25.0000",
+      outstandingAmount: "25.0000",
+      status: "OPEN"
+    }]);
+
+    await expect(procurement.createSupplierInvoice(scope, {
+      idempotencyKey: "invoice-001",
+      supplierId: supplier.id,
+      goodsReceiptId: first.receiptId,
+      invoiceNumber: "INV-001",
+      issuedOn: "2026-09-16",
+      currency: "BOB",
+      totalAmount: "26.0000",
+      dueOn: "2026-10-16"
+    })).rejects.toBeInstanceOf(IdempotencyKeyReusedError);
+
+    await ownerPool.query("update payables set outstanding_amount = 0 where id = $1", [payable.payableId]);
+    expect((await procurement.listSupplierInvoices(scope)).items[0]?.status).toBe("PAID");
+    await ownerPool.query(
+      "update payables set outstanding_amount = original_amount, due_on = current_date - 1 where id = $1",
+      [payable.payableId]
+    );
+    expect((await procurement.listSupplierInvoices(scope)).items[0]?.status).toBe("OVERDUE");
   });
 
   it("receives partial orders through the protected boundary and serializes cumulative totals", async () => {
