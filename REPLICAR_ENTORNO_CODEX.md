@@ -238,6 +238,31 @@ En la aplicación Desktop se puede seleccionar visualmente **Acceso completo**;
 esa selección pertenece a la sesión y no debe confundirse con copiar tokens o
 credenciales.
 
+### Requisito adicional para Windows nativo
+
+Si el perfil `gentle-dev` conserva las reglas `deny` para secretos mostradas
+arriba, el sandbox nativo de Windows debe poder ejecutarse con elevación:
+
+~~~toml
+[windows]
+sandbox = "elevated"
+~~~
+
+`unelevated` es un fallback para equipos donde la elevación no está disponible,
+pero puede fallar al iniciar una sesión cuando Codex debe aplicar restricciones
+de lectura divididas para `.env`, `.pem`, `.key`, `.ssh` o credenciales. Después
+de cambiar este valor, abrir Codex una vez desde PowerShell como administrador y
+validar:
+
+~~~powershell
+codex doctor --summary --no-color
+~~~
+
+No copiar el `config.toml` global completo: contiene rutas específicas de la
+computadora, runtimes versionados y configuración de plugins. La referencia
+oficial explica la precedencia y la opción `windows.sandbox` en [Config
+basics](https://learn.chatgpt.com/docs/config-file/config-basic?translationFallback=en).
+
 ## 7. MCP activos de la PC actual
 
 La salida real de "codex mcp list" muestra cuatro servidores stdio y uno HTTP:
