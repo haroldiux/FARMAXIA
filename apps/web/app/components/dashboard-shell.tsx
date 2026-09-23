@@ -12,6 +12,7 @@ const navigation = [
   { label: "Reporte global", icon: "07", active: false },
   { label: "Compras", icon: "04", active: false },
   { label: "Ventas y caja", icon: "05", active: false },
+  { label: "Ventas POS", icon: "08", active: false },
   { label: "Auditoría", icon: "06", active: false }
 ];
 
@@ -95,6 +96,9 @@ export function DashboardShell() {
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
             </Link> : item.label === "Ventas y caja" && session.permissions.includes("cash.manage") ? <Link className="nav-item" href="/cash" key={item.label}>
+              <span className="nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link> : item.label === "Ventas POS" && session.permissions.includes("sales.confirm") ? <Link className="nav-item" href="/sales" key={item.label}>
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
             </Link> : <button className={`nav-item ${item.active ? "is-active" : ""}`} disabled={!item.active} key={item.label} type="button">

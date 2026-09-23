@@ -16,7 +16,8 @@ export default defineConfig({
       "test/procurement.spec.ts",
       "test/inventory.spec.ts",
       "test/inventory-report.spec.ts",
-      "test/cash.spec.ts"
+      "test/cash.spec.ts",
+      "test/sales.spec.ts"
     ],
     fileParallelism: false
   }

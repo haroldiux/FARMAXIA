@@ -1380,3 +1380,129 @@ export const payables = pgTable(
     check("payables_outstanding_amount_non_negative_check", sql`${table.outstandingAmount} >= 0`)
   ]
 );
+
+export const sales = pgTable(
+  "sales",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    cashShiftId: uuid("cash_shift_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    status: varchar("status", { length: 24 }).default("CONFIRMED").notNull(),
+    totalAmountBob: numeric("total_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    paidAmountBob: numeric("paid_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sales_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "sales_tenant_branch_shift_fk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId],
+      foreignColumns: [cashShifts.tenantId, cashShifts.branchId, cashShifts.id]
+    }),
+    foreignKey({
+      name: "sales_tenant_branch_warehouse_fk",
+      columns: [table.tenantId, table.branchId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.branchId, warehouses.id]
+    }),
+    foreignKey({
+      name: "sales_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    unique("sales_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("sales_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt),
+    check("sales_status_check", sql`${table.status} in ('CONFIRMED')`),
+    check("sales_total_nonnegative_check", sql`${table.totalAmountBob} >= 0`),
+    check("sales_paid_nonnegative_check", sql`${table.paidAmountBob} >= 0`)
+  ]
+);
+
+export const saleItems = pgTable(
+  "sale_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    quantity: bigint("quantity", { mode: "number" }).notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    unitPriceBob: numeric("unit_price_bob", { precision: 18, scale: 4 }).notNull(),
+    lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_items_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    foreignKey({
+      name: "sale_items_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    unique("sale_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("sale_items_sale_idx").on(table.tenantId, table.branchId, table.saleId),
+    check("sale_items_quantity_positive_check", sql`${table.quantity} > 0 and ${table.quantityBase} > 0`),
+    check("sale_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`)
+  ]
+);
+
+export const salePayments = pgTable(
+  "sale_payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    method: varchar("method", { length: 16 }).notNull(),
+    amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_payments_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    unique("sale_payments_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    check("sale_payments_method_check", sql`${table.method} = 'CASH'`),
+    check("sale_payments_amount_nonnegative_check", sql`${table.amountBob} >= 0`)
+  ]
+);
+
+export const saleAllocations = pgTable(
+  "sale_allocations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleItemId: uuid("sale_item_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_allocations_item_fk",
+      columns: [table.tenantId, table.branchId, table.saleItemId],
+      foreignColumns: [saleItems.tenantId, saleItems.branchId, saleItems.id]
+    }),
+    foreignKey({
+      name: "sale_allocations_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    unique("sale_allocations_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("sale_allocations_item_idx").on(table.tenantId, table.branchId, table.saleItemId),
+    check("sale_allocations_quantity_positive_check", sql`${table.quantityBase} > 0`)
+  ]
+);

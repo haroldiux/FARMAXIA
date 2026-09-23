@@ -99,6 +99,13 @@
       "when": 1790090000000,
       "tag": "0013_global_inventory_report",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0014_f11_cash_sales",
+      "breakpoints": true
     }
   ]
 }
