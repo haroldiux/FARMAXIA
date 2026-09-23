@@ -1,0 +1,71 @@
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 18280, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph MCP] Caught up 20 file(s) changed since last run
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 11556, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Another daemon (pid 19112) already holds the lock; exiting.
+[CodeGraph daemon] Another daemon (pid 19112) already holds the lock; exiting.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 19112, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph MCP] Caught up 6 file(s) changed since last run
+[CodeGraph daemon] socket error: write EPIPE
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 24600, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph daemon] socket error: write EPIPE
+[CodeGraph MCP] Caught up 10 file(s) changed since last run
+[CodeGraph daemon] Another daemon (pid 14556) already holds the lock; exiting.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 14556, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph MCP] Caught up 14 file(s) changed since last run
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 2252, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 23056, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 6368, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph MCP] Caught up 7 file(s) changed since last run
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 2404, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 18568, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph MCP] Caught up 6 file(s) changed since last run
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 2576, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 11260, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 10068, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph] v1.6.0 is available (this server is running v1.5.0). Update with `codegraph upgrade`.
+[CodeGraph daemon] Listening on \\.\pipe\codegraph-506bdb7227c5c74e (pid 15088, v1.5.0). Idle timeout 300000ms.
+[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
+[CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[CodeGraph daemon] Another daemon (pid 15088) already holds the lock; exiting.

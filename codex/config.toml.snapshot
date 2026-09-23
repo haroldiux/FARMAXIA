@@ -1,0 +1,199 @@
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
+service_tier = "priority"
+default_permissions = "gentle-dev"
+model_instructions_file = 'C:\Users\harol\OneDrive\CodexSync\.codex\engram-instructions.md'
+experimental_compact_prompt_file = 'C:\Users\harol\OneDrive\CodexSync\.codex\engram-compact-prompt.md'
+
+notify = [ "C:\\Users\\harol\\AppData\\Local\\OpenAI\\Codex\\runtimes\\cua_node\\6f12e0ef1c6e5061\\bin\\node_modules\\@oai\\sky\\bin\\windows\\codex-computer-use.exe", "turn-ended" ]
+[windows]
+sandbox = "unelevated"
+
+[projects."C:\\PROYECTOS\\SISTEMA ACADEMICO"]
+trust_level = "trusted"
+
+[projects."C:\\PROYECTOS\\SISTEMA UDEMYBOL"]
+trust_level = "trusted"
+
+[projects."c:\\proyectos\\proyecto aula virtual"]
+trust_level = "trusted"
+
+[projects."c:\\users\\harol\\onedrive\\documentos\\llevar contexto a otra pc"]
+trust_level = "trusted"
+
+[projects."c:\\proyectos\\sisa"]
+trust_level = "trusted"
+
+[projects.'c:\proyectos\farmaxia']
+trust_level = "trusted"
+
+[projects.'c:\users\harol\documents\codex\2026-09-18\hag']
+trust_level = "trusted"
+
+[projects.'c:\users\harol\documents\codex\2026-09-18\hagamos-una-actualizacion-al-harness-gentle']
+trust_level = "trusted"
+
+[projects.'c:\users\harol\documents\codex\2026-09-21\realtime-voice-chat']
+trust_level = "trusted"
+
+[marketplaces.openai-bundled]
+last_updated = "2026-06-11T15:50:42Z"
+source_type = "local"
+source = "\\\\?\\C:\\Users\\harol\\.codex\\.tmp\\bundled-marketplaces\\openai-bundled"
+
+[marketplaces.openai-primary-runtime]
+source_type = "local"
+source = '\\?\C:\Users\harol\.cache\codex-runtimes\codex-primary-runtime\plugins\openai-primary-runtime'
+
+[marketplaces.engram]
+source_type = "git"
+source = "https://github.com/Gentleman-Programming/engram.git"
+ref = "main"
+
+[marketplaces.claude-cowork]
+source_type = "local"
+source = "\\\\?\\C:\\Users\\harol\\OneDrive\\CodexSync\\.codex\\plugins\\cache\\claude-cowork"
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."google-drive@openai-curated"]
+enabled = true
+
+[plugins."computer-use@openai-bundled"]
+enabled = true
+
+[plugins."chrome@openai-bundled"]
+enabled = true
+
+[plugins."github@openai-curated"]
+enabled = true
+
+[plugins."openai-developers@openai-curated"]
+enabled = true
+
+[plugins."figma@openai-curated"]
+enabled = true
+
+[plugins."supabase@openai-curated"]
+enabled = true
+
+[plugins."build-web-apps@openai-curated"]
+enabled = true
+
+[plugins."pdf@openai-primary-runtime"]
+enabled = true
+
+[plugins."engram@engram"]
+enabled = true
+
+[plugins."template-creator@openai-primary-runtime"]
+enabled = true
+
+[plugins."cowork-plugin-management@claude-cowork"]
+enabled = true
+
+[plugins."design@claude-cowork"]
+enabled = true
+
+[plugins."engineering@claude-cowork"]
+enabled = true
+
+[desktop]
+localeOverride = "es-419"
+integratedTerminalShell = "powershell"
+git-create-pull-request-as-draft = false
+git-show-sidebar-pr-icons = true
+default-service-tier = "priority"
+followUpQueueMode = "queue"
+selected-avatar-id = "fireball"
+external-agent-import-sync-item-types = "all"
+external-agent-import-sync-enabled = true
+
+[features]
+multi_agent = true
+js_repl = false
+
+[mcp_servers.codegraph]
+command = "codegraph"
+args = [ "serve", "--mcp", "--no-watch" ]
+
+[mcp_servers.node_repl]
+args = []
+command = 'C:\Users\harol\AppData\Local\OpenAI\Codex\runtimes\cua_node\6f12e0ef1c6e5061\bin\node_repl.exe'
+startup_timeout_sec = 120
+
+[mcp_servers.node_repl.env]
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = 'C:\Users\harol\AppData\Local\OpenAI\Codex\runtimes\cua_node\6f12e0ef1c6e5061\bin\node_modules'
+NODE_REPL_NODE_PATH = 'C:\Users\harol\AppData\Local\OpenAI\Codex\runtimes\cua_node\6f12e0ef1c6e5061\bin\node.exe'
+NODE_REPL_TRUSTED_CODE_PATHS = 'C:\Users\harol\OneDrive\CodexSync\.codex;C:\Users\harol\AppData\Local\OpenAI\Codex\runtimes\cua_node\6f12e0ef1c6e5061\bin\node_modules'
+CODEX_HOME = 'C:\Users\harol\OneDrive\CodexSync\.codex'
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+BROWSER_USE_TINYSKY_ENABLED = "1"
+NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
+NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
+BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
+BROWSER_USE_CODEX_APP_VERSION = "26.908.70816"
+NODE_REPL_TRUSTED_SERVICES = '{"browser":"C:/Users/harol/OneDrive/CodexSync/.codex/plugins/cache/openai-bundled/browser/26.908.70816/scripts/browser-service.mjs","sky":"@oai/sky/service"}'
+SKY_CUA_NATIVE_PIPE = "1"
+SKY_CUA_NATIVE_PIPE_DIRECTORY = '\\.\pipe\codex-computer-use-3892d9fc-e2a5-43a5-8010-6b7e3a0e8778'
+CODEX_CLI_PATH = 'C:\Users\harol\AppData\Local\OpenAI\Codex\bin\12219cbfbcbddde7\codex.exe'
+
+[mcp_servers.cua_repl]
+command = 'C:\Program Files\WindowsApps\OpenAI.Codex_26.908.9136.0_x64__2p2nqsd0c76g0\app\ChatGPT.exe'
+enabled = false
+
+[agents]
+max_depth = 2
+max_threads = 4
+
+[permissions.gentle-dev]
+description = "Comfortable local development profile with workspace writes, network access, Git metadata writes, Nix/Home Manager support, and secret-file protections."
+
+[permissions.gentle-dev.network]
+enabled = true
+
+[permissions.gentle-dev.network.domains]
+"*" = "allow"
+
+[permissions.gentle-dev.filesystem]
+":slash_tmp" = "write"
+":tmpdir" = "write"
+"~/.nix-profile" = "read"
+"~/.local/state/nix/profiles/home-manager/home-path" = "read"
+"~/.gitconfig" = "read"
+"~/.config/git" = "read"
+":minimal" = "read"
+
+[permissions.gentle-dev.workspace_roots]
+"~" = true
+
+[permissions.gentle-dev.filesystem.":workspace_roots"]
+"**/secrets/**" = "deny"
+"**/*.key" = "deny"
+"**/*.pem" = "deny"
+"**/credentials.json" = "deny"
+"**/Library/Keychains/**" = "deny"
+"**/.ssh/**" = "deny"
+"**/.credentials/**" = "deny"
+"**/.config/gh/hosts.yml" = "deny"
+"**/.aws/credentials" = "deny"
+"**/.env.*.local" = "deny"
+"**/.env.local" = "deny"
+"**/.env" = "deny"
+".git/**" = "write"
+"." = "write"
+
+[mcp_servers.engram]
+command = "engram"
+args = ["mcp", "--tools=agent"]
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
