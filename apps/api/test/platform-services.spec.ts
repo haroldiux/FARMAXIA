@@ -98,6 +98,7 @@ describe("platform transactional services", () => {
         legal_entities,
         users,
         tenants
+      cascade
     `);
     await ownerPool.query("insert into tenants (id, slug, name) values ($1, $2, $3)", [
       tenantId,

@@ -94,6 +94,7 @@ describe("inventory adjustments and reconciliation (C03)", () => {
         legal_entities,
         users,
         tenants
+      cascade
     `);
     await ownerPool.query("insert into tenants (id, slug, name) values ($1, $2, $3)", [
       tenantId,

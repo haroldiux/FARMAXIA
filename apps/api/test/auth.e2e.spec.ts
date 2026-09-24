@@ -119,6 +119,7 @@ describe("authentication API", () => {
         legal_entities,
         users,
         tenants
+      cascade
     `);
     const passwordHash = await argon2.hash("CorrectHorseBatteryStaple!", {
       type: argon2.argon2id,

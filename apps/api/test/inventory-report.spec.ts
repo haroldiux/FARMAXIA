@@ -63,6 +63,7 @@ describe("tenant-wide inventory report (F9)", () => {
         role_permissions, user_roles, permissions, roles,
         user_branch_memberships, cash_shift_controls, cash_shift_users, cash_shifts,
         cash_registers, warehouses, branches, legal_entities, users, tenants
+      cascade
     `);
     await ownerPool.query("insert into tenants (id, slug, name) values ($1, $2, $3), ($4, $5, $6)", [
       tenantId, "report-tenant", "Report tenant", otherTenantId, "other-tenant", "Other tenant"

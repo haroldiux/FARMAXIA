@@ -110,6 +110,7 @@ describe("tenancy schema", () => {
         legal_entities,
         users,
         tenants
+      cascade
     `);
 
     await ownerPool.query(

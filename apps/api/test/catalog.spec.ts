@@ -91,6 +91,7 @@ describe("catalog service (C01)", () => {
         legal_entities,
         users,
         tenants
+      cascade
     `);
     await ownerPool.query(
       "insert into tenants (id, slug, name) values ($1, $2, $3), ($4, $5, $6)",

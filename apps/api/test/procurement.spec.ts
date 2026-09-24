@@ -100,6 +100,7 @@ describe("procurement and receiving service (C02)", () => {
         legal_entities,
         users,
         tenants
+      cascade
     `);
     await ownerPool.query("insert into tenants (id, slug, name) values ($1, $2, $3)", [
       tenantId,
