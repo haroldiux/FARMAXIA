@@ -9,7 +9,8 @@
     "start": "node dist/src/main.js",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
