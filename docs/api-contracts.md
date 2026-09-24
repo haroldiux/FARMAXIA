@@ -57,7 +57,7 @@ El cliente Web envía el encabezado `Idempotency-Key` y repite ese valor en `ide
 | `paidAmountBob`, `unitPriceBob` | Son cadenas decimales no negativas, con hasta cuatro decimales. Se conservan como cadenas decimales exactas, sin conversión a punto flotante. |
 | `lines` | Debe contener entre 1 y 100 líneas; cada `presentationId` debe ser vendible y cada `quantity` un entero positivo seguro. |
 
-La confirmación reserva y consume stock disponible por FEFO (vencimiento ascendente y, ante empate, identificador de lote), sin usar lotes vencidos. El importe pagado debe coincidir exactamente con el total calculado. Venta, ítems, pago en efectivo, consumo/movimientos de inventario, actualización del control de caja, auditoría y evento outbox se ejecutan de forma transaccional.
+La confirmación asigna y consume stock disponible por FEFO (vencimiento ascendente y, ante empate, identificador de lote), sin usar lotes vencidos. El importe pagado debe coincidir exactamente con el total calculado. Venta, ítems, pago en efectivo, consumo/movimientos de inventario, actualización del control de caja, auditoría y evento outbox se ejecutan de forma transaccional.
 
 La respuesta es un `ConfirmedSale`:
 
