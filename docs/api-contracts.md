@@ -6,7 +6,7 @@ Las rutas de dominio se publicarán bajo `/api/v1`. UUID de tenant, sucursal y c
 | --- | --- |
 | Identidad | Sesión autenticada aporta `userId`; backend deriva tenants, roles y sucursales permitidas. |
 | Tenant | Una mutación trabaja en un único tenant y establece contexto RLS transaccional. |
-| Idempotencia | `Idempotency-Key` es obligatoria en confirmaciones. Misma clave y cuerpo igual devuelve resultado original; cuerpo distinto devuelve `409 IDEMPOTENCY_KEY_REUSED`. |
+| Idempotencia F11 | El cliente Web envía `Idempotency-Key` y el mismo valor en `idempotencyKey`; la confirmación de ventas usa la clave del cuerpo. Misma clave y cuerpo normalizado igual reproduce el resultado; un cuerpo distinto genera conflicto por reutilización de clave. |
 | Errores | `{ "error": { "code", "message", "requestId", "details?" } }`; los detalles no filtran otro tenant. |
 
 ## Autenticación y contexto
@@ -26,24 +26,80 @@ autorizan por sí mismos y deben coincidir con la membresía del usuario. Las ru
 son privadas por defecto; una ruta protegida por `@RequirePermissions(...)` exige
 todas las autorizaciones declaradas.
 
-## `POST /api/v1/sales/confirmations`
+## `POST /api/v1/sales/confirm` (F11)
 
-**Permiso:** `sales.confirm` en sucursal, almacén y caja, con turno abierto.
+F11 confirma una venta **no fiscal y solo en efectivo**. Requiere el permiso `sales.confirm`; el backend deriva `tenantId`, `branchId` y `userId` de la sesión autenticada. No acepta `branchId`, `cashRegisterId` ni otro dato del cliente como autorización.
+
+El cliente Web envía el encabezado `Idempotency-Key` y repite ese valor en `idempotencyKey` del cuerpo. La implementación del endpoint toma la clave del cuerpo; el encabezado por sí solo no sustituye `idempotencyKey`. Reutilizar la misma clave con el mismo cuerpo normalizado reproduce el resultado original; reutilizarla con un cuerpo distinto genera un conflicto de idempotencia.
 
 ```json
 {
-  "branchId": "uuid",
+  "idempotencyKey": "uuid",
+  "cashShiftId": "uuid",
   "warehouseId": "uuid",
-  "cashRegisterId": "uuid",
-  "documentMode": "FISCAL_INVOICE",
-  "lines": [{ "presentationId": "uuid", "quantity": 2 }],
-  "payments": [{ "method": "CASH", "amount": "25.00" }]
+  "paymentMethod": "CASH",
+  "paidAmountBob": "25.0000",
+  "lines": [
+    {
+      "presentationId": "uuid",
+      "quantity": 2,
+      "unitPriceBob": "12.5000"
+    }
+  ]
 }
 ```
 
-`documentMode` admite exclusivamente `FISCAL_INVOICE` y `NON_FISCAL_RECEIPT`. Ambas confirman una venta y movimiento físico una sola vez. Fiscal valida configuración y crea evento outbox; recibo solo crea documento comercial. La respuesta identifica venta, asignaciones por lote, pagos y documento; una venta fiscal nunca cambia automáticamente a recibo.
+| Campo | Regla implementada |
+| --- | --- |
+| `cashShiftId` | Debe corresponder a un control de caja `OPEN`, asignado al usuario autenticado, dentro del tenant y sucursal de la sesión. |
+| `warehouseId` | Debe existir en el tenant/sucursal de la sesión y tener despacho habilitado. |
+| `paymentMethod` | Solo admite `CASH`. |
+| `paidAmountBob`, `unitPriceBob` | Son cadenas decimales no negativas, con hasta cuatro decimales. Se conservan como cadenas decimales exactas, sin conversión a punto flotante. |
+| `lines` | Debe contener entre 1 y 100 líneas; cada `presentationId` debe ser vendible y cada `quantity` un entero positivo seguro. |
 
-Errores previstos: `400 VALIDATION_FAILED`, `403 FORBIDDEN`, `409 INSUFFICIENT_STOCK`, `409 CASH_SHIFT_REQUIRED`, `409 IDEMPOTENCY_KEY_REUSED`, `422 FISCAL_CONFIGURATION_REQUIRED`.
+La confirmación reserva y consume stock disponible por FEFO (vencimiento ascendente y, ante empate, identificador de lote), sin usar lotes vencidos. El importe pagado debe coincidir exactamente con el total calculado. Venta, ítems, pago en efectivo, consumo/movimientos de inventario, actualización del control de caja, auditoría y evento outbox se ejecutan de forma transaccional.
+
+La respuesta es un `ConfirmedSale`:
+
+```json
+{
+  "id": "uuid",
+  "cashShiftId": "uuid",
+  "warehouseId": "uuid",
+  "status": "CONFIRMED",
+  "paymentMethod": "CASH",
+  "totalBob": "25.0000",
+  "paidAmountBob": "25.0000",
+  "items": [
+    {
+      "presentationId": "uuid",
+      "quantity": 2,
+      "quantityBase": 2,
+      "unitPriceBob": "12.5000",
+      "lineTotalBob": "25.0000",
+      "allocations": [
+        {
+          "batchId": "uuid",
+          "lotCode": "LOTE-001",
+          "expiresOn": "2026-12-31",
+          "quantityBase": 2
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Situación | Comportamiento implementado |
+| --- | --- |
+| Datos inválidos | Error de validación para campos requeridos, decimales, cantidades, líneas o un método de pago distinto de `CASH`. |
+| Sin `sales.confirm` | Acceso prohibido. |
+| Turno ausente, no abierto o no asignado | Conflicto: se requiere un turno abierto asignado al usuario autenticado. |
+| Almacén o presentación no disponible | La operación se rechaza cuando el almacén no permite despacho o la presentación no es vendible en el tenant. |
+| Inventario insuficiente | Conflicto sin confirmar una venta parcial. |
+| Reutilización de `idempotencyKey` | El mismo cuerpo normalizado reproduce la venta; un cuerpo diferente provoca conflicto. |
+
+**Fuera del alcance de F11:** documentos fiscales, pagos con tarjeta o QR, devoluciones, cotizaciones, impuestos, promociones, conversiones de moneda, conciliación de pasarelas y liquidación contable.
 
 ## Proformas, devoluciones y documentos
 

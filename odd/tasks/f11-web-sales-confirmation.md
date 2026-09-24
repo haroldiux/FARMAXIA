@@ -40,6 +40,7 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - [x] T9 — Expand pure unit coverage for `normalizeSaleInput` with CASH normalization, trimmed identifiers, exact decimal-string preservation, invalid decimal rejection, invalid quantity rejection, and empty-line rejection; do not change production service behavior or add database integration.
 - [x] T10 — Correct the PostgreSQL 42830 migration blocker by adding `warehouses_tenant_branch_id_unique` before the sales warehouse three-column FK, mirror it in Drizzle, preserve the FK, and do not edit migration metadata or snapshots.
 - [x] T11 — Make PostgreSQL integration-fixture cleanup FK-safe by appending `CASCADE` to the nine affected `TRUNCATE` statements; preserve all table lists and production foreign keys.
+- [x] T12 — Align `docs/api-contracts.md` with the implemented F11 CASH-only, non-fiscal `POST /api/v1/sales/confirm` contract without changing application behavior.
 
 ## Route declaration
 - Route: delegated direct implementation.
@@ -77,6 +78,7 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - T11 focused database group 2: `DATABASE_URL=postgresql://farmaxia:local-development-only@localhost:5433/farmaxia_test pnpm --filter @farmaxia/api exec vitest run --config vitest.config.ts test/inventory-report.spec.ts test/tenancy.rls.spec.ts test/catalog.spec.ts`: PASS (exit code 0; 3 files, 11 tests). Vitest emitted a non-blocking `pg` deprecation warning for concurrent `client.query()` calls in tenancy RLS coverage.
 - T11 focused database group 3: `DATABASE_URL=postgresql://farmaxia:local-development-only@localhost:5433/farmaxia_test pnpm --filter @farmaxia/api exec vitest run --config vitest.config.ts test/auth.e2e.spec.ts test/subscription-quotas.spec.ts test/platform-services.spec.ts test/transversal-services.spec.ts`: PASS (exit code 0; 4 files, 13 tests).
 - T11 API TypeScript: `pnpm --filter @farmaxia/api exec tsc --noEmit --project tsconfig.json`: PASS (exit code 0).
+- T12 documentation diff check: `git diff --check origin/codex/f11-web-sales-confirmation..HEAD`: PASS (exit code 0); no application test is required for this documentation-only change.
 
 ## Progress
 - Status: T1-T9 implemented in scope; the Web sales workspace now blocks incomplete forms and explains each missing requirement with dashboard navigation, and `normalizeSaleInput` has focused pure-unit coverage for valid CASH normalization and invalid input boundaries. No production service behavior or database integration was changed.
@@ -89,4 +91,6 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - T9 commit: `b6e84d3` (`test(api): cover sales input normalization`).
 - T11 commit evidence: `fix(test): cascade PostgreSQL fixture cleanup` (owned test fixtures plus this F11 ledger update).
 - Risks: PostgreSQL/Docker unavailable locally; migration application and FEFO/RLS integration remain blocked and require database verification. T9 is intentionally pure unit coverage only and does not reduce the PostgreSQL/Docker integration block. T8 has no Web test script available, so confidence comes from TypeScript, production build, diff validation, and code inspection.
-- Next: later repeat integration tests with PostgreSQL.
+- T12 completion: replaced the stale plural/fiscal sales contract with the implemented singular CASH-only F11 endpoint, including session-derived scope, body-backed idempotency, request/response shapes, FEFO, transactional effects, implemented errors and explicit exclusions.
+- T12 commit evidence: `docs(api): align F11 sales confirmation contract` work-unit commit containing only this API contract documentation and the F11 ledger.
+- Next: later repeat integration tests with PostgreSQL; T12 documentation alignment is complete.
