@@ -8,7 +8,7 @@ import {
   Req,
   UnauthorizedException
 } from "@nestjs/common";
-import { RequirePermissions } from "../auth/auth.decorators.js";
+import { RequireAnyPermission, RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import {
   InventoryService,
@@ -38,6 +38,7 @@ export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
 
   @Get("warehouses")
+  @RequireAnyPermission("inventory.manage", "sales.confirm")
   listWarehouses(@Req() request: AuthenticatedRequest): Promise<WarehouseListResult> {
     return this.inventory.listWarehouses(scopeFrom(request));
   }

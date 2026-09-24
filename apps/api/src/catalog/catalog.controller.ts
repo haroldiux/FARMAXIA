@@ -20,7 +20,7 @@ import {
   type CatalogPriceInput,
   type CatalogProductInput
 } from "./catalog.service.js";
-import { RequirePermissions } from "../auth/auth.decorators.js";
+import { RequireAnyPermission, RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 
 interface PriceRequest extends Omit<CatalogPriceInput, "validFrom" | "validTo"> {
@@ -60,6 +60,7 @@ export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
 
   @Get("products")
+  @RequireAnyPermission("catalog.manage", "sales.confirm")
   async products(
     @Req() request: AuthenticatedRequest,
     @Query("search") search?: string,

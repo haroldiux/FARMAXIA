@@ -26,6 +26,7 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - Sale, items, payment, inventory consumption, audit and outbox effects are transactional.
 - Exact decimal values round-trip as strings without floating-point coercion.
 - Web flow exposes clear loading, empty, error and success states and does not invent financial totals.
+- The `/sales` read-only dependencies allow `sales.confirm` to read cash shifts, dispatch warehouses and sellable catalog data without granting management permissions; their mutating endpoints remain management-protected.
 
 ## Checklist
 - [x] T1 — RED API/database tests for payment validation and exact decimal normalization; integration cases remain DB-gated.
@@ -33,6 +34,7 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - [x] T3 — RED/GREEN Web client and sales confirmation workspace.
 - [x] T4 — Run focused API/Web verification and static checks.
 - [x] T5 — Commit one work unit on this feature branch.
+- [x] T6 — Add and verify the read-only permission contract: RED/GREEN/REFACTOR coverage for `RequirePermissions` all-of and `RequireAnyPermission` any-of, then apply the any-of metadata only to the cash shifts, inventory warehouses and catalog products GET routes. The focused assertions pass with an isolated include override; the exact repository command remains blocked by the pre-existing Vitest allowlist.
 
 ## Route declaration
 - Route: delegated direct implementation.
@@ -48,9 +50,13 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - `pnpm --filter @farmaxia/web build`: PASS (`/sales` generated).
 - `DATABASE_URL=postgresql://... pnpm --filter @farmaxia/api exec drizzle-kit check`: PASS (`Everything's fine`).
 - `git diff --check`: PASS.
+- `pnpm --filter @farmaxia/api exec vitest run --config vitest.config.ts test/permissions.guard.spec.ts`: BLOCKED — Vitest exits 1 with `No test files found` because `apps/api/vitest.config.ts` has an explicit include list that does not contain the new spec; config ownership was outside T6.
+- Focused Vitest run with an isolated temporary config including only `test/permissions.guard.spec.ts`: PASS (3/3).
+- `pnpm --filter @farmaxia/api exec tsc --noEmit --project tsconfig.json`: PASS.
+- `git diff --check`: PASS.
 
 ## Progress
-- Status: implemented and committed as a single work unit.
-- Commit: this work-unit commit (`feat(sales): add non-fiscal cash sale confirmation`).
-- Risks: PostgreSQL/Docker unavailable locally; migration application and FEFO/RLS integration require database verification.
-- Next: parent runs review/commit orchestration and later repeats integration tests with PostgreSQL.
+- Status: T1-T6 implemented; the exact focused Vitest invocation is blocked by the pre-existing test allowlist, while the isolated guard run and static checks pass.
+- Commit: prior work-unit commit `8179a29` (`feat(sales): add non-fiscal cash sale confirmation`); T6 work-unit commit `5811743` (`fix(auth): allow sales read access for confirmation workspace`).
+- Risks: PostgreSQL/Docker unavailable locally; migration application and FEFO/RLS integration require database verification. The repository Vitest allowlist still needs a separately authorized config update before the exact focused command can pass.
+- Next: later repeat integration tests with PostgreSQL and separately authorize adding the guard spec to `apps/api/vitest.config.ts` if the exact command must run unchanged.

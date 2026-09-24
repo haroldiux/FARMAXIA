@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Req, UnauthorizedException } from "@nestjs/common";
-import { RequirePermissions } from "../auth/auth.decorators.js";
+import { RequireAnyPermission, RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import {
   CashService,
@@ -39,6 +39,7 @@ export class CashController {
   }
 
   @Get("shifts")
+  @RequireAnyPermission("cash.manage", "sales.confirm")
   listShifts(@Req() request: AuthenticatedRequest): Promise<CashShiftListResult> {
     return this.cash.listShifts(scopeFrom(request));
   }
