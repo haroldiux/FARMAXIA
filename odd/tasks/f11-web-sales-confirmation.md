@@ -36,6 +36,7 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - [x] T5 — Commit one work unit on this feature branch.
 - [x] T6 — Add and verify the read-only permission contract: RED/GREEN/REFACTOR coverage for `RequirePermissions` all-of and `RequireAnyPermission` any-of, then apply the any-of metadata only to the cash shifts, inventory warehouses and catalog products GET routes. The focused assertions pass with an isolated include override; the exact repository command remains blocked by the pre-existing Vitest allowlist.
 - [x] T7 — Register exactly `test/permissions.guard.spec.ts` in the API Vitest include allowlist; verify with `pnpm --filter @farmaxia/api exec vitest run --config vitest.config.ts test/permissions.guard.spec.ts` (PASS: 1 file, 3 tests).
+- [ ] T8 — Complete the Web `/sales` loading/empty/error/success UX by deriving available cash shifts, dispatch warehouses and sellable presentations after loading; keep the form hidden when any required collection is empty, show actionable missing-requirement guidance, preserve the dashboard navigation, and run the requested Web checks.
 
 ## Route declaration
 - Route: delegated direct implementation.
@@ -58,10 +59,15 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - T7 focused check: `pnpm --filter @farmaxia/api exec vitest run --config vitest.config.ts test/permissions.guard.spec.ts`: PASS (exit code 0; 1 file, 3 tests).
 - T7 TypeScript check: `pnpm --filter @farmaxia/api exec tsc --noEmit --project tsconfig.json`: PASS (exit code 0).
 - T7 diff check: `git diff --check`: PASS (exit code 0; LF-to-CRLF warnings only).
+- T8 TypeScript check: `pnpm --filter @farmaxia/web exec tsc --noEmit --project tsconfig.json`: PASS (exit code 0).
+- T8 production build: `pnpm --filter @farmaxia/web build`: PASS (exit code 0; Next.js generated 12 static pages).
+- T8 diff check: `git diff --check`: PASS (exit code 0; CRLF warnings only, including pre-existing `.codegraph` runtime files).
+- T8 test gap: `apps/web/package.json` has no `test` script; no Web test command was available or invented.
 
 ## Progress
-- Status: T1-T7 implemented; the API Vitest allowlist now includes the permission guard suite and all requested T7 checks pass.
+- Status: T1-T8 implemented; the Web sales workspace now blocks incomplete forms and explains each missing requirement with dashboard navigation. The API Vitest allowlist now includes the permission guard suite and all requested T7 checks pass.
 - Commit: prior work-unit commit `8179a29` (`feat(sales): add non-fiscal cash sale confirmation`); T6 work-unit commit `4103d33` (`fix(auth): allow sales read access for confirmation workspace`); documentation commit `1b3c48a` (`docs(odd): record F11 permission work unit`).
 - T7 commit: `4c59991` (`test(api): register permission guard suite`).
-- Risks: PostgreSQL/Docker unavailable locally; migration application and FEFO/RLS integration require database verification.
-- Next: later repeat integration tests with PostgreSQL; no further T7 source changes are pending.
+- T8 commit: pending commit creation (`feat(web): complete sales empty states`).
+- Risks: PostgreSQL/Docker unavailable locally; migration application and FEFO/RLS integration require database verification. T8 has no Web test script available, so confidence comes from TypeScript, production build, diff validation, and code inspection.
+- Next: record the T8 work-unit commit and later repeat integration tests with PostgreSQL.
