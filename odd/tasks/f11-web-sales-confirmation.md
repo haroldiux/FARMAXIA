@@ -73,6 +73,6 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 - Commit: prior work-unit commit `8179a29` (`feat(sales): add non-fiscal cash sale confirmation`); T6 work-unit commit `4103d33` (`fix(auth): allow sales read access for confirmation workspace`); documentation commit `1b3c48a` (`docs(odd): record F11 permission work unit`).
 - T7 commit: `4c59991` (`test(api): register permission guard suite`).
 - T8 commit: `bec6e82` (`feat(web): complete sales empty states`).
-- T9 commit: pending work-unit commit `test(api): cover sales input normalization`.
+- T9 commit: `b6e84d3` (`test(api): cover sales input normalization`).
 - Risks: PostgreSQL/Docker unavailable locally; migration application and FEFO/RLS integration remain blocked and require database verification. T9 is intentionally pure unit coverage only and does not reduce the PostgreSQL/Docker integration block. T8 has no Web test script available, so confidence comes from TypeScript, production build, diff validation, and code inspection.
 - Next: later repeat integration tests with PostgreSQL.
