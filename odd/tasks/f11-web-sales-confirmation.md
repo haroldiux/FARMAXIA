@@ -57,6 +57,6 @@ Provide a bounded sales/POS confirmation workflow for cash-only, non-fiscal sale
 
 ## Progress
 - Status: T1-T6 implemented; the exact focused Vitest invocation is blocked by the pre-existing test allowlist, while the isolated guard run and static checks pass.
-- Commit: prior work-unit commit `8179a29` (`feat(sales): add non-fiscal cash sale confirmation`); T6 work-unit commit `5811743` (`fix(auth): allow sales read access for confirmation workspace`).
+- Commit: prior work-unit commit `8179a29` (`feat(sales): add non-fiscal cash sale confirmation`); T6 work-unit commit `4103d33` (`fix(auth): allow sales read access for confirmation workspace`).
 - Risks: PostgreSQL/Docker unavailable locally; migration application and FEFO/RLS integration require database verification. The repository Vitest allowlist still needs a separately authorized config update before the exact focused command can pass.
 - Next: later repeat integration tests with PostgreSQL and separately authorize adding the guard spec to `apps/api/vitest.config.ts` if the exact command must run unchanged.
