@@ -229,6 +229,7 @@ export const warehouses = pgTable(
       foreignColumns: [branches.tenantId, branches.id]
     }),
     unique("warehouses_tenant_id_id_unique").on(table.tenantId, table.id),
+    unique("warehouses_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
     unique("warehouses_tenant_branch_name_unique").on(
       table.tenantId,
       table.branchId,

@@ -58,6 +58,7 @@ CREATE TABLE "sale_allocations" (
 --> statement-breakpoint
 ALTER TABLE sales ADD CONSTRAINT sales_tenant_branch_fk FOREIGN KEY (tenant_id, branch_id) REFERENCES branches(tenant_id, id);
 ALTER TABLE sales ADD CONSTRAINT sales_tenant_branch_shift_fk FOREIGN KEY (tenant_id, branch_id, cash_shift_id) REFERENCES cash_shifts(tenant_id, branch_id, id);
+ALTER TABLE warehouses ADD CONSTRAINT warehouses_tenant_branch_id_unique UNIQUE (tenant_id, branch_id, id);
 ALTER TABLE sales ADD CONSTRAINT sales_tenant_branch_warehouse_fk FOREIGN KEY (tenant_id, branch_id, warehouse_id) REFERENCES warehouses(tenant_id, branch_id, id);
 ALTER TABLE sales ADD CONSTRAINT sales_creator_membership_fk FOREIGN KEY (created_by_user_id, tenant_id, branch_id) REFERENCES user_branch_memberships(user_id, tenant_id, branch_id);
 ALTER TABLE sale_items ADD CONSTRAINT sale_items_sale_fk FOREIGN KEY (tenant_id, branch_id, sale_id) REFERENCES sales(tenant_id, branch_id, id);
