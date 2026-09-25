@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import { AuditService } from "../transversal/audit.service.js";
@@ -168,7 +168,7 @@ function money(value: string, field: string): string {
 export class CashService {
   private readonly audit = new AuditService();
 
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async listRegisters(scope: TenantScope): Promise<CashRegisterListResult> {
     return this.database.withScope(scope, async (client) => {

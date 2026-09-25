@@ -1,5 +1,6 @@
+import { Inject, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
-import type { TenantDatabase, TenantScope } from "../database/tenant-database.js";
+import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import {
   IdempotencyService,
   type IdempotentExecutionResult
@@ -252,10 +253,11 @@ function requireRow<T>(row: T | undefined, message: string): T {
   return row;
 }
 
+@Injectable()
 export class ProcurementService {
   private readonly idempotency: IdempotencyService;
 
-  constructor(private readonly database: TenantDatabase) {
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {
     this.idempotency = new IdempotencyService();
   }
 

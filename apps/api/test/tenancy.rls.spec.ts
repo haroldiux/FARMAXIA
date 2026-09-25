@@ -46,17 +46,7 @@ const tenantDatabase = new TenantDatabase(testAppDatabaseUrl);
 
 describe("tenancy schema", () => {
   beforeAll(async () => {
-    const adminPool = new Pool({
-      connectionString: withDatabaseName(developmentDatabaseUrl, "postgres")
-    });
-    const { rowCount } = await adminPool.query(
-      "select 1 from pg_database where datname = 'farmaxia_test'"
-    );
-    if (rowCount === 0) {
-      await adminPool.query("create database farmaxia_test");
-    }
-    await adminPool.end();
-
+    // La base farmaxia_test la crea test/global-setup.ts antes de cualquier suite.
     await migrate(drizzle(ownerPool), { migrationsFolder });
   });
 

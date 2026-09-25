@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Post, Req, UnauthorizedException } from "@nestjs/common";
 import { RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import {
@@ -26,7 +26,7 @@ function scopeFrom(request: AuthenticatedRequest) {
 @Controller("api/v1/procurement")
 @RequirePermissions("inventory.manage")
 export class ProcurementController {
-  constructor(private readonly procurement: ProcurementService) {}
+  constructor(@Inject(ProcurementService) private readonly procurement: ProcurementService) {}
 
   @Get("suppliers")
   listSuppliers(@Req() request: AuthenticatedRequest): Promise<SupplierListResult> {

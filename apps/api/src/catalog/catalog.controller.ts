@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Headers,
+  Inject,
   Param,
   Post,
   Query,
@@ -57,7 +58,7 @@ function parseDate(value: string | undefined, field: string): Date | undefined {
 @Controller("api/v1/catalog")
 @RequirePermissions("catalog.manage")
 export class CatalogController {
-  constructor(private readonly catalog: CatalogService) {}
+  constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
 
   @Get("products")
   @RequireAnyPermission("catalog.manage", "sales.confirm")

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import { AuditService } from "../transversal/audit.service.js";
@@ -121,7 +121,7 @@ export class SalesService {
   private readonly audit = new AuditService();
   private readonly outbox = new OutboxService();
 
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async confirm(scope: TenantScope, input: ConfirmSaleInput): Promise<ConfirmedSale> {
     const normalized = normalizeSaleInput(input);

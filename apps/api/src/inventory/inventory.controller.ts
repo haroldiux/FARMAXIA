@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   Post,
   Query,
@@ -35,7 +36,7 @@ function scopeFrom(request: AuthenticatedRequest) {
 @Controller("api/v1/inventory")
 @RequirePermissions("inventory.manage")
 export class InventoryController {
-  constructor(private readonly inventory: InventoryService) {}
+  constructor(@Inject(InventoryService) private readonly inventory: InventoryService) {}
 
   @Get("warehouses")
   @RequireAnyPermission("inventory.manage", "sales.confirm")

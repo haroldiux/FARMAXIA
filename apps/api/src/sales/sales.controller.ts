@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Inject, Post, Req, UnauthorizedException } from "@nestjs/common";
 import { RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import type { TenantScope } from "../database/tenant-database.js";
@@ -13,7 +13,7 @@ function scopeFrom(request: AuthenticatedRequest): TenantScope {
 @Controller("api/v1/sales")
 @RequirePermissions("sales.confirm")
 export class SalesController {
-  constructor(private readonly sales: SalesService) {}
+  constructor(@Inject(SalesService) private readonly sales: SalesService) {}
 
   @Post("confirm")
   confirm(@Req() request: AuthenticatedRequest, @Body() input: ConfirmSaleInput) {

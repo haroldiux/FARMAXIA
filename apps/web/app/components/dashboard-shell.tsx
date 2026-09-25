@@ -4,16 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { currentSession, logout, type AuthSession } from "../lib/session";
+import { NavIcon, type NavIconName } from "./nav-icon";
 
-const navigation = [
-  { label: "Resumen", icon: "01", active: true },
-  { label: "Catálogo", icon: "02", active: false },
-  { label: "Inventario", icon: "03", active: false },
-  { label: "Reporte global", icon: "07", active: false },
-  { label: "Compras", icon: "04", active: false },
-  { label: "Ventas y caja", icon: "05", active: false },
-  { label: "Ventas POS", icon: "08", active: false },
-  { label: "Auditoría", icon: "06", active: false }
+const navigation: { label: string; icon: NavIconName; active: boolean }[] = [
+  { label: "Resumen", icon: "overview", active: true },
+  { label: "Catálogo", icon: "catalog", active: false },
+  { label: "Inventario", icon: "inventory", active: false },
+  { label: "Reporte global", icon: "report", active: false },
+  { label: "Compras", icon: "procurement", active: false },
+  { label: "Ventas y caja", icon: "cash", active: false },
+  { label: "Ventas POS", icon: "sales", active: false },
+  { label: "Auditoría", icon: "audit", active: false }
 ];
 
 function shortId(value: string): string {
@@ -84,25 +85,25 @@ export function DashboardShell() {
           <p className="nav-label">Workspace</p>
           {navigation.map((item) => (
             item.label === "Catálogo" && session.permissions.includes("catalog.manage") ? <Link className="nav-item" href="/catalog" key={item.label}>
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
             </Link> : item.label === "Inventario" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/inventory" key={item.label}>
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
             </Link> : item.label === "Reporte global" && session.permissions.includes("inventory.report.global") ? <Link className="nav-item" href="/inventory/report" key={item.label}>
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
             </Link> : item.label === "Compras" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/procurement" key={item.label}>
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
             </Link> : item.label === "Ventas y caja" && session.permissions.includes("cash.manage") ? <Link className="nav-item" href="/cash" key={item.label}>
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
             </Link> : item.label === "Ventas POS" && session.permissions.includes("sales.confirm") ? <Link className="nav-item" href="/sales" key={item.label}>
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
             </Link> : <button className={`nav-item ${item.active ? "is-active" : ""}`} disabled={!item.active} key={item.label} type="button">
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><NavIcon name={item.icon} /></span>
               <span>{item.label}</span>
               {!item.active ? <small>Próximo</small> : null}
             </button>
@@ -110,7 +111,7 @@ export function DashboardShell() {
         </nav>
         <div className="sidebar-footer">
           <div className="secure-badge"><span>●</span> Sesión protegida</div>
-          <button className="logout-button" onClick={signOut} type="button">Cerrar sesión <span>↗</span></button>
+          <button className="logout-button" onClick={signOut} type="button">Cerrar sesión <NavIcon name="logout" /></button>
         </div>
       </aside>
       <main className="dashboard-main">

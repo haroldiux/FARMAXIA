@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import {
@@ -361,7 +361,7 @@ export class InventoryService {
   private readonly idempotency = new IdempotencyService();
   private readonly audit = new AuditService();
 
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async reconcile(scope: TenantScope, input: ReconcileInput): Promise<ReconcileResult> {
     const normalized = this.normalizeReconcile(input);

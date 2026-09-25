@@ -3,8 +3,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     globals: true,
+    globalSetup: ["test/global-setup.ts"],
     include: [
       "test/health.e2e.spec.ts",
+      "test/dependency-injection.spec.ts",
       "test/tenancy.rls.spec.ts",
       "test/auth.e2e.spec.ts",
       "test/tenant-resource-keys.spec.ts",

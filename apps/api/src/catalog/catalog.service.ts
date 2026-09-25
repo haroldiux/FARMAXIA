@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import { AuditService } from "../transversal/audit.service.js";
@@ -179,7 +179,7 @@ export class CatalogService {
   private readonly idempotency = new IdempotencyService();
   private readonly audit = new AuditService();
 
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async createCategory(scope: TenantScope, input: CatalogCategoryInput): Promise<CreatedRow> {
     const name = requiredText(input.name, "Category name", 160);
