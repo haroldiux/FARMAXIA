@@ -1,3 +1,4 @@
+import { RequireFeature } from "../saas/subscription.guard.js";
 import { Body, Controller, Inject, Post, Req, UnauthorizedException } from "@nestjs/common";
 import { RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
@@ -10,6 +11,7 @@ function scopeFrom(request: AuthenticatedRequest): TenantScope {
   return { tenantId: auth.tenantId, branchId: auth.branchId, userId: auth.userId };
 }
 
+@RequireFeature("pos")
 @Controller("api/v1/sales")
 @RequirePermissions("sales.confirm")
 export class SalesController {

@@ -1,3 +1,4 @@
+import { Inject, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { TenantScope } from "../database/tenant-database.js";
 import { TenantDatabase } from "../database/tenant-database.js";
@@ -10,15 +11,18 @@ import {
 interface EffectiveFeature extends SubscriptionAccessState {
   allowsAllFeatures: boolean;
   isEnabled: boolean | null;
+  overrideEnabled: boolean | null;
 }
 
 /**
  * Resolves a tenant's entitlement from its current plan.
  * A full-access plan stays simple today while specific plans can opt in to
  * individual features through `plan_features` without changing callers.
+ * A per-subscription override (e.g. SIAT sold as an add-on) wins over the plan.
  */
+@Injectable()
 export class FeatureService {
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async isEnabled(scope: TenantScope, featureCode: string): Promise<boolean> {
     if (!featureCode.trim()) {
@@ -28,6 +32,9 @@ export class FeatureService {
     return this.database.withScope(scope, async (client) => {
       const feature = await this.effectiveFeature(client, scope.tenantId, featureCode);
       assertSubscriptionAccess(feature, new Date());
+      if (feature.overrideEnabled !== null) {
+        return feature.overrideEnabled;
+      }
       return feature.allowsAllFeatures || feature.isEnabled === true;
     });
   }
@@ -43,12 +50,16 @@ export class FeatureService {
          subscription.trial_ends_at as "trialEndsAt",
          subscription.grace_ends_at as "graceEndsAt",
          plan.allows_all_features as "allowsAllFeatures",
-         plan_feature.is_enabled as "isEnabled"
+         plan_feature.is_enabled as "isEnabled",
+         override.is_enabled as "overrideEnabled"
        from tenant_subscriptions as subscription
        join subscription_plans as plan on plan.id = subscription.plan_id
        left join plan_features as plan_feature
          on plan_feature.plan_id = plan.id
         and plan_feature.feature_code = $2
+       left join subscription_feature_overrides as override
+         on override.subscription_id = subscription.id
+        and override.feature_code = $2
        where subscription.tenant_id = $1
          and subscription.status <> 'CANCELED'
        limit 1`,

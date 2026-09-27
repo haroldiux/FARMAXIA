@@ -8,7 +8,8 @@ import { AppModule } from "./app.module.js";
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter()
+    // 4 MB: un comprobante de pago de 2 MB viaja en base64 (~2,7 MB).
+    new FastifyAdapter({ bodyLimit: 4 * 1024 * 1024 })
   );
   app.enableCors({
     origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",

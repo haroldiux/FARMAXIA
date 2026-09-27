@@ -1,9 +1,25 @@
 export interface LoginInput {
   email: string;
   password: string;
-  tenantId: string;
-  branchId: string;
+  /** Identificador de la farmacia (opcional si el usuario tiene una sola). */
+  tenant?: string;
+  branchId?: string;
 }
+
+export interface BranchOption {
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+}
+
+/** El login puede terminar, pedir sucursal o pedir el código 2FA. */
+export type LoginResult =
+  | { status: "ok" }
+  | { status: "branch"; options: BranchOption[] }
+  | { status: "totp"; challengeToken: string };
 
 export interface AuthSession {
   userId: string;
@@ -18,7 +34,7 @@ interface TokenResponse {
 }
 
 const accessTokenKey = "farmaxia.access_token";
-const apiUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
+export const apiUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
 function token(): string | null {
   if (typeof window === "undefined") {
@@ -31,6 +47,8 @@ function storeToken(value: string): void {
   window.sessionStorage.setItem(accessTokenKey, value);
 }
 
+export const storeAccessToken = storeToken;
+
 async function tokenResponse(response: Response): Promise<TokenResponse> {
   if (!response.ok) {
     throw new Error("No pudimos iniciar la sesión. Verifica tus datos e inténtalo nuevamente.");
@@ -38,15 +56,57 @@ async function tokenResponse(response: Response): Promise<TokenResponse> {
   return (await response.json()) as TokenResponse;
 }
 
-export async function login(input: LoginInput): Promise<void> {
+async function loginError(response: Response): Promise<Error> {
+  if (response.status === 429) {
+    return new Error("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.");
+  }
+  if (response.status === 401) {
+    try {
+      const body = (await response.json()) as { code?: string; message?: string };
+      if (body.code === "INVALID_TOTP" && body.message) {
+        return new Error(body.message);
+      }
+    } catch {
+      // Sin cuerpo JSON: mensaje genérico.
+    }
+  }
+  return new Error("No pudimos iniciar la sesión. Verifica tus datos e inténtalo nuevamente.");
+}
+
+export async function login(input: LoginInput): Promise<LoginResult> {
   const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "include",
     body: JSON.stringify(input)
   });
-  const result = await tokenResponse(response);
-  storeToken(result.accessToken);
+  if (!response.ok) {
+    throw await loginError(response);
+  }
+  const body = (await response.json()) as
+    | TokenResponse
+    | { requires: "BRANCH"; options: BranchOption[] }
+    | { requires: "TOTP"; challengeToken: string };
+  if ("requires" in body) {
+    return body.requires === "BRANCH"
+      ? { status: "branch", options: body.options }
+      : { status: "totp", challengeToken: body.challengeToken };
+  }
+  storeToken(body.accessToken);
+  return { status: "ok" };
+}
+
+export async function completeTotpLogin(challengeToken: string, code: string): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/auth/login/totp`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ challengeToken, code })
+  });
+  if (!response.ok) {
+    throw await loginError(response);
+  }
+  storeToken(((await response.json()) as TokenResponse).accessToken);
 }
 
 async function refresh(): Promise<void> {
@@ -84,6 +144,10 @@ export async function authenticatedFetch(path: string, init: RequestInit = {}): 
       throw new Error("SESSION_EXPIRED");
     }
     response = await execute(refreshedToken);
+  }
+  // 402: la suscripción no está activa. La página de suscripción explica el motivo y permite pagar.
+  if (response.status === 402 && !window.location.pathname.startsWith("/billing")) {
+    window.location.assign("/billing?bloqueado=1");
   }
   return response;
 }

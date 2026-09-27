@@ -1,3 +1,4 @@
+import { RequireFeature } from "../saas/subscription.guard.js";
 import {
   Body,
   Controller,
@@ -33,6 +34,7 @@ function scopeFrom(request: AuthenticatedRequest) {
   return request.auth;
 }
 
+@RequireFeature("inventory")
 @Controller("api/v1/inventory")
 @RequirePermissions("inventory.manage")
 export class InventoryController {
@@ -44,6 +46,7 @@ export class InventoryController {
     return this.inventory.listWarehouses(scopeFrom(request));
   }
 
+  @RequireFeature("reports.basic")
   @Get("reports/tenant-stock")
   @RequirePermissions("inventory.report.global")
   tenantStockReport(

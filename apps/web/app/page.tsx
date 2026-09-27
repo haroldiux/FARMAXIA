@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LoginForm } from "./components/login-form";
 
 export default function HomePage() {
@@ -18,7 +19,7 @@ export default function HomePage() {
       <section className="login-panel">
         <div className="login-panel-heading"><p className="section-kicker">Acceso seguro</p><h2>Bienvenido de vuelta.</h2><p>Ingresa con el contexto de la sucursal donde vas a operar.</p></div>
         <LoginForm />
-        <p className="login-footer">FARMAXIA protege cada operación con permisos y contexto verificado.</p>
+        <p className="login-footer auth-switch">¿Tu farmacia aún no tiene cuenta? <Link href="/register">Regístrala y prueba 7 días gratis</Link></p>
       </section>
     </main>
   );

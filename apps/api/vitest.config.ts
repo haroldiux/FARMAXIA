@@ -20,7 +20,9 @@ export default defineConfig({
       "test/inventory-report.spec.ts",
       "test/cash.spec.ts",
       "test/sales.spec.ts",
-      "test/permissions.guard.spec.ts"
+      "test/permissions.guard.spec.ts",
+      "test/saas.spec.ts",
+      "test/identity.spec.ts"
     ],
     fileParallelism: false
   }

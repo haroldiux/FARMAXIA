@@ -41,9 +41,21 @@ export const subscriptionPlans = pgTable(
     name: varchar("name", { length: 160 }).notNull(),
     allowsAllFeatures: boolean("allows_all_features").default(false).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
-    createdAt
+    createdAt,
+    description: varchar("description", { length: 255 }).default("").notNull(),
+    priceMonthlyBob: numeric("price_monthly_bob", { precision: 12, scale: 2 }).default("0").notNull(),
+    auditRetentionDays: integer("audit_retention_days"),
+    isPublic: boolean("is_public").default(false).notNull(),
+    sortOrder: integer("sort_order").default(0).notNull()
   },
-  (table) => [uniqueIndex("subscription_plans_code_unique").on(table.code)]
+  (table) => [
+    uniqueIndex("subscription_plans_code_unique").on(table.code),
+    check("subscription_plans_price_non_negative_check", sql`${table.priceMonthlyBob} >= 0`),
+    check(
+      "subscription_plans_retention_positive_check",
+      sql`${table.auditRetentionDays} is null or ${table.auditRetentionDays} > 0`
+    )
+  ]
 );
 
 export const planFeatures = pgTable(
@@ -99,7 +111,9 @@ export const tenantSubscriptions = pgTable(
     graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),
     canceledAt: timestamp("canceled_at", { withTimezone: true }),
     createdAt,
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true })
   },
   (table) => [
     foreignKey({
@@ -276,9 +290,20 @@ export const users = pgTable(
     displayName: varchar("display_name", { length: 160 }).notNull(),
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
-    createdAt
+    createdAt,
+    // Migración 0016: farmacia dueña de la cuenta, 2FA (secreto cifrado) y auditoría de acceso.
+    homeTenantId: uuid("home_tenant_id"),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    totpSecret: varchar("totp_secret", { length: 255 }),
+    totpPendingSecret: varchar("totp_pending_secret", { length: 255 }),
+    totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+    totpLastStep: bigint("totp_last_step", { mode: "number" }),
+    passwordChangedAt: timestamp("password_changed_at", { withTimezone: true })
   },
-  (table) => [uniqueIndex("users_email_unique").on(table.email)]
+  (table) => [
+    uniqueIndex("users_email_unique").on(table.email),
+    foreignKey({ name: "users_home_tenant_fk", columns: [table.homeTenantId], foreignColumns: [tenants.id] })
+  ]
 );
 
 export const userBranchMemberships = pgTable(
@@ -489,7 +514,11 @@ export const roles = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     tenantId: uuid("tenant_id").notNull(),
     code: varchar("code", { length: 80 }).notNull(),
-    createdAt
+    createdAt,
+    name: varchar("name", { length: 120 }).default("").notNull(),
+    description: varchar("description", { length: 255 }).default("").notNull(),
+    isSystem: boolean("is_system").default(false).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [
     foreignKey({
@@ -504,7 +533,10 @@ export const roles = pgTable(
 
 export const permissions = pgTable("permissions", {
   code: varchar("code", { length: 120 }).primaryKey(),
-  description: varchar("description", { length: 255 }).notNull()
+  description: varchar("description", { length: 255 }).notNull(),
+  label: varchar("label", { length: 160 }).default("").notNull(),
+  module: varchar("module", { length: 80 }).default("General").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull()
 });
 
 export const rolePermissions = pgTable(
@@ -567,7 +599,10 @@ export const authSessions = pgTable(
     branchId: uuid("branch_id").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    createdAt
+    createdAt,
+    userAgent: varchar("user_agent", { length: 255 }),
+    ipAddress: varchar("ip_address", { length: 64 }),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [
     uniqueIndex("auth_sessions_token_hash_unique").on(table.tokenHash),
@@ -1505,5 +1540,148 @@ export const saleAllocations = pgTable(
     unique("sale_allocations_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
     index("sale_allocations_item_idx").on(table.tenantId, table.branchId, table.saleItemId),
     check("sale_allocations_quantity_positive_check", sql`${table.quantityBase} > 0`)
+  ]
+);
+
+// Core SaaS (migración 0015): funcionalidades contratables, extras por suscripción,
+// comprobantes, pagos declarados y operadores de plataforma.
+export const saasFeatures = pgTable("saas_features", {
+  code: varchar("code", { length: 120 }).primaryKey(),
+  name: varchar("name", { length: 160 }).notNull(),
+  module: varchar("module", { length: 80 }).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull()
+});
+
+export const subscriptionFeatureOverrides = pgTable(
+  "subscription_feature_overrides",
+  {
+    subscriptionId: uuid("subscription_id").notNull(),
+    featureCode: varchar("feature_code", { length: 120 }).notNull(),
+    isEnabled: boolean("is_enabled").notNull(),
+    createdAt
+  },
+  (table) => [
+    primaryKey({ name: "subscription_feature_overrides_pk", columns: [table.subscriptionId, table.featureCode] }),
+    foreignKey({
+      name: "subscription_feature_overrides_subscription_fk",
+      columns: [table.subscriptionId],
+      foreignColumns: [tenantSubscriptions.id]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "subscription_feature_overrides_feature_fk",
+      columns: [table.featureCode],
+      foreignColumns: [saasFeatures.code]
+    })
+  ]
+);
+
+export const platformOperators = pgTable(
+  "platform_operators",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: varchar("email", { length: 254 }).notNull(),
+    displayName: varchar("display_name", { length: 160 }).notNull(),
+    passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt
+  },
+  (table) => [uniqueIndex("platform_operators_email_unique").on(table.email)]
+);
+
+export const saasInvoices = pgTable(
+  "saas_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    subscriptionId: uuid("subscription_id").notNull(),
+    number: varchar("number", { length: 32 }).notNull(),
+    planCode: varchar("plan_code", { length: 80 }).notNull(),
+    planName: varchar("plan_name", { length: 160 }).notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    amountBob: numeric("amount_bob", { precision: 12, scale: 2 }).notNull(),
+    status: varchar("status", { length: 16 }).default("OPEN").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).defaultNow().notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    voidedAt: timestamp("voided_at", { withTimezone: true })
+  },
+  (table) => [
+    foreignKey({ name: "saas_invoices_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    foreignKey({
+      name: "saas_invoices_tenant_subscription_fk",
+      columns: [table.tenantId, table.subscriptionId],
+      foreignColumns: [tenantSubscriptions.tenantId, tenantSubscriptions.id]
+    }),
+    unique("saas_invoices_tenant_id_id_unique").on(table.tenantId, table.id),
+    uniqueIndex("saas_invoices_number_unique").on(table.number),
+    uniqueIndex("saas_invoices_subscription_period_unique")
+      .on(table.subscriptionId, table.periodStart)
+      .where(sql`${table.status} <> 'VOID'`),
+    index("saas_invoices_tenant_issued_idx").on(table.tenantId, table.issuedAt),
+    check("saas_invoices_status_check", sql`${table.status} in ('OPEN', 'PAID', 'VOID')`),
+    check("saas_invoices_amount_positive_check", sql`${table.amountBob} > 0`),
+    check("saas_invoices_period_check", sql`${table.periodEnd} > ${table.periodStart}`)
+  ]
+);
+
+export const saasPayments = pgTable(
+  "saas_payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    invoiceId: uuid("invoice_id").notNull(),
+    method: varchar("method", { length: 16 }).notNull(),
+    reference: varchar("reference", { length: 120 }).notNull(),
+    amountBob: numeric("amount_bob", { precision: 12, scale: 2 }).notNull(),
+    paidOn: date("paid_on").notNull(),
+    status: varchar("status", { length: 16 }).default("PENDING").notNull(),
+    attachmentMediaType: varchar("attachment_media_type", { length: 80 }),
+    // attachment_data (bytea, máx. 2 MB) lo crea la migración 0015: pg-core no expone bytea.
+    submittedByUserId: uuid("submitted_by_user_id").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+    reviewedByOperatorId: uuid("reviewed_by_operator_id"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: varchar("review_note", { length: 500 })
+  },
+  (table) => [
+    foreignKey({
+      name: "saas_payments_tenant_invoice_fk",
+      columns: [table.tenantId, table.invoiceId],
+      foreignColumns: [saasInvoices.tenantId, saasInvoices.id]
+    }),
+    foreignKey({ name: "saas_payments_submitted_by_fk", columns: [table.submittedByUserId], foreignColumns: [users.id] }),
+    foreignKey({
+      name: "saas_payments_reviewed_by_fk",
+      columns: [table.reviewedByOperatorId],
+      foreignColumns: [platformOperators.id]
+    }),
+    uniqueIndex("saas_payments_one_pending_per_invoice").on(table.invoiceId).where(sql`${table.status} = 'PENDING'`),
+    index("saas_payments_status_submitted_idx").on(table.status, table.submittedAt),
+    check("saas_payments_method_check", sql`${table.method} in ('QR', 'TRANSFER', 'GATEWAY', 'CASH')`),
+    check("saas_payments_status_check", sql`${table.status} in ('PENDING', 'APPROVED', 'REJECTED')`),
+    check("saas_payments_amount_positive_check", sql`${table.amountBob} > 0`)
+  ]
+);
+
+export const platformAuditEvents = pgTable(
+  "platform_audit_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    operatorId: uuid("operator_id"),
+    tenantId: uuid("tenant_id"),
+    action: varchar("action", { length: 100 }).notNull(),
+    entityType: varchar("entity_type", { length: 100 }).notNull(),
+    entityId: varchar("entity_id", { length: 100 }).notNull(),
+    payload: jsonb("payload").default({}).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "platform_audit_events_operator_fk",
+      columns: [table.operatorId],
+      foreignColumns: [platformOperators.id]
+    }),
+    index("platform_audit_events_occurred_idx").on(table.occurredAt)
   ]
 );

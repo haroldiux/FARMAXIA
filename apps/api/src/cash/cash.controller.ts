@@ -1,3 +1,4 @@
+import { RequireFeature } from "../saas/subscription.guard.js";
 import { Body, Controller, Get, Inject, Param, Post, Req, UnauthorizedException } from "@nestjs/common";
 import { RequireAnyPermission, RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
@@ -21,6 +22,7 @@ function scopeFrom(request: AuthenticatedRequest) {
   return request.auth;
 }
 
+@RequireFeature("pos")
 @Controller("api/v1/cash")
 @RequirePermissions("cash.manage")
 export class CashController {

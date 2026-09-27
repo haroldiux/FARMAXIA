@@ -15,7 +15,8 @@ docker compose up --build -d
 docker compose ps
 ```
 
-- Web: `http://localhost:3000`
+- Web: `http://localhost:3000` (registro de farmacias en `/register`)
+- Panel de plataforma (operadores del SaaS): `http://localhost:3000/platform/login`
 - API: `http://localhost:3001/health`
 - PostgreSQL local: `localhost:5433`
 - Redis local: `localhost:6379`
@@ -51,7 +52,11 @@ docker compose config
 
 Las migraciones usan `DATABASE_URL` (propietario de migraciones), los módulos de
 dominio usan `DATABASE_APP_URL` (rol con RLS) y la identidad usa
-`DATABASE_AUTH_URL` (rol de privilegio mínimo). Los valores del archivo de ejemplo
+`DATABASE_AUTH_URL` (rol de privilegio mínimo), el alta de farmacias y el panel de
+plataforma usan `DATABASE_PLATFORM_URL`, y la administración de usuarios y roles usa
+`DATABASE_IDENTITY_URL`. `pnpm --filter @farmaxia/api db:seed` carga
+una farmacia de demostración y un operador de plataforma (ver `SEED_DATA` en
+`apps/api/src/database/seed.ts`). Los valores del archivo de ejemplo
 son únicamente para desarrollo local. Las pruebas crean/usan la base aislada
 `farmaxia_test`.
 

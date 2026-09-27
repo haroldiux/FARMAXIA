@@ -228,3 +228,127 @@ adyacentes son válidos y dos intervalos del mismo producto/presentación y alca
 (global o la misma sucursal) responden `409 CATALOG_PRICE_OVERLAP`. Cada mutación
 operativa registra auditoría transaccional. Ninguna ruta de F8 crea ventas,
 movimientos, FEFO, valoración ni reportes globales de inventario.
+
+## Core SaaS (planes, alta, cobro y plataforma)
+
+Migración `0015_core_saas.sql`. El rol `farmaxia_platform` (`DATABASE_PLATFORM_URL`)
+solo lo usan el alta pública y las rutas `/api/v1/platform`; las rutas de una
+farmacia siguen bajo `farmaxia_app` y su RLS.
+
+### Control de plan en las rutas de la farmacia
+
+Un guard global corre después de identidad y permisos. Las rutas marcadas con
+`@RequireFeature(código)` responden:
+
+| Situación | Respuesta |
+| --- | --- |
+| Suscripción suspendida, cancelada, prueba vencida o gracia vencida | `402` `{ code: "SUBSCRIPTION_INACTIVE" }` |
+| El plan (o un extra) no incluye la funcionalidad | `403` `{ code: "PLAN_FEATURE_RESTRICTED", feature }` |
+
+Catálogo → `catalog`, Inventario → `inventory` (reporte global → `reports.basic`),
+Compras → `procurement`, Caja y Ventas → `pos`, Auditoría → `audit`. Las rutas de
+suscripción y cobro no se marcan: una farmacia suspendida siempre puede ver su
+estado y pagar.
+
+### Alta pública
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET /api/v1/onboarding/plans` | Pública. Planes visibles con precio, límites (`null` = ilimitado) y funcionalidades. |
+| `POST /api/v1/onboarding/register` | Pública, 5 por IP por hora. Recibe `pharmacyName`, `legalName`, `taxId` (solo dígitos), `branchName?`, `ownerName`, `email`, `password` (≥10, letras y números) y `planCode`. Crea farmacia, razón social, sucursal `SUC-001`, almacén, caja `CAJA-01`, dueño con rol `owner`, prueba de 7 días y el primer comprobante. Responde `201` con `tenantId`, `branchId`, `trialEndsAt` y sesión (`accessToken` + cookie de refresh). Correo repetido → `409 EMAIL_TAKEN`. |
+
+### Farmacia
+
+| Ruta | Acceso y contrato |
+| --- | --- |
+| `GET /api/v1/subscription` | Cualquier sesión. Plan, estado, `hasAccess`, fechas, uso contra límites, funcionalidades (con `addOn`) y comprobantes abiertos. |
+| `GET /api/v1/billing/invoices` | `billing.manage`. Comprobantes con sus pagos declarados. |
+| `GET /api/v1/billing/invoices/:id` | `billing.manage`. Comprobante con datos del cliente para imprimir. |
+| `POST /api/v1/billing/invoices/:id/payments` | `billing.manage`. `method` (`QR` \| `TRANSFER`), `reference`, `amountBob` (hasta 2 decimales), `paidOn` (no futura) y `attachment?` `{ mediaType, base64 }` (PNG/JPG/WEBP/PDF, máx. 2 MB). Queda `PENDING`; uno solo en revisión por comprobante (`409 PAYMENT_ALREADY_PENDING`). |
+| `GET /api/v1/audit/events` | `audit.read` + funcionalidad `audit`. Filtros `action`, `from`, `to`, `limit` (≤100), `offset`. Solo devuelve eventos dentro de la retención del plan (7 días, 30 días o todo); la bitácora nunca se borra. |
+
+### Ciclo de cobro
+
+Corre cada `BILLING_CYCLE_INTERVAL_MINUTES` (60; `0` lo desactiva) con advisory lock,
+y también a pedido desde el panel. Es idempotente:
+
+1. Emite el comprobante del siguiente periodo mensual 7 días antes de que empiece.
+2. Prueba vencida sin pago → `SUSPENDED`.
+3. Periodo pagado vencido → `PAST_DUE` con 3 días de gracia; gracia vencida → `SUSPENDED`.
+4. Los planes sin costo no se cobran.
+
+Aprobar un pago marca el comprobante `PAID`, extiende `current_period_end` y activa la
+suscripción; si estaba suspendida, el nuevo periodo empieza el día de la aprobación.
+
+### Plataforma (`/api/v1/platform`)
+
+Token de operador con audiencia `farmaxia-platform` (8 h), distinto al de farmacia:
+ninguno sirve en las rutas del otro.
+
+| Ruta | Contrato |
+| --- | --- |
+| `POST auth/login`, `GET auth/me` | Correo y contraseña de `platform_operators`. |
+| `GET overview` | Suscripciones por estado, ingreso mensual recurrente, pagos por revisar, comprobantes abiertos y últimas altas. |
+| `GET tenants?search&status`, `GET tenants/:id` | Listado y detalle (uso, extras, comprobantes, historial). |
+| `POST tenants/:id/plan` | `{ planCode }`. Rechaza bajar a un plan cuyos límites ya se superan (`409 PLAN_QUOTA_EXCEEDED`); anula el comprobante abierto y emite uno con el nuevo precio. |
+| `POST tenants/:id/status` | `{ action: SUSPEND \| REACTIVATE \| CANCEL }` respetando la máquina de estados. |
+| `POST tenants/:id/features` | `{ featureCode, enabled: true \| false \| null }`: extra por farmacia (`null` lo quita). |
+| `GET payments?status`, `GET payments/:id/attachment` | Cola de pagos y comprobante adjunto. |
+| `POST payments/:id/approve`, `POST payments/:id/reject` | `{ note }` (obligatoria al rechazar). No aprueba montos menores al comprobante. |
+| `GET plans`, `PATCH plans/:code`, `GET features` | Planes y precio/visibilidad editables. |
+| `POST billing/run-cycle` | Ejecuta el ciclo de cobro. |
+
+Toda acción de operador queda en `platform_audit_events` (inmutable).
+
+## Usuarios, roles y seguridad (módulo 1)
+
+Migración `0016_identity_management.sql`. El rol `farmaxia_identity`
+(`DATABASE_IDENTITY_URL`) administra usuarios, roles y accesos de una sola farmacia
+(`app.tenant_id`); `farmaxia_app` sigue sin poder escribir usuarios, roles ni membresías.
+
+### Inicio de sesión
+
+`POST /api/v1/auth/login` recibe `email`, `password` y, opcionalmente, `tenant`
+(identificador o UUID), `tenantId` y `branchId`. Primero valida la contraseña; recién
+entonces resuelve farmacia y sucursal entre las membresías del usuario:
+
+| Resultado | Respuesta |
+| --- | --- |
+| Una sola sucursal posible | `201` `{ accessToken, expiresInSeconds }` y cookie de refresh (igual que antes) |
+| Varias sucursales o farmacias | `200` `{ requires: "BRANCH", options: [{ tenantId, tenantSlug, tenantName, branchId, branchCode, branchName }] }` |
+| 2FA activo | `200` `{ requires: "TOTP", challengeToken }` (5 min, audiencia `farmaxia-2fa`, no sirve como sesión) |
+| Datos incorrectos | `401` sin revelar la causa |
+| Más de 10 intentos por IP y correo en 15 min | `429 TOO_MANY_LOGIN_ATTEMPTS` |
+
+`POST /api/v1/auth/login/totp` `{ challengeToken, code }` completa el paso 2FA. Un
+código aceptado no se puede reutilizar.
+
+### Mi cuenta (cualquier sesión)
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET auth/account` | Nombre, correo, farmacia (nombre e identificador), sucursal, 2FA y sucursales disponibles. `GET auth/me` no cambia. |
+| `POST auth/switch-branch` | `{ branchId }` de la misma farmacia: nueva sesión y cierra la actual. |
+| `POST auth/password` | `{ currentPassword, newPassword }` (≥10, letras y números). Cierra las demás sesiones. |
+| `POST auth/2fa/setup`, `auth/2fa/enable`, `auth/2fa/disable` | TOTP (RFC 6238, 6 dígitos, 30 s). El secreto se guarda cifrado con AES-256-GCM (`AUTH_ENCRYPTION_KEY` o, si falta, `AUTH_JWT_SECRET`). Desactivar exige la contraseña. |
+| `GET auth/sessions`, `POST auth/sessions/:id/revoke`, `POST auth/sessions/revoke-others` | Sesiones activas con dispositivo, IP, farmacia y sucursal. Una sesión cerrada deja de renovarse; su access token vence en ≤15 min. |
+
+Un usuario desactivado o sin acceso a la sucursal recibe permisos vacíos al instante,
+aunque su access token siga vigente.
+
+### Administración (`users.manage`)
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET users`, `POST users`, `PATCH users/:id` | Alta con rol(es) y sucursal(es); consume la cuota `users` del plan (`409 PLAN_QUOTA_EXCEEDED`). Desactivar libera el lugar y cierra sus sesiones en la farmacia. |
+| `POST users/:id/password`, `POST users/:id/2fa/reset` | Solo para cuentas de esta farmacia (`home_tenant_id`). |
+| `GET roles`, `POST roles`, `PATCH roles/:id`, `DELETE roles/:id` | Roles personalizados. Los predefinidos (`is_system`) no se modifican (`409 SYSTEM_ROLE`); un rol con usuarios no se elimina (`409 ROLE_IN_USE`). |
+| `GET permissions`, `GET branches` | Catálogo de permisos con nombre y módulo; sucursales de la farmacia. |
+
+Reglas: nadie otorga permisos que no tiene ni administra a alguien con más permisos
+(`403 INSUFFICIENT_PRIVILEGES`); siempre queda un Propietario activo (`409 LAST_OWNER`);
+nadie se desactiva ni cambia sus propios roles; nombre, estado y contraseña de una cuenta
+solo se cambian en su farmacia dueña (`403 USER_MANAGED_ELSEWHERE`).
+
+Roles predefinidos por farmacia: Propietario (todos los permisos), Regente farmacéutico,
+Encargado de sucursal, Cajero y Almacenero (ver `apps/api/src/identity/role-templates.ts`).

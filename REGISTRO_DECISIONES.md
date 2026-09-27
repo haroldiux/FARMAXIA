@@ -9,8 +9,8 @@ Complementa `PLAN_IMPLEMENTACION_ANTIGRAVITY.md`. Una decisión abierta bloquea 
 | D03 | Abierta externa | Tributario/Técnico | El núcleo expone `FiscalProvider`; adaptador SIAT real espera modalidad, contrato y credenciales del emisor. | F01–F05, T08, T15–T17 |
 | D04 | Confirmada para piloto · 2026-09-15 | Producto/Tributario | Un tenant tiene una razón social/NIT activa y varias sucursales. Se conserva entidad para evolución multiemisor. | A01, A02, B02, F01 |
 | D05 | Confirmada · 2026-09-15 | Técnico | Base compartida con `tenant_id`, FKs compuestas, contexto transaccional y RLS. Drizzle gestiona migraciones; el rol app no es propietario ni usa `BYPASSRLS`. | A02, B04, T01, T02 |
-| D06 | Confirmada · 2026-09-16 | Producto | Lanzamiento con un único plan `COMPLETO`, todas las funciones habilitadas. La segmentación futura se hará por entitlements, sin crear productos separados ahora. | B05, T03, T23 |
-| D07 | Confirmada · 2026-09-16 | Producto/Técnico | Trial: 1 sucursal, 5 usuarios, 1 caja activa y 1 GB. Plan `COMPLETO`: esos recursos ilimitados (`NULL`). El modelo conserva cuotas por recurso para futuros planes. | B05, T03 |
+| D06 | Reemplazada por D23 · 2026-09-26 | Producto | Lanzamiento con un único plan `COMPLETO`, todas las funciones habilitadas. La segmentación futura se hará por entitlements, sin crear productos separados ahora. | B05, T03, T23 |
+| D07 | Reemplazada por D24 · 2026-09-26 | Producto/Técnico | Trial: 1 sucursal, 5 usuarios, 1 caja activa y 1 GB. Plan `COMPLETO`: esos recursos ilimitados (`NULL`). El modelo conserva cuotas por recurso para futuros planes. | B05, T03 |
 | D08 | Abierta | Producto/Tributario/Técnico | BOB inicial; no se usará `number` para dinero. Redondeo y costos antes de F2. | C01–C04, V03 |
 | D09 | Abierta | Producto | Proforma no mueve stock ni caja; reserva/vencimiento deben aprobarse antes de habilitarse. | V06, T11, T12 |
 | D10 | Confirmada para piloto · 2026-09-15 | Producto/Técnico | Piloto con backend accesible; contingencia SIAT aparte; no hay venta offline SaaS inicial. | A01, V03, O03, T26 |
@@ -26,6 +26,15 @@ Complementa `PLAN_IMPLEMENTACION_ANTIGRAVITY.md`. Una decisión abierta bloquea 
 | D20 | Abierta | Producto/Regencia/Técnico | Privacidad y datos mínimos antes de CRM, recetas adjuntas o convenios. | G01–G04 |
 | D21 | Abierta | Producto/Técnico | Instrumentar métricas ahora; objetivos de carga antes de piloto. | H02 |
 | D22 | Abierta externa | Producto/Regencia | Migración real espera catálogo, lotes, vencimiento, costos y conciliación firmados. | C03, C06 |
+| D23 | Confirmada · 2026-09-26 | Producto (Denilson) | Planes Básico, Profesional y Premium con los límites y funcionalidades de la matriz maestra. Precios iniciales 150/350/700 BOB al mes, editables desde el panel de plataforma. `COMPLETO` queda como plan interno sin costo. | Core SaaS, B05 |
+| D24 | Confirmada · 2026-09-26 | Producto (Denilson) | La prueba de 7 días usa los límites del plan elegido al registrarse (antes: cuotas propias de trial, D07). | Core SaaS, B05 |
+| D25 | Confirmada · 2026-09-26 | Producto (Denilson) | Cobro manual: la farmacia declara el pago (QR o transferencia, con comprobante opcional) y un operador lo aprueba. La pasarela real queda para cuando exista contrato; el método `GATEWAY` está reservado. | Core SaaS |
+| D26 | Confirmada · 2026-09-26 | Producto (Denilson) | Comprobante de cobro no fiscal con numeración correlativa `FX-000001` hasta que exista la facturación SIAT (D03). | Core SaaS, F01 |
+| D27 | Confirmada · 2026-09-26 | Producto (Denilson) | Registro público de farmacias con 7 días de prueba; límite de 5 registros por IP por hora. | Core SaaS |
+| D28 | Confirmada · 2026-09-27 | Producto (Denilson) | Login con correo y contraseña; la farmacia y la sucursal se eligen tras validar la contraseña. El identificador (slug) o UUID de farmacia sigue aceptándose. | Módulo 1 |
+| D29 | Confirmada · 2026-09-27 | Producto (Denilson) | Roles predefinidos por farmacia: Propietario, Regente, Encargado, Cajero y Almacenero (no editables) + roles personalizados. Sin escalada de permisos y con al menos un Propietario activo. | Módulo 1 |
+| D30 | Confirmada · 2026-09-27 | Producto/Técnico | 2FA opcional con app de autenticación (TOTP). Si alguien pierde el teléfono, un administrador de su farmacia le quita el 2FA. | Módulo 1 |
+| D31 | Confirmada · 2026-09-27 | Técnico | Las cuentas son globales por correo; nombre, estado, contraseña y 2FA solo se administran en la farmacia dueña (`home_tenant_id`). | Módulo 1 |
 
 ## Regla de actualización
 

@@ -1,3 +1,4 @@
+import { RequireFeature } from "../saas/subscription.guard.js";
 import {
   BadRequestException,
   Body,
@@ -55,6 +56,7 @@ function parseDate(value: string | undefined, field: string): Date | undefined {
   return parsed;
 }
 
+@RequireFeature("catalog")
 @Controller("api/v1/catalog")
 @RequirePermissions("catalog.manage")
 export class CatalogController {

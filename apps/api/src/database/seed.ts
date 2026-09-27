@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import argon2 from "argon2";
+import { ownerRoleCode, systemRoles, tenantPermissions } from "../identity/role-templates.js";
 
 const connectionString =
   process.env.DATABASE_URL ??
@@ -43,6 +44,12 @@ export const SEED_DATA = {
     email: "admin@farmaxia.local",
     displayName: "Administrador Farmaxia",
     password: "Admin1234!"
+  },
+  platformOperator: {
+    id: "99999999-0000-4000-a000-000000000001",
+    email: "owner@farmaxia.local",
+    displayName: "Operador FARMAXIA",
+    password: "Owner12345!"
   },
   role: {
     id: "77777777-7777-4000-a000-000000000001",
@@ -183,14 +190,15 @@ async function seed() {
     const passwordHash = await argon2.hash(SEED_DATA.user.password, argon2idOptions);
 
     await client.query(
-      `INSERT INTO users (id, email, display_name, password_hash, is_active)
-       VALUES ($1, $2, $3, $4, true)
-       ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash, is_active = true`,
+      `INSERT INTO users (id, email, display_name, password_hash, is_active, home_tenant_id)
+       VALUES ($1, $2, $3, $4, true, $5)
+       ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash, is_active = true, home_tenant_id = excluded.home_tenant_id`,
       [
         SEED_DATA.user.id,
         SEED_DATA.user.email,
         SEED_DATA.user.displayName,
-        passwordHash
+        passwordHash,
+        SEED_DATA.tenant.id
       ]
     );
 
@@ -215,21 +223,12 @@ async function seed() {
       [SEED_DATA.user.id, SEED_DATA.tenant.id, SEED_DATA.role.id]
     );
 
-    const permissions = [
-      { code: "cash.manage", desc: "Manage cash registers and shifts" },
-      { code: "cash.shift.approve", desc: "Approve cash shift controls" },
-      { code: "catalog.manage", desc: "Manage catalog and prices" },
-      { code: "inventory.manage", desc: "Manage inventory operations" },
-      { code: "inventory.report.global", desc: "View global inventory reports" },
-      { code: "sales.confirm", desc: "Confirm non-fiscal cash sales" }
-    ];
-
-    for (const perm of permissions) {
+    for (const perm of tenantPermissions) {
       await client.query(
-        `INSERT INTO permissions (code, description)
-         VALUES ($1, $2)
-         ON CONFLICT (code) DO NOTHING`,
-        [perm.code, perm.desc]
+        `INSERT INTO permissions (code, description, label, module, sort_order)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (code) DO UPDATE SET label = excluded.label, module = excluded.module, sort_order = excluded.sort_order`,
+        [perm.code, perm.description, perm.label, perm.module, perm.sortOrder]
       );
       await client.query(
         `INSERT INTO role_permissions (role_id, permission_code)
@@ -238,6 +237,48 @@ async function seed() {
         [SEED_DATA.role.id, perm.code]
       );
     }
+
+    // Roles predefinidos; el administrador de demostración es Propietario.
+    for (const template of systemRoles) {
+      const role = await client.query<{ id: string }>(
+        `INSERT INTO roles (tenant_id, code, name, description, is_system)
+         VALUES ($1, $2, $3, $4, true)
+         ON CONFLICT (tenant_id, code) DO UPDATE SET name = excluded.name, description = excluded.description, is_system = true
+         RETURNING id`,
+        [SEED_DATA.tenant.id, template.code, template.name, template.description]
+      );
+      const roleId = role.rows[0]?.id;
+      if (!roleId) {
+        throw new Error(`Failed to seed role ${template.code}`);
+      }
+      for (const permissionCode of template.permissions) {
+        await client.query(
+          `INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2)
+           ON CONFLICT (role_id, permission_code) DO NOTHING`,
+          [roleId, permissionCode]
+        );
+      }
+      if (template.code === ownerRoleCode) {
+        await client.query(
+          `INSERT INTO user_roles (user_id, tenant_id, role_id) VALUES ($1, $2, $3)
+           ON CONFLICT (user_id, tenant_id, role_id) DO NOTHING`,
+          [SEED_DATA.user.id, SEED_DATA.tenant.id, roleId]
+        );
+      }
+    }
+
+    console.log("Seeding platform operator...");
+    await client.query(
+      `INSERT INTO platform_operators (id, email, display_name, password_hash, is_active)
+       VALUES ($1, $2, $3, $4, true)
+       ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash, is_active = true`,
+      [
+        SEED_DATA.platformOperator.id,
+        SEED_DATA.platformOperator.email,
+        SEED_DATA.platformOperator.displayName,
+        await argon2.hash(SEED_DATA.platformOperator.password, argon2idOptions)
+      ]
+    );
 
     console.log("Seeding catalog and pricing...");
     await client.query(

@@ -3,18 +3,31 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { accountProfile, type AccountProfile } from "../lib/account";
+import { daysUntil, formatDate, statusLabels, subscriptionSummary, type SubscriptionSummary } from "../lib/saas";
 import { currentSession, logout, type AuthSession } from "../lib/session";
 import { NavIcon, type NavIconName } from "./nav-icon";
 
-const navigation: { label: string; icon: NavIconName; active: boolean }[] = [
-  { label: "Resumen", icon: "overview", active: true },
-  { label: "Catálogo", icon: "catalog", active: false },
-  { label: "Inventario", icon: "inventory", active: false },
-  { label: "Reporte global", icon: "report", active: false },
-  { label: "Compras", icon: "procurement", active: false },
-  { label: "Ventas y caja", icon: "cash", active: false },
-  { label: "Ventas POS", icon: "sales", active: false },
-  { label: "Auditoría", icon: "audit", active: false }
+interface NavigationItem {
+  label: string;
+  icon: NavIconName;
+  href?: string;
+  permission?: string;
+}
+
+// Opción sin href: es la página actual (Resumen). Con href pero sin permiso: "Próximo".
+const navigation: NavigationItem[] = [
+  { label: "Resumen", icon: "overview" },
+  { label: "Catálogo", icon: "catalog", href: "/catalog", permission: "catalog.manage" },
+  { label: "Inventario", icon: "inventory", href: "/inventory", permission: "inventory.manage" },
+  { label: "Reporte global", icon: "report", href: "/inventory/report", permission: "inventory.report.global" },
+  { label: "Compras", icon: "procurement", href: "/procurement", permission: "inventory.manage" },
+  { label: "Ventas y caja", icon: "cash", href: "/cash", permission: "cash.manage" },
+  { label: "Ventas POS", icon: "sales", href: "/sales", permission: "sales.confirm" },
+  { label: "Auditoría", icon: "audit", href: "/audit", permission: "audit.read" },
+  { label: "Usuarios", icon: "users", href: "/users", permission: "users.manage" },
+  { label: "Suscripción", icon: "billing", href: "/billing", permission: "billing.manage" },
+  { label: "Mi cuenta", icon: "account", href: "/account" }
 ];
 
 function shortId(value: string): string {
@@ -26,6 +39,8 @@ export function DashboardShell() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionError, setSessionError] = useState(false);
+  const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
+  const [account, setAccount] = useState<AccountProfile | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -33,6 +48,9 @@ export function DashboardShell() {
       .then((value) => {
         if (mounted) {
           setSession(value);
+          // El aviso es informativo: si falla, el panel sigue funcionando.
+          subscriptionSummary().then((summary) => mounted && setSubscription(summary)).catch(() => undefined);
+          accountProfile().then((profile) => mounted && setAccount(profile)).catch(() => undefined);
         }
       })
       .catch(() => {
@@ -77,37 +95,22 @@ export function DashboardShell() {
           <span className="status-dot" />
           <div>
             <small>Espacio activo</small>
-            <strong>{shortId(session.tenantId)}</strong>
+            <strong>{account?.tenantName ?? shortId(session.tenantId)}</strong>
           </div>
           <span className="switcher-arrow">⌄</span>
         </div>
         <nav className="main-nav" aria-label="Navegación principal">
           <p className="nav-label">Workspace</p>
-          {navigation.map((item) => (
-            item.label === "Catálogo" && session.permissions.includes("catalog.manage") ? <Link className="nav-item" href="/catalog" key={item.label}>
-              <span className="nav-icon"><NavIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-            </Link> : item.label === "Inventario" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/inventory" key={item.label}>
-              <span className="nav-icon"><NavIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-            </Link> : item.label === "Reporte global" && session.permissions.includes("inventory.report.global") ? <Link className="nav-item" href="/inventory/report" key={item.label}>
-              <span className="nav-icon"><NavIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-            </Link> : item.label === "Compras" && session.permissions.includes("inventory.manage") ? <Link className="nav-item" href="/procurement" key={item.label}>
-              <span className="nav-icon"><NavIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-            </Link> : item.label === "Ventas y caja" && session.permissions.includes("cash.manage") ? <Link className="nav-item" href="/cash" key={item.label}>
-              <span className="nav-icon"><NavIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-            </Link> : item.label === "Ventas POS" && session.permissions.includes("sales.confirm") ? <Link className="nav-item" href="/sales" key={item.label}>
-              <span className="nav-icon"><NavIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-            </Link> : <button className={`nav-item ${item.active ? "is-active" : ""}`} disabled={!item.active} key={item.label} type="button">
-              <span className="nav-icon"><NavIcon name={item.icon} /></span>
-              <span>{item.label}</span>
-              {!item.active ? <small>Próximo</small> : null}
-            </button>
-          ))}
+          {navigation.map((item) => {
+            const content = <><span className="nav-icon"><NavIcon name={item.icon} /></span><span>{item.label}</span></>;
+            if (!item.href) {
+              return <span aria-current="page" className="nav-item is-active" key={item.label}>{content}</span>;
+            }
+            if (!item.permission || session.permissions.includes(item.permission)) {
+              return <Link className="nav-item" href={item.href} key={item.label}>{content}</Link>;
+            }
+            return <button className="nav-item" disabled key={item.label} type="button">{content}<small>Sin acceso</small></button>;
+          })}
         </nav>
         <div className="sidebar-footer">
           <div className="secure-badge"><span>●</span> Sesión protegida</div>
@@ -122,9 +125,10 @@ export function DashboardShell() {
           </div>
           <div className="context-pill">
             <span className="status-dot" />
-            <div><small>Sucursal activa</small><strong>{shortId(session.branchId)}</strong></div>
+            <div><small>Sucursal activa</small><strong>{account?.branchName ?? shortId(session.branchId)}</strong></div>
           </div>
         </header>
+        {subscription ? <SubscriptionNotice subscription={subscription} canManage={session.permissions.includes("billing.manage")} /> : null}
         <section className="welcome-card">
           <div>
             <p className="section-kicker">Sesión validada</p>
@@ -150,6 +154,34 @@ export function DashboardShell() {
           </article>
         </section>
       </main>
+    </div>
+  );
+}
+
+function SubscriptionNotice({ subscription, canManage }: Readonly<{ subscription: SubscriptionSummary; canManage: boolean }>) {
+  const trialDays = daysUntil(subscription.trialEndsAt);
+  let tone = "info";
+  let message: string;
+  if (subscription.status === "TRIALING") {
+    message = trialDays !== null && trialDays > 0
+      ? `Te quedan ${trialDays} ${trialDays === 1 ? "día" : "días"} de prueba del plan ${subscription.plan.name}.`
+      : "Tu periodo de prueba terminó.";
+  } else if (subscription.status === "PAST_DUE") {
+    tone = "warning";
+    message = `Tu pago está vencido. Tienes hasta el ${formatDate(subscription.graceEndsAt)} para regularizarlo.`;
+  } else if (subscription.status === "SUSPENDED") {
+    tone = "danger";
+    message = "Tu suscripción está suspendida: los módulos están bloqueados hasta registrar el pago.";
+  } else if (subscription.openInvoices > 0) {
+    message = `Plan ${subscription.plan.name} activo. Tienes ${subscription.openInvoices} comprobante(s) por pagar.`;
+  } else {
+    return null;
+  }
+  return (
+    <div className={`subscription-notice notice-${tone}`} role="status">
+      <span className="notice-badge">{statusLabels[subscription.status]}</span>
+      <p>{message}</p>
+      {canManage ? <Link className="quiet-button" href="/billing">Ver suscripción</Link> : null}
     </div>
   );
 }
