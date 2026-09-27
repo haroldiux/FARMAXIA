@@ -234,9 +234,17 @@ export const warehouses = pgTable(
     branchId: uuid("branch_id").notNull(),
     name: varchar("name", { length: 160 }).notNull(),
     isDispatchEnabled: boolean("is_dispatch_enabled").default(true).notNull(),
+    warehouseType: varchar("warehouse_type", { length: 16 }).default("GENERAL").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt
   },
   (table) => [
+    check("warehouses_type_check", sql`${table.warehouseType} in ('GENERAL', 'CENTRAL', 'QUARANTINE', 'COLD')`),
+    check(
+      "warehouses_quarantine_no_dispatch_check",
+      sql`${table.warehouseType} <> 'QUARANTINE' OR NOT ${table.isDispatchEnabled}`
+    ),
     foreignKey({
       name: "warehouses_tenant_branch_fk",
       columns: [table.tenantId, table.branchId],
@@ -813,7 +821,8 @@ export const productCategories = pgTable(
     name: varchar("name", { length: 160 }).notNull(),
     isControlled: boolean("is_controlled").default(false).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
-    createdAt
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [
     foreignKey({
@@ -835,7 +844,22 @@ export const products = pgTable(
     name: varchar("name", { length: 200 }).notNull(),
     activeIngredient: varchar("active_ingredient", { length: 240 }),
     isActive: boolean("is_active").default(true).notNull(),
-    createdAt
+    createdAt,
+    // Migración 0017: ficha sanitaria, controlados, cadena de frío y códigos SIN.
+    genericName: varchar("generic_name", { length: 240 }),
+    concentration: varchar("concentration", { length: 120 }),
+    pharmaceuticalForm: varchar("pharmaceutical_form", { length: 80 }),
+    laboratory: varchar("laboratory", { length: 160 }),
+    sanitaryRegistration: varchar("sanitary_registration", { length: 80 }),
+    saleClassification: varchar("sale_classification", { length: 24 }).default("OTC").notNull(),
+    isControlled: boolean("is_controlled").default(false).notNull(),
+    requiresColdChain: boolean("requires_cold_chain").default(false).notNull(),
+    coldChainMinCelsius: numeric("cold_chain_min_celsius", { precision: 4, scale: 1 }),
+    coldChainMaxCelsius: numeric("cold_chain_max_celsius", { precision: 4, scale: 1 }),
+    sinActivityCode: varchar("sin_activity_code", { length: 10 }),
+    sinProductCode: varchar("sin_product_code", { length: 10 }),
+    sinUnitCode: varchar("sin_unit_code", { length: 10 }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [
     foreignKey({
@@ -861,7 +885,9 @@ export const productPresentations = pgTable(
     name: varchar("name", { length: 160 }).notNull(),
     baseUnitFactor: bigint("base_unit_factor", { mode: "number" }).notNull(),
     isSellable: boolean("is_sellable").default(true).notNull(),
-    createdAt
+    createdAt,
+    isActive: boolean("is_active").default(true).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [
     foreignKey({
@@ -1242,6 +1268,7 @@ export const inventoryReconciliations = pgTable(
     deltaQuantity: bigint("delta_quantity", { mode: "number" }).notNull(),
     reason: varchar("reason", { length: 255 }).notNull(),
     status: varchar("status", { length: 24 }).default("POSTED").notNull(),
+    countId: uuid("count_id"),
     createdAt
   },
   (table) => [
@@ -1319,9 +1346,21 @@ export const inventoryOperationEvents = pgTable(
     quantityBase: bigint("quantity_base", { mode: "number" }),
     temperatureCelsius: numeric("temperature_celsius", { precision: 8, scale: 2 }),
     idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    actNumber: varchar("act_number", { length: 32 }),
+    createdByUserId: uuid("created_by_user_id"),
+    disposalMethod: varchar("disposal_method", { length: 24 }),
     createdAt
   },
   (table) => [
+    foreignKey({
+      name: "inventory_operation_events_created_by_fk",
+      columns: [table.createdByUserId],
+      foreignColumns: [users.id]
+    }),
+    check(
+      "inventory_operation_events_disposal_check",
+      sql`${table.disposalMethod} is null or ${table.disposalMethod} in ('DESTRUCTION', 'SUPPLIER_RETURN', 'OTHER')`
+    ),
     foreignKey({
       name: "inventory_operation_events_tenant_warehouse_fk",
       columns: [table.tenantId, table.warehouseId],
@@ -1354,6 +1393,110 @@ export const inventoryOperationEvents = pgTable(
       "inventory_operation_events_quantity_check",
       sql`${table.quantityBase} is null or ${table.quantityBase} > 0`
     )
+  ]
+);
+
+export const inventoryCounts = pgTable(
+  "inventory_counts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    number: varchar("number", { length: 32 }).notNull(),
+    status: varchar("status", { length: 16 }).default("OPEN").notNull(),
+    notes: varchar("notes", { length: 500 }),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt,
+    submittedByUserId: uuid("submitted_by_user_id"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    closedByUserId: uuid("closed_by_user_id"),
+    closedAt: timestamp("closed_at", { withTimezone: true })
+  },
+  (table) => [
+    unique("inventory_counts_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("inventory_counts_tenant_number_unique").on(table.tenantId, table.number),
+    check("inventory_counts_status_check", sql`${table.status} in ('OPEN', 'SUBMITTED', 'APPROVED', 'CANCELED')`),
+    uniqueIndex("inventory_counts_one_active_per_warehouse")
+      .on(table.tenantId, table.warehouseId)
+      .where(sql`${table.status} in ('OPEN', 'SUBMITTED')`),
+    foreignKey({
+      name: "inventory_counts_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "inventory_counts_warehouse_fk",
+      columns: [table.tenantId, table.warehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    })
+  ]
+);
+
+export const inventoryCountLines = pgTable(
+  "inventory_count_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    countId: uuid("count_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    countedQuantity: bigint("counted_quantity", { mode: "number" }),
+    expectedQuantity: bigint("expected_quantity", { mode: "number" }),
+    countedByUserId: uuid("counted_by_user_id"),
+    countedAt: timestamp("counted_at", { withTimezone: true })
+  },
+  (table) => [
+    unique("inventory_count_lines_count_batch_unique").on(table.countId, table.batchId),
+    check(
+      "inventory_count_lines_counted_check",
+      sql`${table.countedQuantity} is null or ${table.countedQuantity} >= 0`
+    ),
+    foreignKey({
+      name: "inventory_count_lines_count_fk",
+      columns: [table.tenantId, table.branchId, table.countId],
+      foreignColumns: [inventoryCounts.tenantId, inventoryCounts.branchId, inventoryCounts.id]
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "inventory_count_lines_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    })
+  ]
+);
+
+export const inventoryAlerts = pgTable(
+  "inventory_alerts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    warehouseId: uuid("warehouse_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    alertType: varchar("alert_type", { length: 16 }).notNull(),
+    expiresOn: date("expires_on").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    createdAt,
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    acknowledgedByUserId: uuid("acknowledged_by_user_id"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true })
+  },
+  (table) => [
+    check("inventory_alerts_type_check", sql`${table.alertType} in ('EXPIRING', 'EXPIRED')`),
+    uniqueIndex("inventory_alerts_one_open")
+      .on(table.tenantId, table.warehouseId, table.batchId, table.alertType)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    index("inventory_alerts_branch_open_idx").on(table.tenantId, table.branchId, table.resolvedAt, table.createdAt),
+    foreignKey({
+      name: "inventory_alerts_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "inventory_alerts_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    })
   ]
 );
 

@@ -176,7 +176,7 @@ export class SalesService {
 
     const warehouse = await client.query<{ id: string }>(
       `select id from warehouses
-       where tenant_id = $1 and branch_id = $2 and id = $3 and is_dispatch_enabled = true
+       where tenant_id = $1 and branch_id = $2 and id = $3 and is_dispatch_enabled = true and is_active
        for key share`,
       [scope.tenantId, scope.branchId, input.warehouseId]
     );
@@ -200,7 +200,13 @@ export class SalesService {
       const presentation = await client.query<{ id: string; factor: string }>(
         `select id, base_unit_factor::text as factor
          from product_presentations
-         where tenant_id = $1 and id = $2 and is_sellable = true
+         where tenant_id = $1 and id = $2 and is_sellable = true and is_active = true
+           and exists (
+             select 1 from products
+             where products.tenant_id = product_presentations.tenant_id
+               and products.id = product_presentations.product_id
+               and products.is_active
+           )
          for key share`,
         [scope.tenantId, line.presentationId]
       );

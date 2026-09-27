@@ -105,7 +105,7 @@ export class OnboardingService {
           `insert into branches (tenant_id, legal_entity_id, code, name) values ($1, $2, 'SUC-001', $3) returning id`,
           [tenant, legalEntity, input.branchName]);
         await client.query(
-          "insert into warehouses (tenant_id, branch_id, name, is_dispatch_enabled) values ($1, $2, 'Almacén Central', true)",
+          "insert into warehouses (tenant_id, branch_id, name, is_dispatch_enabled, warehouse_type) values ($1, $2, 'Almacén Central', true, 'CENTRAL')",
           [tenant, branch]
         );
         await client.query(

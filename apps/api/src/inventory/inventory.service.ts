@@ -6,6 +6,7 @@ import {
   type IdempotentExecutionResult
 } from "../transversal/idempotency.service.js";
 import { AuditService } from "../transversal/audit.service.js";
+import { DocumentSequenceService } from "../transversal/document-sequence.service.js";
 
 export interface ReconcileInput {
   idempotencyKey: string;
@@ -45,6 +46,7 @@ export interface WarehouseSummary {
   id: string;
   name: string;
   isDispatchEnabled: boolean;
+  warehouseType: string;
 }
 
 export interface WarehouseListResult {
@@ -114,16 +116,21 @@ export interface BatchStatusResult {
   status: "AVAILABLE" | "QUARANTINED";
 }
 
+export type DisposalMethod = "DESTRUCTION" | "SUPPLIER_RETURN" | "OTHER";
+
 export interface WasteInput {
   idempotencyKey: string;
   warehouseId: string;
   batchId: string;
   quantityBase: number;
   reason: string;
+  /** Cómo se dispuso el producto dado de baja (aparece en el acta). */
+  disposalMethod?: DisposalMethod;
 }
 
 export interface WasteResult {
   wasteEventId: string;
+  actNumber: string;
   warehouseId: string;
   batchId: string;
   quantityBase: number;
@@ -233,6 +240,7 @@ interface WarehouseRow {
   id: string;
   name: string;
   isDispatchEnabled: boolean;
+  warehouseType: string;
 }
 
 interface BatchStatusRow {
@@ -315,6 +323,16 @@ function temperature(value: number | undefined, reason: QuarantineReasonCode): n
   return value;
 }
 
+function disposalMethod(value: string | undefined): DisposalMethod | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (!["DESTRUCTION", "SUPPLIER_RETURN", "OTHER"].includes(value)) {
+    throw new Error("Disposal method is not supported.");
+  }
+  return value as DisposalMethod;
+}
+
 function futureTimestamp(value: string): string {
   const normalized = value.trim();
   const timestamp = new Date(normalized);
@@ -360,6 +378,7 @@ function reportPage(value: number | undefined, field: string, fallback: number, 
 export class InventoryService {
   private readonly idempotency = new IdempotencyService();
   private readonly audit = new AuditService();
+  private readonly sequences = new DocumentSequenceService();
 
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
@@ -420,9 +439,10 @@ export class InventoryService {
       const result = await client.query<WarehouseRow>(
         `select id,
                 name,
-                is_dispatch_enabled as "isDispatchEnabled"
+                is_dispatch_enabled as "isDispatchEnabled",
+                warehouse_type as "warehouseType"
          from warehouses
-         where tenant_id = $1 and branch_id = $2
+         where tenant_id = $1 and branch_id = $2 and is_active
          order by name asc, id asc`,
         [scope.tenantId, scope.branchId]
       );
@@ -688,7 +708,8 @@ export class InventoryService {
       warehouseId: text(input.warehouseId, "Warehouse ID", 64),
       batchId: text(input.batchId, "Batch ID", 64),
       quantityBase: positiveQuantity(input.quantityBase, "Waste quantity"),
-      reason: text(input.reason, "Reason", 255)
+      reason: text(input.reason, "Reason", 255),
+      disposalMethod: disposalMethod(input.disposalMethod)
     };
   }
 
@@ -725,7 +746,9 @@ export class InventoryService {
     const presentationResult = await client.query<PresentationFactorRow>(
       `select base_unit_factor as "baseUnitFactor"
        from product_presentations
-       where tenant_id = $1 and id = $2 and is_sellable = true`,
+       where tenant_id = $1 and id = $2 and is_sellable = true
+         and is_active = true
+         and exists (select 1 from products where products.tenant_id = product_presentations.tenant_id and products.id = product_presentations.product_id and products.is_active)`,
       [scope.tenantId, input.presentationId]
     );
     const presentation = requireRow(
@@ -755,7 +778,7 @@ export class InventoryService {
          and b.status = 'AVAILABLE'
          and b.expires_on >= current_date
          and w.branch_id = $4
-         and w.is_dispatch_enabled = true
+         and w.is_dispatch_enabled = true and w.is_active
          and ib.quantity_base > ib.reserved_base
        order by b.expires_on asc, ib.batch_id asc
        for update of ib, b`,
@@ -950,11 +973,13 @@ export class InventoryService {
     if (available < input.quantityBase) {
       throw new Error("Waste quantity exceeds available free stock.");
     }
+    // Cada merma genera un acta de baja con número correlativo por sucursal.
+    const actNumber = await this.nextActNumber(client, scope);
     const eventResult = await client.query<OperationEventRow>(
       `insert into inventory_operation_events
          (tenant_id, warehouse_id, batch_id, operation_type, reason,
-          quantity_base, idempotency_key)
-       values ($1, $2, $3, 'WASTE', $4, $5, $6)
+          quantity_base, idempotency_key, act_number, created_by_user_id, disposal_method)
+       values ($1, $2, $3, 'WASTE', $4, $5, $6, $7, $8, $9)
        returning id`,
       [
         scope.tenantId,
@@ -962,7 +987,10 @@ export class InventoryService {
         input.batchId,
         input.reason,
         input.quantityBase,
-        input.idempotencyKey
+        input.idempotencyKey,
+        actNumber,
+        scope.userId,
+        input.disposalMethod ?? null
       ]
     );
     const event = requireRow(eventResult.rows[0], "Waste event was not created.");
@@ -990,6 +1018,8 @@ export class InventoryService {
         warehouseId: input.warehouseId,
         batchId: input.batchId,
         quantityBase: input.quantityBase,
+        actNumber,
+        disposalMethod: input.disposalMethod ?? null,
         quantityAfter: Number(balance.quantityBase),
         reservedAfter: Number(balance.reservedBase)
       }
@@ -998,6 +1028,7 @@ export class InventoryService {
       statusCode: 201,
       body: {
         wasteEventId: event.id,
+        actNumber,
         warehouseId: input.warehouseId,
         batchId: input.batchId,
         quantityBase: Number(balance.quantityBase),
@@ -1216,10 +1247,32 @@ export class InventoryService {
     });
   }
 
+  private async nextActNumber(client: PoolClient, scope: TenantScope): Promise<string> {
+    const branch = await client.query<{ code: string }>(
+      "select code from branches where tenant_id = $1 and id = $2",
+      [scope.tenantId, scope.branchId]
+    );
+    const number = await this.sequences.nextNumberInTransaction(client, "WASTE_ACT");
+    return `AB-${branch.rows[0]?.code ?? "SUC"}-${number.toString().padStart(6, "0")}`;
+  }
+
+  /**
+   * Ajuste de un lote dentro de una transacción ya abierta. Lo usan la conciliación
+   * individual y la aprobación de un conteo físico.
+   */
+  async applyReconciliation(
+    client: PoolClient,
+    scope: TenantScope,
+    input: ReconcileInput & { countId?: string }
+  ): Promise<ReconcileResult> {
+    const result = await this.postReconciliation(client, scope, input);
+    return result.body as ReconcileResult;
+  }
+
   private async postReconciliation(
     client: PoolClient,
     scope: TenantScope,
-    input: ReconcileInput
+    input: ReconcileInput & { countId?: string }
   ): Promise<IdempotentExecutionResult<ReconcileResult>> {
     const balanceResult = await client.query<BalanceRow>(
       `select quantity_base as "quantityBase", reserved_base as "reservedBase"
@@ -1238,8 +1291,8 @@ export class InventoryService {
     const reconciliationResult = await client.query<ReconciliationRow>(
       `insert into inventory_reconciliations
          (tenant_id, warehouse_id, batch_id, idempotency_key,
-          expected_quantity, counted_quantity, delta_quantity, reason)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+          expected_quantity, counted_quantity, delta_quantity, reason, count_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        returning id`,
       [
         scope.tenantId,
@@ -1249,7 +1302,8 @@ export class InventoryService {
         expectedQuantity,
         input.countedQuantity,
         deltaQuantity,
-        input.reason
+        input.reason,
+        input.countId ?? null
       ]
     );
     const reconciliation = requireRow(

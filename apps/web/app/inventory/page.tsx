@@ -2,15 +2,21 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { InventoryNav } from "../components/inventory-nav";
 import { currentSession, logout, type AuthSession } from "../lib/session";
 import {
+  acknowledgeAlert,
+  disposalMethodLabels,
+  listInventoryAlerts,
   listExpiryAlerts,
   listWarehouses,
   quarantineBatch,
   recordWaste,
   releaseQuarantine,
   type BatchStatus,
+  type DisposalMethod,
   type ExpiryAlert,
+  type InventoryAlert,
   type QuarantineReasonCode,
   type Warehouse
 } from "../lib/inventory";
@@ -69,6 +75,9 @@ export default function InventoryPage() {
   const [reason, setReason] = useState("");
   const [temperatureCelsius, setTemperatureCelsius] = useState("");
   const [wasteQuantity, setWasteQuantity] = useState("1");
+  const [disposalMethod, setDisposalMethod] = useState<DisposalMethod>("DESTRUCTION");
+  const [lastAct, setLastAct] = useState<{ id: string; number: string } | null>(null);
+  const [autoAlerts, setAutoAlerts] = useState<InventoryAlert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -95,10 +104,11 @@ export default function InventoryPage() {
           setLoading(false);
           return;
         }
-        const result = await listWarehouses();
+        const [result, automatic] = await Promise.all([listWarehouses(), listInventoryAlerts(true)]);
         if (!mounted) {
           return;
         }
+        setAutoAlerts(automatic.items);
         setWarehouses(result.items);
         const firstWarehouse = result.items[0];
         if (firstWarehouse) {
@@ -162,6 +172,8 @@ export default function InventoryPage() {
     setReasonCode("QUALITY");
     setTemperatureCelsius("");
     setWasteQuantity("1");
+    setDisposalMethod("DESTRUCTION");
+    setLastAct(null);
     setNotice(null);
     setError(null);
   }
@@ -200,19 +212,31 @@ export default function InventoryPage() {
           reason: reason.trim()
         });
       } else {
-        await recordWaste(action.alert.batchId, {
+        const waste = await recordWaste(action.alert.batchId, {
           warehouseId: selectedWarehouseId,
           quantityBase: Number(wasteQuantity),
-          reason: reason.trim()
+          reason: reason.trim(),
+          disposalMethod
         });
+        setLastAct({ id: waste.wasteEventId, number: waste.actNumber });
       }
       setNotice(`${actionLabel(action.kind)} aplicado correctamente.`);
+      setAutoAlerts((await listInventoryAlerts(true)).items);
       setAction(null);
       await loadAlerts(selectedWarehouseId, horizonDays);
     } catch (reasonValue) {
       setError(reasonValue instanceof Error ? reasonValue.message : "No pudimos aplicar la operación.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function acknowledge(alert: InventoryAlert): Promise<void> {
+    try {
+      await acknowledgeAlert(alert.id);
+      setAutoAlerts((await listInventoryAlerts(true)).items);
+    } catch (reasonValue) {
+      setError(reasonValue instanceof Error ? reasonValue.message : "No pudimos marcar la alerta.");
     }
   }
 
@@ -243,8 +267,32 @@ export default function InventoryPage() {
         <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
       </header>
 
+      <InventoryNav />
       {error ? <p className="form-error inventory-message" role="alert">{error}</p> : null}
-      {notice ? <p className="form-success inventory-message" role="status">{notice}</p> : null}
+      {notice ? <p className="form-success inventory-message" role="status">{notice}{lastAct ? <> · <Link href={`/inventory/waste-acts/${lastAct.id}`}>Ver acta {lastAct.number}</Link></> : null}</p> : null}
+
+      <section className="panel auto-alerts" aria-label="Alertas automáticas">
+        <div className="panel-heading">
+          <div><p className="section-kicker">Alertas automáticas</p><h2>Lotes vencidos o por vencer</h2></div>
+          <span className="panel-count">{autoAlerts.filter((item) => !item.acknowledgedAt).length.toString().padStart(2, "0")}</span>
+        </div>
+        {autoAlerts.length ? (
+          <div className="category-list">
+            {autoAlerts.map((item) => (
+              <div className={`category-row ${item.acknowledgedAt ? "is-inactive" : ""}`} key={item.id}>
+                <div>
+                  <strong>
+                    <span className={`alert-chip ${item.alertType === "EXPIRED" ? "is-expired" : "is-expiring"}`}>{item.alertType === "EXPIRED" ? "Vencido" : `Vence en ${item.daysToExpiry} ${item.daysToExpiry === 1 ? "día" : "días"}`}</span>
+                    {" "}{item.productName} · {item.presentationName}
+                  </strong>
+                  <small>Lote {item.lotCode} · {item.quantityBase} {item.quantityBase === 1 ? "unidad" : "unidades"} · {item.warehouseName} · vence {formatDate(item.expiresOn)}{item.acknowledgedAt ? " · revisada" : ""}</small>
+                </div>
+                {item.acknowledgedAt ? null : <div className="user-actions"><button className="row-action" onClick={() => void acknowledge(item)} type="button">Marcar revisada</button></div>}
+              </div>
+            ))}
+          </div>
+        ) : <p className="field-hint">Sin alertas. El sistema revisa los vencimientos cada hora (30 días de anticipación) y avisa aquí y en el resumen.</p>}
+      </section>
 
       <section className="inventory-toolbar" aria-label="Filtros de inventario">
         <label className="inventory-filter"><span>Almacén</span><select value={selectedWarehouseId} onChange={(event) => changeWarehouse(event.target.value)}><option value="">Selecciona un almacén</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.isDispatchEnabled ? " · despacho activo" : " · solo resguardo"}</option>)}</select></label>
@@ -272,6 +320,7 @@ export default function InventoryPage() {
             {action.kind === "QUARANTINE" ? <label className="field"><span>Motivo</span><select value={reasonCode} onChange={(event) => setReasonCode(event.target.value as QuarantineReasonCode)}><option value="QUALITY">Calidad</option><option value="COLD_CHAIN">Cadena de frío</option><option value="DAMAGE">Daño físico</option><option value="OTHER">Otro</option></select></label> : null}
             {action.kind === "QUARANTINE" && reasonCode === "COLD_CHAIN" ? <label className="field"><span>Temperatura registrada (°C)</span><input required type="number" step="0.1" value={temperatureCelsius} onChange={(event) => setTemperatureCelsius(event.target.value)} placeholder="Ej. 8.5" /></label> : null}
             {action.kind === "WASTE" ? <label className="field"><span>Cantidad base</span><input min="1" required type="number" value={wasteQuantity} onChange={(event) => setWasteQuantity(event.target.value)} /></label> : null}
+            {action.kind === "WASTE" ? <label className="field"><span>Destino del producto (acta de baja)</span><select value={disposalMethod} onChange={(event) => setDisposalMethod(event.target.value as DisposalMethod)}>{Object.entries(disposalMethodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label> : null}
             <label className="field"><span>Detalle de la operación</span><textarea required value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Escribe el motivo para dejar trazabilidad." rows={4} /></label>
             <button className="primary-button" disabled={saving} type="submit">{saving ? "Aplicando…" : "Confirmar acción"}<span>↗</span></button>
           </form></aside> : <aside className="inventory-action-panel panel inventory-action-placeholder"><span className="empty-symbol">✦</span><h2>Selecciona una acción</h2><p>Las operaciones quedan auditadas y nunca modifican reservas por accidente.</p></aside>}

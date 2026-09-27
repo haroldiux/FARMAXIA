@@ -2,46 +2,38 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { authenticatedFetch, currentSession, logout, type AuthSession } from "../lib/session";
+import { currentSession, logout, type AuthSession } from "../lib/session";
 import {
   createPriceList,
   findBarcode,
+  listCategories,
   listPriceLists,
+  listProducts,
   registerBarcode,
+  saleClassificationLabels,
   setPrice,
   type BarcodeLookup,
-  type CatalogPriceList
+  type CatalogCategory,
+  type CatalogPriceList,
+  type CatalogProductSummary
 } from "../lib/catalog";
 
-interface Presentation {
-  presentationId: string;
-  name: string;
-  baseUnitFactor: number;
-  isSellable: boolean;
-}
-
-interface Product {
-  productId: string;
-  name: string;
-  activeIngredient: string | null;
-  categoryName: string | null;
-  presentations: Presentation[];
-}
-
 interface ProductPage {
-  items: Product[];
+  items: CatalogProductSummary[];
   total: number;
   limit: number;
   offset: number;
 }
+
+const emptyFilters = { categoryId: "", controlled: false, coldChain: false, includeInactive: false };
 
 export default function CatalogPage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [products, setProducts] = useState<ProductPage | null>(null);
   const [search, setSearch] = useState("");
   const [draftSearch, setDraftSearch] = useState("");
-  const [productName, setProductName] = useState("");
-  const [activeIngredient, setActiveIngredient] = useState("");
+  const [filters, setFilters] = useState(emptyFilters);
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +55,7 @@ export default function CatalogPage() {
       .then(async (value) => {
         setSession(value);
         try {
-          await Promise.all([loadProducts(""), loadPriceLists()]);
+          await Promise.all([loadProducts("", emptyFilters), loadPriceLists(), listCategories().then(setCategories)]);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : "No pudimos cargar el catálogo.");
         }
@@ -74,17 +66,15 @@ export default function CatalogPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function loadProducts(value: string): Promise<void> {
+  async function loadProducts(value: string, nextFilters: typeof emptyFilters): Promise<void> {
     setError(null);
-    const params = new URLSearchParams({ limit: "50", offset: "0" });
-    if (value.trim()) {
-      params.set("search", value.trim());
-    }
-    const response = await authenticatedFetch(`/api/v1/catalog/products?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error(response.status === 403 ? "Tu sesión no tiene permiso para consultar el catálogo." : "No pudimos cargar el catálogo.");
-    }
-    setProducts((await response.json()) as ProductPage);
+    setProducts(await listProducts({ search: value, limit: 50, ...nextFilters }));
+  }
+
+  function changeFilters(patch: Partial<typeof emptyFilters>): void {
+    const next = { ...filters, ...patch };
+    setFilters(next);
+    loadProducts(search, next).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "No pudimos cargar el catálogo."));
   }
 
   async function loadPriceLists(): Promise<void> {
@@ -97,37 +87,9 @@ export default function CatalogPage() {
     event.preventDefault();
     setSearch(draftSearch);
     try {
-      await loadProducts(draftSearch);
+      await loadProducts(draftSearch, filters);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No pudimos cargar el catálogo.");
-    }
-  }
-
-  async function createProduct(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const response = await authenticatedFetch("/api/v1/catalog/products", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: productName,
-          activeIngredient: activeIngredient || undefined
-        })
-      });
-      if (!response.ok) {
-        throw new Error(response.status === 403 ? "Tu sesión no tiene permiso para crear productos." : "No pudimos guardar el producto.");
-      }
-      setProductName("");
-      setActiveIngredient("");
-      setNotice("Producto creado. Ya aparece en el catálogo.");
-      await loadProducts(search);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "No pudimos guardar el producto.");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -224,40 +186,56 @@ export default function CatalogPage() {
       <header className="catalog-header">
         <div>
           <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
-          <p className="eyebrow">F2 · Catálogo</p>
+          <p className="eyebrow">Catálogo</p>
           <h1>Productos que sí puedes rastrear.</h1>
-          <p className="catalog-lede">Consulta la base activa de tu organización y prepara sus presentaciones para las operaciones futuras.</p>
+          <p className="catalog-lede">Ficha sanitaria, presentaciones y códigos de cada producto de tu farmacia.</p>
         </div>
-        <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
+        <div className="header-actions">
+          {canManage ? <Link className="quiet-button" href="/catalog/categories">Categorías</Link> : null}
+          {canManage ? <Link className="secondary-button" href="/catalog/products/new">+ Nuevo producto</Link> : null}
+          <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
+        </div>
       </header>
       <section className="catalog-toolbar">
         <form className="catalog-search" onSubmit={submitSearch}>
-          <label htmlFor="catalog-search">Buscar por producto o principio activo</label>
+          <label htmlFor="catalog-search">Buscar por nombre, genérico, principio activo, laboratorio o código de barras</label>
           <div><input id="catalog-search" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} placeholder="Ej. paracetamol" /><button className="search-button" type="submit">Buscar</button></div>
         </form>
-        <div className="catalog-counter"><strong>{products.total.toString().padStart(2, "0")}</strong><span>productos activos</span></div>
+        <div className="catalog-counter"><strong>{products.total.toString().padStart(2, "0")}</strong><span>{filters.includeInactive ? "productos" : "productos activos"}</span></div>
+        <div className="catalog-filters">
+          <label className="inventory-filter"><span>Categoría</span>
+            <select value={filters.categoryId} onChange={(event) => changeFilters({ categoryId: event.target.value })}>
+              <option value="">Todas</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
+          </label>
+          <label className="filter-check"><input checked={filters.controlled} onChange={(event) => changeFilters({ controlled: event.target.checked })} type="checkbox" /> Controlados</label>
+          <label className="filter-check"><input checked={filters.coldChain} onChange={(event) => changeFilters({ coldChain: event.target.checked })} type="checkbox" /> Cadena de frío</label>
+          <label className="filter-check"><input checked={filters.includeInactive} onChange={(event) => changeFilters({ includeInactive: event.target.checked })} type="checkbox" /> Mostrar desactivados</label>
+        </div>
       </section>
       {error ? <p className="form-error catalog-message" role="alert">{error}</p> : null}
       {notice ? <p className="form-success catalog-message" role="status">{notice}</p> : null}
-      <div className="catalog-layout">
-        <section className="product-list-panel">
-          <div className="panel-heading"><div><p className="section-kicker">Inventario base</p><h2>Catálogo activo</h2></div><span className="panel-count">{products.items.length.toString().padStart(2, "0")}</span></div>
-          {products.items.length ? <div className="product-list">{products.items.map((product) => <article className="product-row" key={product.productId}>
+      <section className="product-list-panel catalog-list-full">
+        <div className="panel-heading"><div><p className="section-kicker">Catálogo</p><h2>Productos</h2></div><span className="panel-count">{products.items.length.toString().padStart(2, "0")}</span></div>
+        {products.items.length ? <div className="product-list">{products.items.map((product) => (
+          <Link className={`product-row product-row-link ${product.isActive ? "" : "is-inactive"}`} href={`/catalog/products/${product.productId}`} key={product.productId}>
             <div className="product-avatar">{product.name.slice(0, 1).toUpperCase()}</div>
-            <div className="product-copy"><h3>{product.name}</h3><p>{product.activeIngredient ?? "Principio activo no registrado"}</p><small>{product.categoryName ?? "Sin categoría"} · {product.presentations.length} {product.presentations.length === 1 ? "presentación" : "presentaciones"}</small></div>
-            <div className="presentation-chips">{product.presentations.map((presentation) => <span key={presentation.presentationId}>{presentation.name} · ×{presentation.baseUnitFactor}</span>)}</div>
-          </article>)}</div> : <div className="catalog-empty"><span>✦</span><h3>No encontramos productos.</h3><p>Prueba otra búsqueda o crea el primer producto desde el panel lateral.</p></div>}
-        </section>
-        <aside className="create-product-panel">
-          <div className="panel-heading"><div><p className="section-kicker">Alta rápida</p><h2>Nuevo producto</h2></div><span className="sparkle">✦</span></div>
-          {canManage ? <form className="product-form" onSubmit={createProduct}>
-            <label className="field"><span>Nombre comercial</span><input required value={productName} onChange={(event) => setProductName(event.target.value)} placeholder="Ej. Paracetamol" /></label>
-            <label className="field"><span>Principio activo <small>opcional</small></span><input value={activeIngredient} onChange={(event) => setActiveIngredient(event.target.value)} placeholder="Ej. Paracetamol 500 mg" /></label>
-            <p className="form-note">La categoría y las presentaciones se pueden completar después desde el flujo de catálogo.</p>
-            <button className="primary-button" disabled={saving} type="submit">{saving ? "Guardando…" : "Crear producto"}<span>↗</span></button>
-          </form> : <p className="empty-copy">Tu sesión puede consultar el catálogo, pero no tiene permiso para crear productos.</p>}
-        </aside>
-      </div>
+            <div className="product-copy">
+              <h3>{product.name}{product.concentration ? <span className="title-detail"> {product.concentration}</span> : null}</h3>
+              <p>{[product.genericName ?? product.activeIngredient, product.pharmaceuticalForm, product.laboratory].filter(Boolean).join(" · ") || "Ficha sin completar"}</p>
+              <div className="product-badges">
+                <span className={`product-badge badge-class-${product.saleClassification.toLowerCase()}`}>{saleClassificationLabels[product.saleClassification]}</span>
+                {product.isControlled ? <span className="product-badge badge-controlled">Controlado</span> : null}
+                {product.requiresColdChain ? <span className="product-badge badge-cold">Frío</span> : null}
+                {!product.isActive ? <span className="product-badge badge-inactive">Desactivado</span> : null}
+                <small>{product.categoryName ?? "Sin categoría"}</small>
+              </div>
+            </div>
+            <div className="presentation-chips">{product.presentations.length ? product.presentations.map((presentation) => <span key={presentation.presentationId}>{presentation.name} · ×{presentation.baseUnitFactor}</span>) : <span className="chip-warning">Sin presentaciones</span>}</div>
+          </Link>
+        ))}</div> : <div className="catalog-empty"><span>✦</span><h3>No encontramos productos.</h3><p>{canManage ? "Prueba otra búsqueda o crea un producto nuevo." : "Prueba otra búsqueda."}</p></div>}
+      </section>
       <section className="catalog-layout" aria-label="Precios y códigos de barras">
         <section className="product-list-panel">
           <div className="panel-heading"><div><p className="section-kicker">Precios operativos</p><h2>Vigencias y listas</h2></div><span className="panel-count">{priceLists.length.toString().padStart(2, "0")}</span></div>

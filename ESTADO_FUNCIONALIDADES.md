@@ -1,7 +1,7 @@
 # FARMAXIA — Estado de funcionalidades
 
-**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 27 de septiembre de 2026 (módulos 0 y 1 completados)
-**Rama revisada:** `Denil` (commit `240f272`, basado en `main` `38709c8`); módulos 0 y 1 en la rama `denil-core-saas`
+**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 27 de septiembre de 2026 (módulos 0, 1, 2 y 3 completados)
+**Rama revisada:** `Denil` (commit `240f272`, basado en `main` `38709c8`); módulos 0 y 1 en el commit `83ad80f` y módulos 2 y 3 sin commit en `Denil`
 **Autor:** Denilson Godoy
 
 ## 1. Propósito de este documento
@@ -36,8 +36,8 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 |---|:-:|:-:|:-:|
 | 0. Core SaaS | 13 | 0 | 0 |
 | 1. Seguridad y roles | 9 | 0 | 0 |
-| 2. Catálogo farmacéutico | 4 | 2 | 4 |
-| 3. Inventario, lotes y almacenes | 6 | 2 | 3 |
+| 2. Catálogo farmacéutico | 10 | 0 | 0 |
+| 3. Inventario, lotes y almacenes | 11 | 0 | 0 |
 | 4. Compras y proveedores | 3 | 2 | 4 |
 | 5. Punto de venta y caja | 5 | 0 | 10 |
 | 6. Facturación SIAT | 0 | 0 | 8 |
@@ -47,9 +47,9 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
 | 11. Analítica | 1 | 0 | 5 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **41** | **7** | **54** |
+| **Total** | **52** | **3** | **47** |
 
-**Avance aproximado: ~40%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~50%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -85,16 +85,16 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 ### 2. Catálogo farmacéutico
 
-- ✅ Productos con nombre comercial y principio activo
+- ✅ Productos con nombre comercial, genérico (DCI) y principio activo
 - ✅ Listas de precios con vigencias, sin superposición y con prioridad de la sucursal sobre la global
-- ✅ Códigos de barras: registro y búsqueda
-- ✅ Búsqueda por nombre o principio activo
-- 🟡 Presentaciones con factor de conversión (caja / blíster / unidad): la API las crea, la web no
-- 🟡 Categorías y tabla de homologación: existen en la API, sin pantalla
-- ❌ Ficha sanitaria: concentración, forma farmacéutica, laboratorio, registro sanitario, clasificación de venta
-- ❌ Marcas de medicamento controlado y de cadena de frío
-- ❌ Códigos del SIN (homologación tributaria)
-- ❌ Editar y desactivar productos
+- ✅ Códigos de barras: registro desde el detalle de cada presentación y búsqueda
+- ✅ Búsqueda por nombre, genérico, principio activo, laboratorio o código de barras, con filtros por categoría, controlados, cadena de frío y desactivados
+- ✅ Presentaciones con factor de conversión (caja / blíster / unidad): alta, renombrar, vender o no, desactivar. El factor no se edita (D35)
+- ✅ Pantalla de categorías (`/catalog/categories`): alta, renombrar, marcar controlada y desactivar. La homologación con el SIN se cubre con los códigos SIN de la ficha
+- ✅ Ficha sanitaria: concentración, forma farmacéutica, laboratorio, registro sanitario y clasificación de venta (lista provisional, D32)
+- ✅ Marcas de medicamento controlado (por producto o categoría) y de cadena de frío con rango de temperatura. Aún no bloquean la venta (D34, módulo 8)
+- ✅ Códigos del SIN (actividad, producto y unidad de medida) guardados en la ficha; se validarán con SIAT (D33)
+- ✅ Editar la ficha con historial de cambios en Auditoría, y desactivar/reactivar productos sin perder su historial
 
 ### 3. Inventario, lotes y almacenes
 
@@ -102,13 +102,13 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 - ✅ Motor FEFO transaccional (primero vence, primero sale) con bloqueo de filas
 - ✅ Alertas de vencimiento a 7 / 30 / 90 días
 - ✅ Cuarentena, liberación y registro de incidencias de cadena de frío
-- ✅ Mermas y bajas con motivo, auditadas
+- ✅ Mermas y bajas con motivo y destino (destrucción, devolución, otro), auditadas
 - ✅ Reporte global de existencias (físico, reservado y disponible) de todas las sucursales
-- 🟡 Inventario físico / conteo ciego (conciliación): la API existe, sin pantalla
-- 🟡 Reservas de stock (FEFO): la API existe, sin pantalla
-- ❌ Alta y configuración de almacenes (central, cuarentena, frío)
-- ❌ Acta de baja imprimible
-- ❌ Alertas automáticas programadas
+- ✅ Inventario físico con conteo ciego (`/inventory/counts`): se cuenta sin ver el stock, se envía a revisión con diferencias y un responsable con permiso `inventory.count.approve` aprueba el ajuste (D37)
+- ✅ Reservas de stock (FEFO): pantalla `/inventory/reservations` para verlas y liberarlas. La venta POS aún descuenta directo (D09)
+- ✅ Alta y configuración de almacenes (`/inventory/warehouses`): general, central, cuarentena (nunca despacha) y cadena de frío; editar, quitar despacho y desactivar sin stock
+- ✅ Acta de baja imprimible (`/inventory/waste-acts`): numeración `AB-<sucursal>-000001` por sucursal, datos de la farmacia, costo y firmas (formato provisional, D38)
+- ✅ Alertas automáticas programadas: la API revisa vencimientos cada hora (30 días de anticipación), avisa en el resumen y en Inventario, y cierra la alerta cuando el lote ya no tiene stock
 
 ### 4. Compras y proveedores
 
@@ -203,7 +203,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | Sprint | Contenido | Estado |
 |---|---|---|
 | 1 | Núcleo, multi-tenancy, suscripciones, autenticación y RBAC | ✅ Casi completo (falta resolver la empresa por subdominio) |
-| 2 | Catálogo, fraccionamiento e inventario FEFO | 🟡 Falta la ficha sanitaria AGEMED y las alertas programadas |
+| 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
 | 3 | POS y control de turnos | 🟡 Falta receta en controlados, impresión térmica y otros medios de pago |
 | 4 | Facturación SIAT | ❌ No iniciado |
 | 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | ❌ No iniciado |

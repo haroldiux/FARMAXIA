@@ -13,7 +13,9 @@ async function bootstrap(): Promise<void> {
   );
   app.enableCors({
     origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
-    credentials: true
+    credentials: true,
+    // Fastify solo permite GET, HEAD y POST por defecto: sin esto el navegador bloquea las ediciones.
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
   });
   await app.register(fastifyCookie);
   const port = Number(process.env.PORT ?? 3001);

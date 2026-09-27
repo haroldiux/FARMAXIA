@@ -88,6 +88,7 @@ export const SEED_DATA = {
     unitCost: "8.5000",
     quantityBase: 200
   },
+  soonBatchId: "00000000-1111-4000-a000-000000000002",
   shift: {
     id: "00000000-2222-4000-a000-000000000001",
     controlId: "00000000-3333-4000-a000-000000000001"
@@ -136,9 +137,9 @@ async function seed() {
     );
 
     await client.query(
-      `INSERT INTO warehouses (id, tenant_id, branch_id, name, is_dispatch_enabled)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (id) DO UPDATE SET name = excluded.name, is_dispatch_enabled = true`,
+      `INSERT INTO warehouses (id, tenant_id, branch_id, name, is_dispatch_enabled, warehouse_type)
+       VALUES ($1, $2, $3, $4, $5, 'CENTRAL')
+       ON CONFLICT (id) DO UPDATE SET name = excluded.name, is_dispatch_enabled = true, warehouse_type = 'CENTRAL', is_active = true`,
       [
         SEED_DATA.warehouse.id,
         SEED_DATA.tenant.id,
@@ -388,6 +389,20 @@ async function seed() {
         SEED_DATA.batch.id,
         SEED_DATA.batch.quantityBase
       ]
+    );
+
+    // Lote de demostración próximo a vencer: activa las alertas automáticas (módulo 3).
+    await client.query(
+      `INSERT INTO inventory_batches (id, tenant_id, presentation_id, supplier_id, lot_code, expires_on, unit_cost, status)
+       VALUES ($1, $2, $3, $4, 'LOTE-2026-B', current_date + 20, 8.5000, 'AVAILABLE')
+       ON CONFLICT (id) DO NOTHING`,
+      [SEED_DATA.soonBatchId, SEED_DATA.tenant.id, SEED_DATA.presentation.id, SEED_DATA.supplier.id]
+    );
+    await client.query(
+      `INSERT INTO inventory_balances (tenant_id, warehouse_id, batch_id, quantity_base, reserved_base)
+       VALUES ($1, $2, $3, 30, 0)
+       ON CONFLICT (tenant_id, warehouse_id, batch_id) DO NOTHING`,
+      [SEED_DATA.tenant.id, SEED_DATA.warehouse.id, SEED_DATA.soonBatchId]
     );
 
     console.log("Seeding active cash shift...");

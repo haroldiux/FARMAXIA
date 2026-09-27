@@ -158,7 +158,7 @@ describe("Usuarios, roles y seguridad", () => {
       const roles = await identity.listRoles(pharmacy.scope);
       expect(roles.map((role) => role.code).sort()).toEqual(["almacenero", "cajero", "encargado", "owner", "regente"]);
       expect(roles.find((role) => role.code === "cajero")?.permissions).toEqual(["cash.manage", "sales.confirm"]);
-      expect(await identity.listPermissions(pharmacy.scope)).toHaveLength(9);
+      expect(await identity.listPermissions(pharmacy.scope)).toHaveLength(10);
 
       const cashier = await roleId(pharmacy, "cajero");
       await expect(identity.updateRole(pharmacy.scope, cashier, { name: "Otro" })).rejects.toMatchObject({ status: 409 });
@@ -395,6 +395,7 @@ describe("Usuarios, roles y seguridad", () => {
       } finally {
         await app.close();
       }
-    });
+      // Arranca la aplicación completa: tarda más que una prueba de servicio.
+    }, 30_000);
   });
 });

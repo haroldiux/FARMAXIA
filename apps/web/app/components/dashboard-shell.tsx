@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { accountProfile, type AccountProfile } from "../lib/account";
+import { listInventoryAlerts } from "../lib/inventory";
 import { daysUntil, formatDate, statusLabels, subscriptionSummary, type SubscriptionSummary } from "../lib/saas";
 import { currentSession, logout, type AuthSession } from "../lib/session";
 import { NavIcon, type NavIconName } from "./nav-icon";
@@ -41,6 +42,7 @@ export function DashboardShell() {
   const [sessionError, setSessionError] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
   const [account, setAccount] = useState<AccountProfile | null>(null);
+  const [expiryAlerts, setExpiryAlerts] = useState<{ expired: number; expiring: number } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -51,6 +53,14 @@ export function DashboardShell() {
           // El aviso es informativo: si falla, el panel sigue funcionando.
           subscriptionSummary().then((summary) => mounted && setSubscription(summary)).catch(() => undefined);
           accountProfile().then((profile) => mounted && setAccount(profile)).catch(() => undefined);
+          if (value.permissions.includes("inventory.manage")) {
+            listInventoryAlerts(false)
+              .then((result) => mounted && setExpiryAlerts({
+                expired: result.items.filter((item) => item.alertType === "EXPIRED").length,
+                expiring: result.items.filter((item) => item.alertType === "EXPIRING").length
+              }))
+              .catch(() => undefined);
+          }
         }
       })
       .catch(() => {
@@ -129,6 +139,17 @@ export function DashboardShell() {
           </div>
         </header>
         {subscription ? <SubscriptionNotice subscription={subscription} canManage={session.permissions.includes("billing.manage")} /> : null}
+        {expiryAlerts && expiryAlerts.expired + expiryAlerts.expiring > 0 ? (
+          <div className={`subscription-notice ${expiryAlerts.expired ? "notice-danger" : "notice-warning"}`} role="status">
+            <span className="notice-badge">Vencimientos</span>
+            <p>
+              {expiryAlerts.expired ? `${expiryAlerts.expired} ${expiryAlerts.expired === 1 ? "lote vencido" : "lotes vencidos"} con stock` : ""}
+              {expiryAlerts.expired && expiryAlerts.expiring ? " y " : ""}
+              {expiryAlerts.expiring ? `${expiryAlerts.expiring} ${expiryAlerts.expiring === 1 ? "lote vence" : "lotes vencen"} en los próximos 30 días` : ""}.
+            </p>
+            <Link className="quiet-button" href="/inventory">Revisar inventario</Link>
+          </div>
+        ) : null}
         <section className="welcome-card">
           <div>
             <p className="section-kicker">Sesión validada</p>

@@ -288,7 +288,7 @@ export class ProcurementService {
          from product_presentations presentation
          join products product
            on product.tenant_id = presentation.tenant_id and product.id = presentation.product_id
-         where presentation.tenant_id = $1 and product.is_active = true
+         where presentation.tenant_id = $1 and product.is_active = true and presentation.is_active = true
          order by product.name asc, presentation.name asc, presentation.id asc`,
         [scope.tenantId]
       );

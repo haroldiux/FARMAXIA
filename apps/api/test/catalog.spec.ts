@@ -284,7 +284,7 @@ describe("catalog service (C01)", () => {
     await expect(catalog.registerBarcode(scope, { ...input, barcode: "780000000005" }))
       .rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_REUSED" });
     await expect(ownerPool.query(
-      "select action, payload->>'barcode' as barcode from audit_events where tenant_id = $1",
+      "select action, payload->>'barcode' as barcode from audit_events where tenant_id = $1 and action = 'catalog.barcode_registered'",
       [tenantId]
     )).resolves.toMatchObject({ rows: [{ action: "catalog.barcode_registered", barcode: "780000000004" }] });
   });

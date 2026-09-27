@@ -4,6 +4,7 @@ export interface Warehouse {
   id: string;
   name: string;
   isDispatchEnabled: boolean;
+  warehouseType?: string;
 }
 
 export interface WarehouseList {
@@ -75,6 +76,7 @@ export interface WasteInput {
   warehouseId: string;
   quantityBase: number;
   reason: string;
+  disposalMethod?: "DESTRUCTION" | "SUPPLIER_RETURN" | "OTHER";
 }
 
 function idempotencyKey(): string {
@@ -152,11 +154,223 @@ export async function releaseQuarantine(batchId: string, input: ReleaseQuarantin
   });
 }
 
-export async function recordWaste(batchId: string, input: WasteInput): Promise<void> {
+export async function recordWaste(batchId: string, input: WasteInput): Promise<{ wasteEventId: string; actNumber: string }> {
   const key = idempotencyKey();
-  await request("/api/v1/inventory/waste", {
+  return request("/api/v1/inventory/waste", {
     method: "POST",
     headers: { "content-type": "application/json", "idempotency-key": key },
     body: JSON.stringify({ ...input, batchId, idempotencyKey: key })
+  });
+}
+
+// ---- Módulo 3: almacenes, conteos, actas de baja, reservas y alertas ----
+
+export type WarehouseType = "GENERAL" | "CENTRAL" | "QUARANTINE" | "COLD";
+export type DisposalMethod = "DESTRUCTION" | "SUPPLIER_RETURN" | "OTHER";
+
+export const warehouseTypeLabels: Record<WarehouseType, string> = {
+  GENERAL: "General",
+  CENTRAL: "Central",
+  QUARANTINE: "Cuarentena",
+  COLD: "Cadena de frío"
+};
+
+export const disposalMethodLabels: Record<DisposalMethod, string> = {
+  DESTRUCTION: "Destrucción",
+  SUPPLIER_RETURN: "Devolución al proveedor",
+  OTHER: "Otro"
+};
+
+export interface WarehouseDetail {
+  id: string;
+  name: string;
+  warehouseType: WarehouseType;
+  isDispatchEnabled: boolean;
+  isActive: boolean;
+  batchCount: number;
+  stockBase: number;
+  reservedBase: number;
+  createdAt: string;
+}
+
+export type CountStatus = "OPEN" | "SUBMITTED" | "APPROVED" | "CANCELED";
+
+export interface CountSummary {
+  id: string;
+  number: string;
+  status: CountStatus;
+  warehouseId: string;
+  warehouseName: string;
+  notes: string | null;
+  lineCount: number;
+  countedLines: number;
+  differenceLines: number | null;
+  createdByName: string | null;
+  createdAt: string;
+  submittedAt: string | null;
+  closedAt: string | null;
+}
+
+export interface CountLine {
+  batchId: string;
+  lotCode: string;
+  expiresOn: string;
+  productName: string;
+  presentationName: string;
+  countedQuantity: number | null;
+  expectedQuantity: number | null;
+  difference: number | null;
+  countedAt: string | null;
+}
+
+export interface CountDetail extends CountSummary {
+  lines: CountLine[];
+}
+
+export interface WasteAct {
+  id: string;
+  actNumber: string | null;
+  createdAt: string;
+  warehouseName: string;
+  productName: string;
+  presentationName: string;
+  lotCode: string;
+  expiresOn: string;
+  quantityBase: number;
+  reason: string;
+  disposalMethod: DisposalMethod | null;
+  createdByName: string | null;
+}
+
+export interface WasteActDocument extends WasteAct {
+  tenantName: string;
+  legalName: string;
+  taxId: string;
+  branchCode: string;
+  branchName: string;
+  unitCost: string;
+  totalCost: string;
+}
+
+export type ReservationStatus = "ACTIVE" | "CONSUMED" | "RELEASED" | "EXPIRED";
+
+export interface ReservationSummary {
+  id: string;
+  status: ReservationStatus;
+  warehouseName: string;
+  productName: string;
+  presentationName: string;
+  lotCode: string;
+  expiresOn: string;
+  quantityBase: number;
+  reservedUntil: string;
+  createdAt: string;
+}
+
+export interface InventoryAlert {
+  id: string;
+  alertType: "EXPIRING" | "EXPIRED";
+  warehouseId: string;
+  warehouseName: string;
+  batchId: string;
+  lotCode: string;
+  productName: string;
+  presentationName: string;
+  expiresOn: string;
+  daysToExpiry: number;
+  quantityBase: number;
+  createdAt: string;
+  acknowledgedAt: string | null;
+}
+
+// Los mensajes de error del módulo 3 vienen en español desde la API; se muestran tal cual.
+async function send<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const response = await authenticatedFetch(path, {
+    method,
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  if (!response.ok) {
+    let message = "No pudimos completar la operación de inventario.";
+    try {
+      const data = (await response.json()) as { message?: string | string[] };
+      if (typeof data.message === "string") message = data.message;
+    } catch {
+      // Sin cuerpo JSON: se mantiene el mensaje general.
+    }
+    if (response.status === 403) message = "Tu sesión no tiene permiso para esta acción.";
+    throw new Error(message);
+  }
+  return (await response.json()) as T;
+}
+
+export function listWarehouseDetails(includeInactive = true): Promise<{ items: WarehouseDetail[] }> {
+  return send(`/api/v1/inventory/warehouses/details?includeInactive=${includeInactive}`, "GET");
+}
+
+export function createWarehouse(input: { name: string; warehouseType: WarehouseType; isDispatchEnabled: boolean }): Promise<WarehouseDetail> {
+  return send("/api/v1/inventory/warehouses", "POST", input);
+}
+
+export function updateWarehouse(
+  id: string,
+  input: Partial<{ name: string; warehouseType: WarehouseType; isDispatchEnabled: boolean; isActive: boolean }>
+): Promise<WarehouseDetail> {
+  return send(`/api/v1/inventory/warehouses/${id}`, "PATCH", input);
+}
+
+export function listCounts(): Promise<{ items: CountSummary[] }> {
+  return send("/api/v1/inventory/counts", "GET");
+}
+
+export function createCount(input: { warehouseId: string; notes?: string }): Promise<CountDetail> {
+  return send("/api/v1/inventory/counts", "POST", input);
+}
+
+export function getCount(id: string): Promise<CountDetail> {
+  return send(`/api/v1/inventory/counts/${id}`, "GET");
+}
+
+export function recordCountLines(id: string, lines: Array<{ batchId: string; countedQuantity: number | null }>): Promise<CountDetail> {
+  return send(`/api/v1/inventory/counts/${id}/lines`, "PUT", { lines });
+}
+
+export function countAction(id: string, action: "submit" | "approve" | "cancel"): Promise<CountDetail> {
+  return send(`/api/v1/inventory/counts/${id}/${action}`, "POST");
+}
+
+export function listWasteActs(): Promise<{ items: WasteAct[] }> {
+  return send("/api/v1/inventory/waste-acts", "GET");
+}
+
+export function getWasteAct(id: string): Promise<WasteActDocument> {
+  return send(`/api/v1/inventory/waste-acts/${id}`, "GET");
+}
+
+export function listReservations(status?: ReservationStatus): Promise<{ items: ReservationSummary[] }> {
+  return send(`/api/v1/inventory/reservations${status ? `?status=${status}` : ""}`, "GET");
+}
+
+export function listInventoryAlerts(includeAcknowledged = true): Promise<{ items: InventoryAlert[]; unacknowledged: number }> {
+  return send(`/api/v1/inventory/alerts?includeAcknowledged=${includeAcknowledged}`, "GET");
+}
+
+export function acknowledgeAlert(id: string): Promise<{ id: string; acknowledgedAt: string }> {
+  return send(`/api/v1/inventory/alerts/${id}/acknowledge`, "POST");
+}
+
+export const countStatusLabels: Record<CountStatus, string> = {
+  OPEN: "Contando",
+  SUBMITTED: "En revisión",
+  APPROVED: "Aprobado",
+  CANCELED: "Anulado"
+};
+
+export async function releaseReservation(id: string): Promise<void> {
+  const key = idempotencyKey();
+  await request(`/api/v1/inventory/reservations/${id}/release`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": key },
+    body: JSON.stringify({ idempotencyKey: key })
   });
 }

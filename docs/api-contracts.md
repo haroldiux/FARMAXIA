@@ -352,3 +352,53 @@ solo se cambian en su farmacia dueña (`403 USER_MANAGED_ELSEWHERE`).
 
 Roles predefinidos por farmacia: Propietario (todos los permisos), Regente farmacéutico,
 Encargado de sucursal, Cajero y Almacenero (ver `apps/api/src/identity/role-templates.ts`).
+
+## Catálogo farmacéutico: ficha, categorías y presentaciones (módulo 2)
+
+Migración `0017_catalog_sanitary_profile.sql`. Las rutas siguen bajo
+`/api/v1/catalog`, con la funcionalidad de plan `catalog` y el permiso `catalog.manage`
+(la lectura también la permite `sales.confirm`). Toda alta o cambio queda en la bitácora.
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET products` | Filtros `search` (nombre, genérico, principio activo, laboratorio o código de barras exacto), `categoryId`, `controlled`, `coldChain`, `includeInactive`. Cada producto trae su ficha resumida, si es controlado (por el producto o su categoría) y sus presentaciones activas. |
+| `GET products/:id` | Ficha completa, categoría, presentaciones (también las desactivadas) con códigos de barras y precio vigente de la sucursal. |
+| `POST products`, `PATCH products/:id` | Ficha: `name`, `genericName`, `activeIngredient`, `concentration`, `pharmaceuticalForm`, `laboratory`, `categoryId`, `sanitaryRegistration`, `saleClassification` (`OTC` \| `PRESCRIPTION` \| `RETAINED_PRESCRIPTION` \| `CONTROLLED`), `isControlled`, `requiresColdChain` (+ `coldChainMinCelsius`/`coldChainMaxCelsius`, 2–8 °C por defecto), `sinActivityCode`, `sinProductCode`, `sinUnitCode` (solo dígitos). `PATCH` acepta `isActive` para desactivar o reactivar; la bitácora guarda qué campos cambiaron (antes y después). |
+| `GET categories`, `POST categories`, `PATCH categories/:id` | Nombre único por farmacia (`409`). Marcar una categoría como controlada marca a sus productos; una desactivada no se asigna a productos nuevos. |
+| `POST products/:id/presentations`, `PATCH presentations/:id` | Nombre único por producto; se editan `name`, `isSellable`, `isActive`. El factor no se modifica (`409 FACTOR_IMMUTABLE`). |
+| `GET options` | Clasificaciones de venta, sugerencias de forma farmacéutica y rango de frío por defecto. |
+
+Reglas: la venta `CONTROLLED` implica `isControlled`; un producto o presentación
+desactivado no se vende, no se reserva, no aparece para compras ni en la lectura de
+códigos de barras, pero conserva su historial.
+
+## Inventario: almacenes, inventario físico, actas de baja y alertas (módulo 3)
+
+Migración `0018_inventory_operations.sql`. Rutas bajo `/api/v1/inventory`, con la
+funcionalidad de plan `inventory` y el permiso `inventory.manage`; todo cambio queda en
+la bitácora. Los datos son siempre de la sucursal activa.
+
+| Ruta | Contrato |
+| --- | --- |
+| `GET warehouses` | (Existente) Almacenes **activos** de la sucursal; ahora incluye `warehouseType`. Lo usan inventario y ventas. |
+| `GET warehouses/details?includeInactive=true` | Almacenes con `warehouseType` (`GENERAL` \| `CENTRAL` \| `QUARANTINE` \| `COLD`), `isDispatchEnabled`, `isActive`, lotes con stock, unidades y reservadas. |
+| `POST warehouses`, `PATCH warehouses/:id` | `name` (único por sucursal, `409`), `warehouseType`, `isDispatchEnabled`, `isActive` (solo en `PATCH`). Cuarentena nunca despacha (`400` si se pide). No se desactiva con stock, reservas o un conteo en curso (`409`). Un almacén inactivo no aparece en ventas ni en la reserva FEFO. |
+| `GET counts?status=` · `GET counts/:id` | Conteos físicos (`OPEN` \| `SUBMITTED` \| `APPROVED` \| `CANCELED`), número `INV-<sucursal>-000001`. Mientras está `OPEN` el stock esperado va en `null` (conteo ciego). |
+| `POST counts` | `{ warehouseId, notes? }`. Toma todos los lotes con stock del almacén. Un solo conteo `OPEN`/`SUBMITTED` por almacén (`409`). |
+| `PUT counts/:id/lines` | `{ lines: [{ batchId, countedQuantity \| null }] }`, solo en `OPEN`. |
+| `POST counts/:id/submit` | Exige todas las líneas contadas (`409 Faltan N lotes`); fija el stock esperado y muestra diferencias. |
+| `POST counts/:id/approve` | Permiso adicional `inventory.count.approve`. Ajusta cada lote a lo contado contra el stock actual (conciliación con `count_id`, movimiento `ADJUSTMENT`). Si un lote quedaría por debajo de sus reservas, no ajusta nada (`409`). |
+| `POST counts/:id/cancel` | Anula un conteo `OPEN` o `SUBMITTED` sin mover stock. |
+| `POST waste` | (Existente) acepta `disposalMethod` (`DESTRUCTION` \| `SUPPLIER_RETURN` \| `OTHER`) y devuelve `actNumber` (`AB-<sucursal>-000001`, correlativo por sucursal; un reintento idempotente no consume número). |
+| `GET waste-acts` · `GET waste-acts/:id` | Actas de baja; el detalle trae razón social, NIT, sucursal, lote, cantidad, costo unitario y total para imprimir. |
+| `GET reservations?status=` | Reservas FEFO de la sucursal con producto, lote y vencimiento. Se liberan con la ruta existente `POST reservations/:id/release`. |
+| `GET alerts?includeAcknowledged=` · `POST alerts/:id/acknowledge` | Alertas automáticas `EXPIRING` / `EXPIRED` con la cantidad actual del lote. Marcar como revisada no la borra. |
+
+Alertas programadas: la API revisa los vencimientos al arrancar y cada
+`INVENTORY_ALERT_INTERVAL_MINUTES` (60 por defecto; `0` lo apaga) con el rol de
+plataforma. Crea una alerta por lote y almacén con stock que vence dentro de
+`INVENTORY_ALERT_HORIZON_DAYS` (30) o ya venció, sin duplicarlas, y la cierra cuando el
+lote se queda sin stock o pasa de "por vencer" a "vencido".
+
+CORS: la API ahora acepta `PUT`, `PATCH` y `DELETE` desde la web (antes Fastify solo
+permitía `GET`, `HEAD` y `POST` y el navegador bloqueaba las ediciones).

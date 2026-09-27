@@ -1,7 +1,14 @@
-import { BadRequestException, ConflictException, Inject, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import { AuditService } from "../transversal/audit.service.js";
+import {
+  changedFields,
+  normalizeProfile,
+  type ProductProfile,
+  type ProductProfileInput,
+  type SaleClassification
+} from "./product-profile.js";
 import {
   IdempotencyKeyReusedError,
   IdempotencyService,
@@ -13,10 +20,46 @@ export interface CatalogCategoryInput {
   isControlled: boolean;
 }
 
-export interface CatalogProductInput {
+export type CatalogProductInput = ProductProfileInput & { name: string };
+
+export type CatalogProductUpdate = ProductProfileInput & { isActive?: boolean };
+
+export interface CatalogCategoryUpdate {
+  name?: string;
+  isControlled?: boolean;
+  isActive?: boolean;
+}
+
+export interface CatalogPresentationUpdate {
+  name?: string;
+  isSellable?: boolean;
+  isActive?: boolean;
+}
+
+export interface CatalogCategorySummary {
+  id: string;
   name: string;
-  categoryId?: string;
-  activeIngredient?: string;
+  isControlled: boolean;
+  isActive: boolean;
+  products: number;
+}
+
+export interface CatalogProductDetail extends ProductProfile {
+  productId: string;
+  categoryName: string | null;
+  categoryIsControlled: boolean;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  presentations: Array<{
+    presentationId: string;
+    name: string;
+    baseUnitFactor: number;
+    isSellable: boolean;
+    isActive: boolean;
+    barcodes: string[];
+    currentPrice: { amount: string; currency: string; priceListName: string } | null;
+  }>;
 }
 
 export interface CatalogPresentationInput {
@@ -69,6 +112,12 @@ export interface CatalogListQuery {
   search?: string;
   limit?: number;
   offset?: number;
+  categoryId?: string;
+  /** Solo controlados / solo cadena de frío. */
+  controlled?: boolean;
+  coldChain?: boolean;
+  /** Incluye productos y presentaciones desactivados (administración del catálogo). */
+  includeInactive?: boolean;
 }
 
 export interface CatalogPresentationSummary {
@@ -76,12 +125,23 @@ export interface CatalogPresentationSummary {
   name: string;
   baseUnitFactor: number;
   isSellable: boolean;
+  isActive: boolean;
 }
 
 export interface CatalogProductSummary {
   productId: string;
   name: string;
   activeIngredient: string | null;
+  genericName: string | null;
+  concentration: string | null;
+  pharmaceuticalForm: string | null;
+  laboratory: string | null;
+  saleClassification: SaleClassification;
+  /** Controlado por el producto o por su categoría. */
+  isControlled: boolean;
+  requiresColdChain: boolean;
+  isActive: boolean;
+  categoryId: string | null;
   categoryName: string | null;
   presentations: CatalogPresentationSummary[];
 }
@@ -167,6 +227,40 @@ function validCurrency(value: string): string {
   return normalized;
 }
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertUuid(value: unknown, field: string): void {
+  if (typeof value !== "string" || !uuidPattern.test(value)) {
+    throw new NotFoundException({ code: "NOT_FOUND", field, message: "El registro no existe." });
+  }
+}
+
+// Columnas de la ficha del producto en el mismo orden que profileValues().
+const profileColumns = [
+  "name", "category_id", "active_ingredient", "generic_name", "concentration", "pharmaceutical_form",
+  "laboratory", "sanitary_registration", "sale_classification", "is_controlled", "requires_cold_chain",
+  "cold_chain_min_celsius", "cold_chain_max_celsius", "sin_activity_code", "sin_product_code", "sin_unit_code"
+] as const;
+
+function profileValues(profile: ProductProfile): unknown[] {
+  return [
+    profile.name, profile.categoryId, profile.activeIngredient, profile.genericName, profile.concentration,
+    profile.pharmaceuticalForm, profile.laboratory, profile.sanitaryRegistration, profile.saleClassification,
+    profile.isControlled, profile.requiresColdChain, profile.coldChainMinCelsius, profile.coldChainMaxCelsius,
+    profile.sinActivityCode, profile.sinProductCode, profile.sinUnitCode
+  ];
+}
+
+const profileSelect = `
+  product.name, product.category_id as "categoryId", product.active_ingredient as "activeIngredient",
+  product.generic_name as "genericName", product.concentration, product.pharmaceutical_form as "pharmaceuticalForm",
+  product.laboratory, product.sanitary_registration as "sanitaryRegistration",
+  product.sale_classification as "saleClassification", product.is_controlled as "isControlled",
+  product.requires_cold_chain as "requiresColdChain",
+  product.cold_chain_min_celsius::text as "coldChainMinCelsius", product.cold_chain_max_celsius::text as "coldChainMaxCelsius",
+  product.sin_activity_code as "sinActivityCode", product.sin_product_code as "sinProductCode",
+  product.sin_unit_code as "sinUnitCode"`;
+
 function validFactor(value: number): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new CatalogValidationError("Base unit factor must be a positive safe integer.");
@@ -182,51 +276,301 @@ export class CatalogService {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async createCategory(scope: TenantScope, input: CatalogCategoryInput): Promise<CreatedRow> {
-    const name = requiredText(input.name, "Category name", 160);
-    return this.database.withScope(scope, async (client) => {
+    const name = requiredText(input.name ?? "", "Category name", 160);
+    const isControlled = input.isControlled === true;
+    return this.catalogWrite(async () => this.database.withScope(scope, async (client) => {
       const { rows } = await client.query<CreatedRow>(
         `insert into product_categories (tenant_id, name, is_controlled)
          values ($1, $2, $3)
          returning id`,
-        [scope.tenantId, name, input.isControlled]
+        [scope.tenantId, name, isControlled]
       );
-      return rows[0] as CreatedRow;
+      const created = this.requireCreated(rows[0]);
+      await this.audit.recordInTransaction(client, {
+        action: "catalog.category_created",
+        entityType: "product_category",
+        entityId: created.id,
+        payload: { name, isControlled }
+      });
+      return created;
+    }), "Ya existe una categoría con ese nombre.");
+  }
+
+  async listCategories(scope: TenantScope): Promise<CatalogCategorySummary[]> {
+    return this.database.withScope(scope, async (client) => {
+      const { rows } = await client.query<CatalogCategorySummary>(
+        `select category.id, category.name, category.is_controlled as "isControlled", category.is_active as "isActive",
+                (select count(*)::int from products where products.tenant_id = category.tenant_id
+                   and products.category_id = category.id and products.is_active) as products
+         from product_categories as category
+         where category.tenant_id = $1
+         order by category.is_active desc, category.name`,
+        [scope.tenantId]
+      );
+      return rows;
     });
   }
 
-  async createProduct(scope: TenantScope, input: CatalogProductInput): Promise<CreatedRow> {
-    const name = requiredText(input.name, "Product name", 200);
-    const activeIngredient = input.activeIngredient?.trim() || null;
-    if (activeIngredient && activeIngredient.length > 240) {
-      throw new Error("Active ingredient must be at most 240 characters.");
+  async updateCategory(scope: TenantScope, categoryId: string, input: CatalogCategoryUpdate): Promise<void> {
+    assertUuid(categoryId, "categoryId");
+    const name = input.name === undefined ? undefined : requiredText(input.name, "Category name", 160);
+    for (const [field, value] of [["isControlled", input.isControlled], ["isActive", input.isActive]] as const) {
+      if (value !== undefined && typeof value !== "boolean") {
+        throw new CatalogValidationError(`${field} must be a boolean.`);
+      }
     }
-    return this.database.withScope(scope, async (client) => {
-      const { rows } = await client.query<CreatedRow>(
-        `insert into products (tenant_id, category_id, name, active_ingredient)
-         values ($1, $2, $3, $4)
-         returning id`,
-        [scope.tenantId, input.categoryId ?? null, name, activeIngredient]
+    await this.catalogWrite(async () => this.database.withScope(scope, async (client) => {
+      const { rowCount } = await client.query(
+        `update product_categories
+         set name = coalesce($3, name),
+             is_controlled = coalesce($4, is_controlled),
+             is_active = coalesce($5, is_active),
+             updated_at = now()
+         where tenant_id = $1 and id = $2`,
+        [scope.tenantId, categoryId, name ?? null, input.isControlled ?? null, input.isActive ?? null]
       );
-      return rows[0] as CreatedRow;
+      if (!rowCount) {
+        throw new NotFoundException({ code: "CATEGORY_NOT_FOUND", message: "La categoría no existe." });
+      }
+      if (input.isControlled === true) {
+        // Una categoría controlada vuelve controlados a sus productos.
+        await client.query(
+          "update products set is_controlled = true, updated_at = now() where tenant_id = $1 and category_id = $2 and not is_controlled",
+          [scope.tenantId, categoryId]
+        );
+      }
+      await this.audit.recordInTransaction(client, {
+        action: "catalog.category_updated",
+        entityType: "product_category",
+        entityId: categoryId,
+        payload: { name, isControlled: input.isControlled, isActive: input.isActive }
+      });
+    }), "Ya existe una categoría con ese nombre.");
+  }
+
+  async createProduct(scope: TenantScope, input: CatalogProductInput): Promise<CreatedRow> {
+    const profile = normalizeProfile(input ?? {});
+    return this.catalogWrite(async () => this.database.withScope(scope, async (client) => {
+      const categoryControlled = await this.categoryControlled(client, scope.tenantId, profile.categoryId);
+      const saved = { ...profile, isControlled: profile.isControlled || categoryControlled };
+      const { rows } = await client.query<CreatedRow>(
+        `insert into products (tenant_id, ${profileColumns.join(", ")})
+         values ($1, ${profileColumns.map((_, index) => `$${index + 2}`).join(", ")})
+         returning id`,
+        [scope.tenantId, ...profileValues(saved)]
+      );
+      const created = this.requireCreated(rows[0]);
+      await this.audit.recordInTransaction(client, {
+        action: "catalog.product_created",
+        entityType: "product",
+        entityId: created.id,
+        payload: { ...saved }
+      });
+      return created;
+    }));
+  }
+
+  async getProduct(scope: TenantScope, productId: string, at = new Date()): Promise<CatalogProductDetail> {
+    assertUuid(productId, "productId");
+    return this.database.withScope(scope, async (client) => {
+      const { rows } = await client.query<CatalogProductDetail>(
+        `select product.id as "productId", ${profileSelect},
+                category.name as "categoryName", coalesce(category.is_controlled, false) as "categoryIsControlled",
+                product.is_active as "isActive", product.created_at as "createdAt", product.updated_at as "updatedAt",
+                coalesce((
+                  select jsonb_agg(jsonb_build_object(
+                    'presentationId', presentation.id,
+                    'name', presentation.name,
+                    'baseUnitFactor', presentation.base_unit_factor::int,
+                    'isSellable', presentation.is_sellable,
+                    'isActive', presentation.is_active,
+                    'barcodes', coalesce((
+                      select jsonb_agg(barcode.barcode order by barcode.barcode)
+                      from product_barcodes as barcode
+                      where barcode.tenant_id = presentation.tenant_id and barcode.presentation_id = presentation.id
+                    ), '[]'::jsonb),
+                    'currentPrice', (
+                      select jsonb_build_object('amount', price.amount::text, 'currency', list.currency, 'priceListName', list.name)
+                      from presentation_prices as price
+                      join price_lists as list on list.tenant_id = price.tenant_id and list.id = price.price_list_id
+                      where price.tenant_id = presentation.tenant_id
+                        and price.presentation_id = presentation.id
+                        and price.valid_from <= $3
+                        and (price.valid_to is null or price.valid_to > $3)
+                        and list.is_active
+                        and (list.branch_id is null or list.branch_id = $4)
+                      order by case when list.branch_id = $4 then 0 else 1 end, price.valid_from desc
+                      limit 1
+                    )
+                  ) order by presentation.is_active desc, presentation.base_unit_factor desc, presentation.name)
+                  from product_presentations as presentation
+                  where presentation.tenant_id = product.tenant_id and presentation.product_id = product.id
+                ), '[]'::jsonb) as presentations
+         from products as product
+         left join product_categories as category
+           on category.tenant_id = product.tenant_id and category.id = product.category_id
+         where product.tenant_id = $1 and product.id = $2`,
+        [scope.tenantId, productId, at, scope.branchId]
+      );
+      const product = rows[0];
+      if (!product) {
+        throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "El producto no existe." });
+      }
+      return product;
     });
+  }
+
+  async updateProduct(scope: TenantScope, productId: string, input: CatalogProductUpdate): Promise<void> {
+    assertUuid(productId, "productId");
+    if (input?.isActive !== undefined && typeof input.isActive !== "boolean") {
+      throw new CatalogValidationError("isActive must be a boolean.");
+    }
+    await this.catalogWrite(async () => this.database.withScope(scope, async (client) => {
+      const { rows } = await client.query<ProductProfile & { isActive: boolean }>(
+        `select ${profileSelect}, product.is_active as "isActive"
+         from products as product
+         where product.tenant_id = $1 and product.id = $2
+         for update`,
+        [scope.tenantId, productId]
+      );
+      const current = rows[0];
+      if (!current) {
+        throw new NotFoundException({ code: "PRODUCT_NOT_FOUND", message: "El producto no existe." });
+      }
+      const { isActive: currentActive, ...currentProfile } = current;
+      const next = normalizeProfile(input ?? {}, currentProfile);
+      next.isControlled = next.isControlled || await this.categoryControlled(client, scope.tenantId, next.categoryId);
+      const changes = changedFields(currentProfile, next);
+      const isActive = input?.isActive ?? currentActive;
+      if (!Object.keys(changes).length && isActive === currentActive) {
+        return;
+      }
+
+      await client.query(
+        `update products
+         set ${profileColumns.map((column, index) => `${column} = $${index + 3}`).join(", ")},
+             is_active = $${profileColumns.length + 3},
+             updated_at = now()
+         where tenant_id = $1 and id = $2`,
+        [scope.tenantId, productId, ...profileValues(next), isActive]
+      );
+      if (Object.keys(changes).length) {
+        await this.audit.recordInTransaction(client, {
+          action: "catalog.product_updated",
+          entityType: "product",
+          entityId: productId,
+          payload: { changes }
+        });
+      }
+      if (isActive !== currentActive) {
+        await this.audit.recordInTransaction(client, {
+          action: isActive ? "catalog.product_reactivated" : "catalog.product_deactivated",
+          entityType: "product",
+          entityId: productId,
+          payload: { name: next.name }
+        });
+      }
+    }));
   }
 
   async createPresentation(
     scope: TenantScope,
     input: CatalogPresentationInput
   ): Promise<CreatedRow> {
-    const name = requiredText(input.name, "Presentation name", 160);
-    const factor = validFactor(input.baseUnitFactor);
-    return this.database.withScope(scope, async (client) => {
+    const name = requiredText(input.name ?? "", "Presentation name", 160);
+    const factor = validFactor(Number(input.baseUnitFactor));
+    const isSellable = input.isSellable !== false;
+    assertUuid(input.productId, "productId");
+    return this.catalogWrite(async () => this.database.withScope(scope, async (client) => {
       const { rows } = await client.query<CreatedRow>(
         `insert into product_presentations
            (tenant_id, product_id, name, base_unit_factor, is_sellable)
          values ($1, $2, $3, $4, $5)
          returning id`,
-        [scope.tenantId, input.productId, name, factor, input.isSellable]
+        [scope.tenantId, input.productId, name, factor, isSellable]
       );
-      return rows[0] as CreatedRow;
-    });
+      const created = this.requireCreated(rows[0]);
+      await this.audit.recordInTransaction(client, {
+        action: "catalog.presentation_created",
+        entityType: "product_presentation",
+        entityId: created.id,
+        payload: { productId: input.productId, name, baseUnitFactor: factor, isSellable }
+      });
+      return created;
+    }), "Ese producto ya tiene una presentación con ese nombre.");
+  }
+
+  /**
+   * El factor de conversión no se edita: el stock y las ventas ya registradas dependen de
+   * él. Para cambiarlo se crea otra presentación y se desactiva la anterior.
+   */
+  async updatePresentation(scope: TenantScope, presentationId: string, input: CatalogPresentationUpdate & { baseUnitFactor?: unknown }): Promise<void> {
+    assertUuid(presentationId, "presentationId");
+    if (input?.baseUnitFactor !== undefined) {
+      throw new ConflictException({
+        code: "FACTOR_IMMUTABLE",
+        message: "El factor de conversión no se puede cambiar. Crea una presentación nueva y desactiva esta."
+      });
+    }
+    const name = input?.name === undefined ? undefined : requiredText(input.name, "Presentation name", 160);
+    for (const [field, value] of [["isSellable", input?.isSellable], ["isActive", input?.isActive]] as const) {
+      if (value !== undefined && typeof value !== "boolean") {
+        throw new CatalogValidationError(`${field} must be a boolean.`);
+      }
+    }
+    await this.catalogWrite(async () => this.database.withScope(scope, async (client) => {
+      const { rowCount } = await client.query(
+        `update product_presentations
+         set name = coalesce($3, name),
+             is_sellable = coalesce($4, is_sellable),
+             is_active = coalesce($5, is_active),
+             updated_at = now()
+         where tenant_id = $1 and id = $2`,
+        [scope.tenantId, presentationId, name ?? null, input?.isSellable ?? null, input?.isActive ?? null]
+      );
+      if (!rowCount) {
+        throw new NotFoundException({ code: "PRESENTATION_NOT_FOUND", message: "La presentación no existe." });
+      }
+      await this.audit.recordInTransaction(client, {
+        action: "catalog.presentation_updated",
+        entityType: "product_presentation",
+        entityId: presentationId,
+        payload: { name, isSellable: input?.isSellable, isActive: input?.isActive }
+      });
+    }), "Ese producto ya tiene una presentación con ese nombre.");
+  }
+
+  private async categoryControlled(client: PoolClient, tenantId: string, categoryId: string | null): Promise<boolean> {
+    if (!categoryId) {
+      return false;
+    }
+    const { rows } = await client.query<{ isControlled: boolean }>(
+      `select is_controlled as "isControlled" from product_categories where tenant_id = $1 and id = $2 and is_active`,
+      [tenantId, categoryId]
+    );
+    if (!rows[0]) {
+      throw new CatalogValidationError("La categoría no existe o está desactivada.");
+    }
+    return rows[0].isControlled;
+  }
+
+  /** Traduce duplicados y referencias inválidas a respuestas claras. */
+  private async catalogWrite<T>(operation: () => Promise<T>, duplicateMessage = "Ese registro ya existe."): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "23505") {
+        throw new ConflictException({ code: "DUPLICATE", message: duplicateMessage });
+      }
+      if (code === "23503") {
+        throw new CatalogValidationError("Alguna referencia no existe en esta farmacia.");
+      }
+      if (code === "23514") {
+        throw new CatalogValidationError("Los datos no cumplen las reglas del catálogo.");
+      }
+      throw error;
+    }
   }
 
   async registerBarcode(scope: TenantScope, input: BarcodeInput): Promise<CreatedRow> {
@@ -447,30 +791,65 @@ export class CatalogService {
       throw new Error("Catalog offset must be a non-negative integer.");
     }
 
+    if (input.categoryId !== undefined && input.categoryId !== "" && !uuidPattern.test(input.categoryId)) {
+      throw new CatalogValidationError("categoryId must be a UUID.");
+    }
+    const includeInactive = input.includeInactive === true;
+
     return this.database.withScope(scope, async (client) => {
+      // La búsqueda cubre nombre comercial, genérico, principio activo, laboratorio y
+      // código de barras exacto de cualquiera de sus presentaciones.
       const { rows } = await client.query<ProductListRow>(
         `with filtered_products as (
            select
              product.id,
              product.name,
              product.active_ingredient as "activeIngredient",
+             product.generic_name as "genericName",
+             product.concentration,
+             product.pharmaceutical_form as "pharmaceuticalForm",
+             product.laboratory,
+             product.sale_classification as "saleClassification",
+             (product.is_controlled or coalesce(category.is_controlled, false)) as "isControlled",
+             product.requires_cold_chain as "requiresColdChain",
+             product.is_active as "isActive",
+             product.category_id as "categoryId",
              category.name as "categoryName"
            from products as product
            left join product_categories as category
              on category.tenant_id = product.tenant_id
             and category.id = product.category_id
            where product.tenant_id = $1
-             and product.is_active
+             and ($5 or product.is_active)
+             and ($6::uuid is null or product.category_id = $6::uuid)
+             and ($7::boolean is null or (product.is_controlled or coalesce(category.is_controlled, false)) = $7::boolean)
+             and ($8::boolean is null or product.requires_cold_chain = $8::boolean)
              and (
                $2 = ''
                or lower(product.name) like '%' || lower($2) || '%'
                or lower(coalesce(product.active_ingredient, '')) like '%' || lower($2) || '%'
+               or lower(coalesce(product.generic_name, '')) like '%' || lower($2) || '%'
+               or lower(coalesce(product.laboratory, '')) like '%' || lower($2) || '%'
+               or exists (
+                 select 1 from product_barcodes as barcode
+                 join product_presentations as coded on coded.tenant_id = barcode.tenant_id and coded.id = barcode.presentation_id
+                 where barcode.tenant_id = product.tenant_id and coded.product_id = product.id and barcode.barcode = $2
+               )
              )
          )
          select
            filtered.id as "productId",
            filtered.name,
            filtered."activeIngredient",
+           filtered."genericName",
+           filtered.concentration,
+           filtered."pharmaceuticalForm",
+           filtered.laboratory,
+           filtered."saleClassification",
+           filtered."isControlled",
+           filtered."requiresColdChain",
+           filtered."isActive",
+           filtered."categoryId",
            filtered."categoryName",
            count(*) over()::int as total,
            coalesce(
@@ -479,7 +858,8 @@ export class CatalogService {
                  'presentationId', presentation.id,
                  'name', presentation.name,
                  'baseUnitFactor', presentation.base_unit_factor::int,
-                 'isSellable', presentation.is_sellable
+                 'isSellable', presentation.is_sellable,
+                 'isActive', presentation.is_active
                ) order by presentation.name
              ) filter (where presentation.id is not null),
              '[]'::jsonb
@@ -488,10 +868,22 @@ export class CatalogService {
          left join product_presentations as presentation
            on presentation.tenant_id = $1
           and presentation.product_id = filtered.id
-         group by filtered.id, filtered.name, filtered."activeIngredient", filtered."categoryName"
-         order by filtered.name
+          and ($5 or presentation.is_active)
+         group by filtered.id, filtered.name, filtered."activeIngredient", filtered."genericName", filtered.concentration,
+                  filtered."pharmaceuticalForm", filtered.laboratory, filtered."saleClassification", filtered."isControlled",
+                  filtered."requiresColdChain", filtered."isActive", filtered."categoryId", filtered."categoryName"
+         order by filtered."isActive" desc, filtered.name
          limit $3 offset $4`,
-        [scope.tenantId, search, limit, offset]
+        [
+          scope.tenantId,
+          search,
+          limit,
+          offset,
+          includeInactive,
+          input.categoryId || null,
+          input.controlled ?? null,
+          input.coldChain ?? null
+        ]
       );
       const total = rows[0]?.total ?? 0;
       return {
@@ -550,6 +942,7 @@ export class CatalogService {
            and barcode.barcode = $2
            and product.is_active
            and presentation.is_sellable
+           and presentation.is_active
          limit 1`,
         [scope.tenantId, normalizedBarcode, at, scope.branchId]
       );

@@ -519,7 +519,7 @@ describe("inventory adjustments and reconciliation (C03)", () => {
     const result = await inventory.listWarehouses(scope);
 
     expect(result).toEqual({
-      items: [{ id: warehouseId, name: "Inventory warehouse", isDispatchEnabled: true }]
+      items: [{ id: warehouseId, name: "Inventory warehouse", isDispatchEnabled: true, warehouseType: "GENERAL" }]
     });
   });
 
