@@ -58,7 +58,7 @@ The user requested a UX/UI specialist to validate the assigned work and continue
 - `pnpm --filter @farmaxia/web build` passed: Next.js compiled successfully, TypeScript completed, and all 28 routes generated.
 - `pnpm --filter @farmaxia/api test` could not start because PostgreSQL was unavailable at `localhost:5433` (`ECONNREFUSED` for `::1:5433` and `127.0.0.1:5433`). No tests were changed or suppressed.
 - `git diff --check` passed.
-- Work-unit commit: `2925e4e20ee16e2799f2a1b0757cbd1fe6c4eb2b` (`fix(web): align catalog access with permissions`).
+- Work-unit commit: `8506427a018707ca6fff184c047bb7976fe20d70` (`fix(web): align catalog access with permissions`).
 
 ## Remaining gaps
 - The platform shell still suppresses an operator-session lookup failure and can remain on a loading screen; see the minor audit finding. Fix it only with dedicated authentication-flow coverage.
