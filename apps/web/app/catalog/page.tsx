@@ -17,6 +17,7 @@ import {
   type CatalogPriceList,
   type CatalogProductSummary
 } from "../lib/catalog";
+import { canManageCatalog, canViewCatalog } from "../lib/catalog-access";
 
 interface ProductPage {
   items: CatalogProductSummary[];
@@ -55,7 +56,11 @@ export default function CatalogPage() {
       .then(async (value) => {
         setSession(value);
         try {
-          await Promise.all([loadProducts("", emptyFilters), loadPriceLists(), listCategories().then(setCategories)]);
+          const loaders = [loadProducts("", emptyFilters)];
+          if (canManageCatalog(value.permissions)) {
+            loaders.push(loadPriceLists(), listCategories().then(setCategories));
+          }
+          await Promise.all(loaders);
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : "No pudimos cargar el catálogo.");
         }
@@ -176,11 +181,18 @@ export default function CatalogPage() {
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando catálogo…</main>;
   }
-  if (!session || !products) {
+  if (!session) {
     return null;
   }
 
-  const canManage = session.permissions.includes("catalog.manage");
+  const canManage = canManageCatalog(session.permissions);
+  const canView = canViewCatalog(session.permissions);
+  if (!canView) {
+    return <main className="center-state inventory-denied"><div><strong>Acceso restringido</strong><p>Tu sesión no tiene permiso para consultar el catálogo.</p><Link href="/dashboard">Volver al resumen</Link></div></main>;
+  }
+  if (!products) {
+    return <main className="center-state inventory-denied"><div><strong>No pudimos cargar el catálogo</strong><p>{error ?? "Intenta volver al resumen e ingresar de nuevo."}</p><Link href="/dashboard">Volver al resumen</Link></div></main>;
+  }
   return (
     <main className="catalog-page">
       <header className="catalog-header">
@@ -203,12 +215,12 @@ export default function CatalogPage() {
         </form>
         <div className="catalog-counter"><strong>{products.total.toString().padStart(2, "0")}</strong><span>{filters.includeInactive ? "productos" : "productos activos"}</span></div>
         <div className="catalog-filters">
-          <label className="inventory-filter"><span>Categoría</span>
+          {canManage ? <label className="inventory-filter"><span>Categoría</span>
             <select value={filters.categoryId} onChange={(event) => changeFilters({ categoryId: event.target.value })}>
               <option value="">Todas</option>
               {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
-          </label>
+          </label> : null}
           <label className="filter-check"><input checked={filters.controlled} onChange={(event) => changeFilters({ controlled: event.target.checked })} type="checkbox" /> Controlados</label>
           <label className="filter-check"><input checked={filters.coldChain} onChange={(event) => changeFilters({ coldChain: event.target.checked })} type="checkbox" /> Cadena de frío</label>
           <label className="filter-check"><input checked={filters.includeInactive} onChange={(event) => changeFilters({ includeInactive: event.target.checked })} type="checkbox" /> Mostrar desactivados</label>
@@ -236,10 +248,10 @@ export default function CatalogPage() {
           </Link>
         ))}</div> : <div className="catalog-empty"><span>✦</span><h3>No encontramos productos.</h3><p>{canManage ? "Prueba otra búsqueda o crea un producto nuevo." : "Prueba otra búsqueda."}</p></div>}
       </section>
-      <section className="catalog-layout" aria-label="Precios y códigos de barras">
+      {canManage ? <section className="catalog-layout" aria-label="Precios y códigos de barras">
         <section className="product-list-panel">
           <div className="panel-heading"><div><p className="section-kicker">Precios operativos</p><h2>Vigencias y listas</h2></div><span className="panel-count">{priceLists.length.toString().padStart(2, "0")}</span></div>
-          {canManage ? <div className="product-form">
+          <div className="product-form">
             <form onSubmit={createCatalogPriceList}>
               <label className="field"><span>Nueva lista</span><input required value={priceListName} onChange={(event) => setPriceListName(event.target.value)} placeholder="Ej. Lista general" /></label>
               <label className="field"><span>Moneda ISO</span><input required maxLength={3} value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value.toUpperCase())} /></label>
@@ -255,7 +267,7 @@ export default function CatalogPage() {
               <p className="form-note">Las vigencias de una misma presentación y alcance no se superponen. La lista de sucursal prevalece sobre la global.</p>
               <button className="primary-button" disabled={saving || !priceLists.length} type="submit">{saving ? "Guardando…" : "Registrar precio"}<span>↗</span></button>
             </form>
-          </div> : <p className="empty-copy">Tu sesión puede consultar el catálogo, pero no tiene permiso para administrar sus precios.</p>}
+          </div>
         </section>
         <aside className="create-product-panel">
           <div className="panel-heading"><div><p className="section-kicker">Lectura rápida</p><h2>Código de barras</h2></div><span className="sparkle">⌁</span></div>
@@ -263,13 +275,13 @@ export default function CatalogPage() {
             <label className="field"><span>Código</span><input required value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="780000000001" /></label>
             <button className="secondary-button" type="submit">Buscar código</button>
           </form>
-          {canManage ? <form className="product-form" onSubmit={saveBarcode}>
+          <form className="product-form" onSubmit={saveBarcode}>
             <label className="field"><span>Presentación a registrar</span><select required value={selectedPresentationId} onChange={(event) => setSelectedPresentationId(event.target.value)}><option value="">Selecciona una presentación</option>{products.items.flatMap((product) => product.presentations.map((presentation) => <option key={presentation.presentationId} value={presentation.presentationId}>{product.name} · {presentation.name}</option>))}</select></label>
             <button className="primary-button" disabled={saving} type="submit">Registrar código<span>↗</span></button>
-          </form> : null}
+          </form>
           {barcodeLookup ? <div className="catalog-empty"><h3>{barcodeLookup.productName}</h3><p>{barcodeLookup.presentationName} · {barcodeLookup.baseUnitFactor} unidades</p><p>{barcodeLookup.priceAmount ? `${barcodeLookup.priceAmount} ${barcodeLookup.priceCurrency}` : "Sin precio vigente"}</p></div> : null}
         </aside>
-      </section>
+      </section> : null}
     </main>
   );
 }

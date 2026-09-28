@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { accountProfile, type AccountProfile } from "../lib/account";
+import { canViewCatalog } from "../lib/catalog-access";
 import { listInventoryAlerts } from "../lib/inventory";
 import { daysUntil, formatDate, statusLabels, subscriptionSummary, type SubscriptionSummary } from "../lib/saas";
 import { currentSession, logout, type AuthSession } from "../lib/session";
@@ -13,21 +14,20 @@ interface NavigationItem {
   label: string;
   icon: NavIconName;
   href?: string;
-  permission?: string;
+  permissions?: readonly string[];
 }
 
-// Opción sin href: es la página actual (Resumen). Con href pero sin permiso: "Próximo".
 const navigation: NavigationItem[] = [
   { label: "Resumen", icon: "overview" },
-  { label: "Catálogo", icon: "catalog", href: "/catalog", permission: "catalog.manage" },
-  { label: "Inventario", icon: "inventory", href: "/inventory", permission: "inventory.manage" },
-  { label: "Reporte global", icon: "report", href: "/inventory/report", permission: "inventory.report.global" },
-  { label: "Compras", icon: "procurement", href: "/procurement", permission: "inventory.manage" },
-  { label: "Ventas y caja", icon: "cash", href: "/cash", permission: "cash.manage" },
-  { label: "Ventas POS", icon: "sales", href: "/sales", permission: "sales.confirm" },
-  { label: "Auditoría", icon: "audit", href: "/audit", permission: "audit.read" },
-  { label: "Usuarios", icon: "users", href: "/users", permission: "users.manage" },
-  { label: "Suscripción", icon: "billing", href: "/billing", permission: "billing.manage" },
+  { label: "Catálogo", icon: "catalog", href: "/catalog", permissions: ["catalog.manage", "sales.confirm"] },
+  { label: "Inventario", icon: "inventory", href: "/inventory", permissions: ["inventory.manage"] },
+  { label: "Reporte global", icon: "report", href: "/inventory/report", permissions: ["inventory.report.global"] },
+  { label: "Compras", icon: "procurement", href: "/procurement", permissions: ["inventory.manage"] },
+  { label: "Ventas y caja", icon: "cash", href: "/cash", permissions: ["cash.manage"] },
+  { label: "Ventas POS", icon: "sales", href: "/sales", permissions: ["sales.confirm"] },
+  { label: "Auditoría", icon: "audit", href: "/audit", permissions: ["audit.read"] },
+  { label: "Usuarios", icon: "users", href: "/users", permissions: ["users.manage"] },
+  { label: "Suscripción", icon: "billing", href: "/billing", permissions: ["billing.manage"] },
   { label: "Mi cuenta", icon: "account", href: "/account" }
 ];
 
@@ -91,6 +91,9 @@ export function DashboardShell() {
     return null;
   }
 
+  const canViewCatalogModule = canViewCatalog(session.permissions);
+  const canManageInventory = session.permissions.includes("inventory.manage");
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -116,7 +119,7 @@ export function DashboardShell() {
             if (!item.href) {
               return <span aria-current="page" className="nav-item is-active" key={item.label}>{content}</span>;
             }
-            if (!item.permission || session.permissions.includes(item.permission)) {
+            if (!item.permissions || item.permissions.some((permission) => session.permissions.includes(permission))) {
               return <Link className="nav-item" href={item.href} key={item.label}>{content}</Link>;
             }
             return <button className="nav-item" disabled key={item.label} type="button">{content}<small>Sin acceso</small></button>;
@@ -161,7 +164,7 @@ export function DashboardShell() {
         <section className="metrics-grid" aria-label="Estado de la plataforma">
           <article className="metric-card accent-blue"><span className="metric-index">01</span><p>Contexto</p><strong>Validado</strong><small>Tenant y sucursal activos</small></article>
           <article className="metric-card accent-orange"><span className="metric-index">02</span><p>Permisos efectivos</p><strong>{session.permissions.length}</strong><small>Devueltos por la sesión</small></article>
-          <article className="metric-card accent-green"><span className="metric-index">03</span><p>Próximo foco</p><strong>Catálogo</strong><small>La siguiente vista funcional</small></article>
+          <article className="metric-card accent-green"><span className="metric-index">03</span><p>Accesos disponibles</p><strong>{[canViewCatalogModule, canManageInventory].filter(Boolean).length}</strong><small>Catálogo e inventario según tu permiso</small></article>
         </section>
         <section className="lower-grid">
           <article className="panel permissions-panel">
@@ -169,9 +172,10 @@ export function DashboardShell() {
             {session.permissions.length ? <div className="permission-list">{session.permissions.map((permission) => <span key={permission}>{permission}</span>)}</div> : <p className="empty-copy">No hay permisos efectivos para mostrar.</p>}
           </article>
           <article className="panel roadmap-panel">
-            <div className="panel-heading"><div><p className="section-kicker">Construcción</p><h3>Lo que sigue</h3></div><span className="sparkle">✦</span></div>
-            <div className="roadmap-row"><span className="roadmap-number">01</span><div><strong>Catálogo farmacéutico</strong><small>Productos, presentaciones y precios</small></div><span className="roadmap-state">Siguiente</span></div>
-            <div className="roadmap-row muted"><span className="roadmap-number">02</span><div><strong>Inventario operativo</strong><small>FEFO, reservas y vencimientos</small></div><span className="roadmap-state">Después</span></div>
+            <div className="panel-heading"><div><p className="section-kicker">Operación</p><h3>Accesos disponibles</h3></div><span className="sparkle">✦</span></div>
+            {canViewCatalogModule ? <Link className="roadmap-row" href="/catalog"><span className="roadmap-number">01</span><div><strong>Catálogo farmacéutico</strong><small>Consulta productos y sus presentaciones</small></div><span className="roadmap-state">Abrir</span></Link> : null}
+            {canManageInventory ? <Link className="roadmap-row" href="/inventory"><span className="roadmap-number">02</span><div><strong>Inventario operativo</strong><small>Alertas de vencimiento, cuarentena y mermas</small></div><span className="roadmap-state">Abrir</span></Link> : null}
+            {!canViewCatalogModule && !canManageInventory ? <p className="empty-copy">No tienes acceso a catálogo ni inventario con esta sesión.</p> : null}
           </article>
         </section>
       </main>

@@ -61,7 +61,7 @@ export default function InventoryReportPage() {
       </header>
       {error ? <p className="form-error inventory-message" role="alert">{error}</p> : null}
       <section className="inventory-toolbar" aria-label="Filtros del reporte">
-        <form className="inventory-filter" onSubmit={submitSearch}><span>Buscar</span><div className="report-search"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Sucursal, almacén o producto" /><button className="quiet-button" type="submit">Aplicar</button></div></form>
+        <form className="inventory-filter" onSubmit={submitSearch}><label htmlFor="inventory-report-search">Buscar</label><div className="report-search"><input id="inventory-report-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Sucursal, almacén o producto" /><button className="quiet-button" type="submit">Aplicar</button></div></form>
         <div className="inventory-summary"><strong>{report?.total ?? 0}</strong><span>filas encontradas</span></div>
       </section>
       {report ? <>
