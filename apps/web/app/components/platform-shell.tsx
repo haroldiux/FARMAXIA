@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { platformLogout, platformMe } from "../lib/platform";
 import { NavIcon, type NavIconName } from "./nav-icon";
@@ -19,12 +19,17 @@ function isActive(pathname: string, href: string): boolean {
 
 /** Marco del panel de operador del SaaS; valida el token de plataforma al entrar. */
 export function PlatformShell({ children }: Readonly<{ children: ReactNode }>) {
+  const router = useRouter();
   const pathname = usePathname();
   const [operator, setOperator] = useState<{ displayName: string; email: string } | null>(null);
 
   useEffect(() => {
-    platformMe().then(setOperator).catch(() => undefined);
-  }, []);
+    platformMe()
+      .then(setOperator)
+      .catch(() => {
+        router.push("/platform/login");
+      });
+  }, [router]);
 
   if (!operator) {
     return <main className="center-state"><span className="loading-orb" />Comprobando sesión de operador…</main>;
