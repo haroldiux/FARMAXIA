@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { currentSession, logout, type AuthSession } from "../lib/session";
+import { currentSession, type AuthSession } from "../lib/session";
 import { listWarehouses, type Warehouse } from "../lib/inventory";
 import {
   createPurchaseOrder,
@@ -151,10 +151,6 @@ export default function ProcurementPage() {
     }
   }
 
-  async function signOut(): Promise<void> {
-    await logout();
-    window.location.assign("/");
-  }
 
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando compras…</main>;
@@ -170,12 +166,10 @@ export default function ProcurementPage() {
     <main className="procurement-page">
       <header className="procurement-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">F4 · Compras</p>
           <h1>Abastecer bien también es cuidar.</h1>
           <p className="procurement-lede">Prepara proveedores y órdenes de compra con el mismo contexto de sucursal que protege tu inventario.</p>
         </div>
-        <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
       </header>
 
       {error ? <p className="form-error procurement-message" role="alert">{error}</p> : null}

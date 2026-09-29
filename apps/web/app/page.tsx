@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { LoginBackground } from "./components/login-background";
 import { LoginForm } from "./components/login-form";
+import { ThemeToggle } from "./components/theme-toggle";
 
 export default function HomePage() {
   return (
     <main className="login-page">
+      <LoginBackground />
+      <ThemeToggle className="login-theme-toggle" />
       <section className="login-intro">
         <div className="brand-lockup brand-lockup-dark">
           <div className="brand-mark">F</div>

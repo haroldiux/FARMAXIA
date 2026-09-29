@@ -1,5 +1,7 @@
 "use client";
 
+import { LoginBackground } from "../../components/login-background";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { FormEvent, useState } from "react";
 import { platformLogin } from "../../lib/platform";
 
@@ -25,6 +27,8 @@ export default function PlatformLoginPage() {
 
   return (
     <main className="login-page">
+      <LoginBackground />
+      <ThemeToggle className="login-theme-toggle" />
       <section className="login-intro platform-intro">
         <div className="brand-lockup brand-lockup-dark">
           <div className="brand-mark">F</div>

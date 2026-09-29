@@ -2,131 +2,45 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { accountProfile, type AccountProfile } from "../lib/account";
 import { listInventoryAlerts } from "../lib/inventory";
 import { daysUntil, formatDate, statusLabels, subscriptionSummary, type SubscriptionSummary } from "../lib/saas";
-import { currentSession, logout, type AuthSession } from "../lib/session";
-import { NavIcon, type NavIconName } from "./nav-icon";
-
-interface NavigationItem {
-  label: string;
-  icon: NavIconName;
-  href?: string;
-  permission?: string;
-}
-
-// Opción sin href: es la página actual (Resumen). Con href pero sin permiso: "Próximo".
-const navigation: NavigationItem[] = [
-  { label: "Resumen", icon: "overview" },
-  { label: "Catálogo", icon: "catalog", href: "/catalog", permission: "catalog.manage" },
-  { label: "Inventario", icon: "inventory", href: "/inventory", permission: "inventory.manage" },
-  { label: "Reporte global", icon: "report", href: "/inventory/report", permission: "inventory.report.global" },
-  { label: "Compras", icon: "procurement", href: "/procurement", permission: "inventory.manage" },
-  { label: "Ventas y caja", icon: "cash", href: "/cash", permission: "cash.manage" },
-  { label: "Ventas POS", icon: "sales", href: "/sales", permission: "sales.confirm" },
-  { label: "Auditoría", icon: "audit", href: "/audit", permission: "audit.read" },
-  { label: "Usuarios", icon: "users", href: "/users", permission: "users.manage" },
-  { label: "Suscripción", icon: "billing", href: "/billing", permission: "billing.manage" },
-  { label: "Mi cuenta", icon: "account", href: "/account" }
-];
+import { useShellSession } from "./app-shell";
 
 function shortId(value: string): string {
   return `${value.slice(0, 8)}…${value.slice(-4)}`;
 }
 
+/** Contenido de la página Resumen. El sidebar lo pone el marco (app-shell). */
 export function DashboardShell() {
-  const router = useRouter();
-  const [session, setSession] = useState<AuthSession | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [sessionError, setSessionError] = useState(false);
+  const shell = useShellSession();
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
-  const [account, setAccount] = useState<AccountProfile | null>(null);
   const [expiryAlerts, setExpiryAlerts] = useState<{ expired: number; expiring: number } | null>(null);
+  const session = shell?.session ?? null;
+  const account = shell?.account ?? null;
 
   useEffect(() => {
+    if (!session) return undefined;
     let mounted = true;
-    currentSession()
-      .then((value) => {
-        if (mounted) {
-          setSession(value);
-          // El aviso es informativo: si falla, el panel sigue funcionando.
-          subscriptionSummary().then((summary) => mounted && setSubscription(summary)).catch(() => undefined);
-          accountProfile().then((profile) => mounted && setAccount(profile)).catch(() => undefined);
-          if (value.permissions.includes("inventory.manage")) {
-            listInventoryAlerts(false)
-              .then((result) => mounted && setExpiryAlerts({
-                expired: result.items.filter((item) => item.alertType === "EXPIRED").length,
-                expiring: result.items.filter((item) => item.alertType === "EXPIRING").length
-              }))
-              .catch(() => undefined);
-          }
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setSessionError(true);
-          router.replace("/");
-        }
-      })
-      .finally(() => {
-        if (mounted) {
-          setLoading(false);
-        }
-      });
+    // Los avisos son informativos: si fallan, el panel sigue funcionando.
+    subscriptionSummary().then((summary) => mounted && setSubscription(summary)).catch(() => undefined);
+    if (session.permissions.includes("inventory.manage")) {
+      listInventoryAlerts(false)
+        .then((result) => mounted && setExpiryAlerts({
+          expired: result.items.filter((item) => item.alertType === "EXPIRED").length,
+          expiring: result.items.filter((item) => item.alertType === "EXPIRING").length
+        }))
+        .catch(() => undefined);
+    }
     return () => {
       mounted = false;
     };
-  }, [router]);
+  }, [session]);
 
-  async function signOut(): Promise<void> {
-    await logout();
-    router.replace("/");
-  }
-
-  if (loading && !sessionError) {
-    return <main className="center-state"><span className="loading-orb" />Comprobando sesión…</main>;
-  }
   if (!session) {
     return null;
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-lockup">
-          <div className="brand-mark">F</div>
-          <div>
-            <strong>FARMAXIA</strong>
-            <span>operación inteligente</span>
-          </div>
-        </div>
-        <div className="workspace-switcher">
-          <span className="status-dot" />
-          <div>
-            <small>Espacio activo</small>
-            <strong>{account?.tenantName ?? shortId(session.tenantId)}</strong>
-          </div>
-          <span className="switcher-arrow">⌄</span>
-        </div>
-        <nav className="main-nav" aria-label="Navegación principal">
-          <p className="nav-label">Workspace</p>
-          {navigation.map((item) => {
-            const content = <><span className="nav-icon"><NavIcon name={item.icon} /></span><span>{item.label}</span></>;
-            if (!item.href) {
-              return <span aria-current="page" className="nav-item is-active" key={item.label}>{content}</span>;
-            }
-            if (!item.permission || session.permissions.includes(item.permission)) {
-              return <Link className="nav-item" href={item.href} key={item.label}>{content}</Link>;
-            }
-            return <button className="nav-item" disabled key={item.label} type="button">{content}<small>Sin acceso</small></button>;
-          })}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="secure-badge"><span>●</span> Sesión protegida</div>
-          <button className="logout-button" onClick={signOut} type="button">Cerrar sesión <NavIcon name="logout" /></button>
-        </div>
-      </aside>
       <main className="dashboard-main">
         <header className="topbar">
           <div>
@@ -175,7 +89,6 @@ export function DashboardShell() {
           </article>
         </section>
       </main>
-    </div>
   );
 }
 

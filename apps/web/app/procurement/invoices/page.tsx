@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { currentSession, logout, type AuthSession } from "../../lib/session";
+import { currentSession, type AuthSession } from "../../lib/session";
 import {
   createSupplierInvoice,
   listGoodsReceipts,
@@ -93,14 +93,13 @@ export default function SupplierInvoicesPage() {
     } finally { setSaving(false); }
   }
 
-  async function signOut(): Promise<void> { await logout(); window.location.assign("/"); }
 
   if (loading) return <main className="center-state"><span className="loading-orb" />Cargando cuentas por pagar…</main>;
   if (!session) return null;
   if (!session.permissions.includes("inventory.manage")) return <main className="center-state inventory-denied"><div><strong>Acceso restringido</strong><p>Tu sesión no tiene permiso para administrar compras.</p><Link href="/dashboard">Volver al resumen</Link></div></main>;
 
   return <main className="receiving-page">
-    <header className="procurement-header"><div><Link className="back-link" href="/procurement">← Volver a compras</Link><p className="eyebrow">F10 · Cuentas por pagar</p><h1>Facturas bajo control.</h1><p className="procurement-lede">Relaciona cada factura con una recepción y conserva sus importes exactos.</p></div><button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button></header>
+    <header className="procurement-header"><div><Link className="back-link" href="/procurement">← Volver a compras</Link><p className="eyebrow">F10 · Cuentas por pagar</p><h1>Facturas bajo control.</h1><p className="procurement-lede">Relaciona cada factura con una recepción y conserva sus importes exactos.</p></div></header>
     {error ? <p className="form-error procurement-message" role="alert">{error}</p> : null}
     {notice ? <p className="form-success procurement-message" role="status">{notice}</p> : null}
     <section className="receiving-layout">

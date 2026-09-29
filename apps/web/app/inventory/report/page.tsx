@@ -57,7 +57,7 @@ export default function InventoryReportPage() {
   return (
     <main className="inventory-page">
       <header className="inventory-header">
-        <div><Link className="back-link" href="/dashboard">← Volver al resumen</Link><p className="eyebrow">F9 · Reporte global</p><h1>Una mirada completa al inventario.</h1><p className="inventory-lede">Consulta existencias físicas, reservas y disponibilidad de todas las sucursales del tenant sin alterar la operación.</p></div>
+        <div><p className="eyebrow">F9 · Reporte global</p><h1>Una mirada completa al inventario.</h1><p className="inventory-lede">Consulta existencias físicas, reservas y disponibilidad de todas las sucursales del tenant sin alterar la operación.</p></div>
       </header>
       {error ? <p className="form-error inventory-message" role="alert">{error}</p> : null}
       <section className="inventory-toolbar" aria-label="Filtros del reporte">

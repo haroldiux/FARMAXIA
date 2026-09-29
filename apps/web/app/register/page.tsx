@@ -1,5 +1,7 @@
 "use client";
 
+import { LoginBackground } from "../components/login-background";
+import { ThemeToggle } from "../components/theme-toggle";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { formatBob, formatDate, listPublicPlans, registerPharmacy, type PublicPlan, type RegisterInput, type RegisterResult } from "../lib/saas";
@@ -64,6 +66,8 @@ export default function RegisterPage() {
 
   return (
     <main className="login-page">
+      <LoginBackground />
+      <ThemeToggle className="login-theme-toggle" />
       <section className="login-intro">
         <div className="brand-lockup brand-lockup-dark">
           <div className="brand-mark">F</div>

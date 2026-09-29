@@ -2,9 +2,21 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "preserve",
-    "plugins": [{ "name": "next" }],
-    "incremental": true
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "incremental": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
-  "include": ["next-env.d.ts", ".next/types", "app"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    ".next/types",
+    "app"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

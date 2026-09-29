@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { currentSession, logout, type AuthSession } from "../lib/session";
+import { currentSession, type AuthSession } from "../lib/session";
 import {
   confirmCashSale,
   listSalesProducts,
@@ -103,9 +103,8 @@ export default function SalesPage() {
     }
   }
 
-  async function signOut(): Promise<void> { await logout(); window.location.assign("/"); }
 
-  const workspaceHeader = <header className="cash-header"><div><Link className="back-link" href="/dashboard">← Volver al resumen</Link><p className="eyebrow">F11 · Ventas POS</p><h1>Confirma la venta sin perder el hilo.</h1><p className="cash-lede">Venta no fiscal, pago en efectivo y consumo FEFO. El total siempre lo confirma el servidor.</p></div><button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button></header>;
+  const workspaceHeader = <header className="cash-header"><div><p className="eyebrow">F11 · Ventas POS</p><h1>Confirma la venta sin perder el hilo.</h1><p className="cash-lede">Venta no fiscal, pago en efectivo y consumo FEFO. El total siempre lo confirma el servidor.</p></div></header>;
 
   if (loading) return <main className="center-state"><span className="loading-orb" />Cargando ventas…</main>;
   if (!session) return <main className="center-state"><div><strong>No pudimos validar tu sesión.</strong><Link href="/">Volver al ingreso</Link></div></main>;

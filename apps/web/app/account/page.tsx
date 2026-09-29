@@ -114,7 +114,6 @@ export default function AccountPage() {
     <main className="cash-page">
       <header className="cash-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Mi cuenta</p>
           <h1>{profile.displayName}</h1>
           <p className="cash-lede">{profile.email} · {profile.tenantName}</p>

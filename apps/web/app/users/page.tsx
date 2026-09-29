@@ -171,7 +171,6 @@ export default function UsersPage() {
     <main className="cash-page">
       <header className="cash-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Equipo</p>
           <h1>Usuarios y roles.</h1>
           <p className="cash-lede">Da acceso a tu equipo con el rol que corresponde y elige en qué sucursales puede trabajar cada persona.</p>

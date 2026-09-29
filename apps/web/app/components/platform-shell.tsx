@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { platformLogout, platformMe } from "../lib/platform";
 import { NavIcon, type NavIconName } from "./nav-icon";
+import { ThemeToggle } from "./theme-toggle";
 
 const navigation: Array<{ label: string; icon: NavIconName; href: string }> = [
   { label: "Resumen", icon: "overview", href: "/platform" },
@@ -50,6 +51,7 @@ export function PlatformShell({ children }: Readonly<{ children: ReactNode }>) {
           ))}
         </nav>
         <div className="sidebar-footer">
+          <ThemeToggle className="sidebar-theme-toggle" />
           <div className="secure-badge"><span>●</span> {operator.email}</div>
           <button className="logout-button" onClick={platformLogout} type="button">Cerrar sesión <NavIcon name="logout" /></button>
         </div>

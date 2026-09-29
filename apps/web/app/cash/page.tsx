@@ -15,7 +15,7 @@ import {
   type CashShift,
   type EligibleCashUser
 } from "../lib/cash";
-import { currentSession, logout, type AuthSession } from "../lib/session";
+import { currentSession, type AuthSession } from "../lib/session";
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("es-BO", {
@@ -184,10 +184,6 @@ export default function CashPage() {
     }
   }
 
-  async function signOut(): Promise<void> {
-    await logout();
-    window.location.assign("/");
-  }
 
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando turnos de caja…</main>;
@@ -203,12 +199,10 @@ export default function CashPage() {
     <main className="cash-page">
       <header className="cash-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">F6 · Ventas y caja</p>
           <h1>Una caja, el turno correcto.</h1>
           <p className="cash-lede">Programa horarios fechados y asigna a una o más personas sin superponer la misma caja.</p>
         </div>
-        <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
       </header>
 
       {error ? <p className="form-error cash-message" role="alert">{error}</p> : null}

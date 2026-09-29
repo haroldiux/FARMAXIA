@@ -134,7 +134,6 @@ export default function BillingPage() {
     <main className="cash-page">
       <header className="cash-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Suscripción</p>
           <h1>Tu plan y tus pagos.</h1>
           <p className="cash-lede">Revisa lo que incluye tu plan, cuánto usas y paga tus comprobantes por QR o transferencia.</p>
