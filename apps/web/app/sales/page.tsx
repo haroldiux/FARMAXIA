@@ -104,6 +104,14 @@ export default function SalesPage() {
   }
 
 
+  const estimatedTotal = lines
+    .reduce((sum, line) => {
+      const quantity = Number(line.quantity);
+      const price = Number(line.unitPriceBob);
+      return Number.isFinite(quantity) && Number.isFinite(price) ? sum + quantity * price : sum;
+    }, 0)
+    .toFixed(2);
+
   const workspaceHeader = <header className="cash-header"><div><p className="eyebrow">F11 · Ventas POS</p><h1>Confirma la venta sin perder el hilo.</h1><p className="cash-lede">Venta no fiscal, pago en efectivo y consumo FEFO. El total siempre lo confirma el servidor.</p></div></header>;
 
   if (loading) return <main className="center-state"><span className="loading-orb" />Cargando ventas…</main>;
@@ -124,14 +132,20 @@ export default function SalesPage() {
   return <main className="cash-page">
     {workspaceHeader}
     {error ? <p className="form-error cash-message" role="alert">{error}</p> : null}
-    {sale ? <section className="panel cash-shifts-panel" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>Pago CASH · {sale.paidAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><button className="quiet-button" type="button" onClick={() => setSale(null)}>Nueva venta</button></section> : <form className="panel cash-shifts-panel" onSubmit={submit}>
-      <div className="panel-heading"><div><p className="section-kicker">Confirmación</p><h2>Venta en efectivo</h2></div></div>
+    {sale ? <section className="panel cash-shifts-panel sale-confirmed" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>Pago CASH · {sale.paidAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><button className="quiet-button" type="button" onClick={() => setSale(null)}>Nueva venta</button></section> : <form className="cash-layout sales-layout" onSubmit={submit}>
+      <section className="panel cash-shifts-panel">
+      <div className="panel-heading"><div><p className="section-kicker">Venta en efectivo</p><h2>Productos de la venta</h2></div><span className="panel-count">{lines.length.toString().padStart(2, "0")}</span></div>
       <label className="inventory-filter"><span>Turno abierto</span><select value={shiftId} onChange={(event) => setShiftId(event.target.value)}><option value="">Selecciona un turno abierto</option>{openShifts.map((shift) => <option key={shift.id} value={shift.id}>{shiftLabel(shift)}</option>)}</select></label>
       <label className="inventory-filter"><span>Almacén de despacho</span><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}><option value="">Selecciona un almacén</option>{dispatchWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
       {lines.map((line, index) => <div className="cash-shift-card" key={`${index}-${line.presentationId}`}><label className="inventory-filter"><span>Producto</span><select value={line.presentationId} onChange={(event) => updateLine(index, { presentationId: event.target.value })}><option value="">Selecciona presentación</option>{sellablePresentations.map((presentation: SalesPresentation & { label: string }) => <option key={presentation.presentationId} value={presentation.presentationId}>{presentation.label}</option>)}</select></label><label className="inventory-filter"><span>Cantidad</span><input inputMode="numeric" value={line.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} /></label><label className="inventory-filter"><span>Precio unitario BOB</span><input inputMode="decimal" value={line.unitPriceBob} onChange={(event) => updateLine(index, { unitPriceBob: event.target.value })} /></label></div>)}
       <button className="quiet-button" type="button" onClick={() => setLines((current) => [...current, { presentationId: "", quantity: "1", unitPriceBob: "" }])}>Agregar línea</button>
-      <label className="inventory-filter"><span>Total pagado BOB</span><input required inputMode="decimal" value={paidAmountBob} onChange={(event) => setPaidAmountBob(event.target.value)} /></label>
-      <button className="primary-button" disabled={saving} type="submit">{saving ? "Confirmando…" : "Confirmar venta CASH"}</button>
+      </section>
+      <aside className="panel cash-form-panel sales-summary">
+        <div className="panel-heading"><div><p className="section-kicker">Cobro</p><h2>Confirmación</h2></div></div>
+        <div className="sales-estimate"><span>Subtotal estimado</span><strong>{estimatedTotal} BOB</strong><small>Según los precios que escribiste. El total final lo calcula el servidor.</small></div>
+        <label className="inventory-filter"><span>Total pagado BOB</span><input required inputMode="decimal" value={paidAmountBob} onChange={(event) => setPaidAmountBob(event.target.value)} /></label>
+        <button className="primary-button" disabled={saving} type="submit">{saving ? "Confirmando…" : "Confirmar venta CASH"}</button>
+      </aside>
     </form>}
   </main>;
 }

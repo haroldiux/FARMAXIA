@@ -243,7 +243,7 @@ export class SalesService {
       const item = await client.query<{ id: string; lineTotalBob: string }>(
         `insert into sale_items
            (tenant_id, branch_id, sale_id, presentation_id, quantity, quantity_base, unit_price_bob, line_total_bob)
-         values ($1, $2, $3, $4, $5, $6, $7, ($5::numeric * $7::numeric))
+         values ($1, $2, $3, $4, $5::bigint, $6, $7::numeric, ($5::bigint * $7::numeric))
          returning id, line_total_bob::text as "lineTotalBob"`,
         [scope.tenantId, scope.branchId, saleRow.id, line.presentationId, line.quantity, quantityBase, line.unitPriceBob]
       );

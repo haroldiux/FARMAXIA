@@ -7,11 +7,11 @@ import { platformLogout, platformMe } from "../lib/platform";
 import { NavIcon, type NavIconName } from "./nav-icon";
 import { ThemeToggle } from "./theme-toggle";
 
-const navigation: Array<{ label: string; icon: NavIconName; href: string }> = [
-  { label: "Resumen", icon: "overview", href: "/platform" },
-  { label: "Farmacias", icon: "tenants", href: "/platform/tenants" },
-  { label: "Pagos", icon: "billing", href: "/platform/payments" },
-  { label: "Planes", icon: "plans", href: "/platform/plans" }
+const navigation: Array<{ label: string; icon: NavIconName; href: string; tone: string }> = [
+  { label: "Resumen", icon: "overview", href: "/platform", tone: "blue" },
+  { label: "Farmacias", icon: "tenants", href: "/platform/tenants", tone: "sky" },
+  { label: "Pagos", icon: "billing", href: "/platform/payments", tone: "green" },
+  { label: "Planes", icon: "plans", href: "/platform/plans", tone: "lilac" }
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -45,7 +45,7 @@ export function PlatformShell({ children }: Readonly<{ children: ReactNode }>) {
         <nav className="main-nav" aria-label="Navegación de plataforma">
           <p className="nav-label">Plataforma</p>
           {navigation.map((item) => (
-            <Link aria-current={isActive(pathname, item.href) ? "page" : undefined} className={`nav-item ${isActive(pathname, item.href) ? "is-active" : ""}`} href={item.href} key={item.href}>
+            <Link aria-current={isActive(pathname, item.href) ? "page" : undefined} className={`nav-item ${isActive(pathname, item.href) ? "is-active" : ""}`} data-tone={item.tone} href={item.href} key={item.href}>
               <span className="nav-icon"><NavIcon name={item.icon} /></span><span>{item.label}</span>
             </Link>
           ))}
@@ -56,7 +56,7 @@ export function PlatformShell({ children }: Readonly<{ children: ReactNode }>) {
           <button className="logout-button" onClick={platformLogout} type="button">Cerrar sesión <NavIcon name="logout" /></button>
         </div>
       </aside>
-      <main className="dashboard-main">{children}</main>
+      <main className="dashboard-main app-content" data-alt-tone="blue" data-module="platform" data-tone="indigo">{children}</main>
     </div>
   );
 }

@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { AppShellGate } from "./components/app-shell";
 import { themeBootScript } from "./lib/theme-script";
 import "./globals.css";
+// Rediseño Bento del sistema interno (solo aplica dentro de .app-shell, nunca al login).
+import "./bento.css";
 
 export const metadata: Metadata = {
   title: "FARMAXIA · Operación inteligente",

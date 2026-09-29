@@ -3,11 +3,19 @@
 /* eslint-disable react/no-unknown-property */
 // Fondo "Dither" de React Bits (reactbits.dev), adaptado a TypeScript. El mouse se escucha
 // en toda la ventana porque el contenido del login queda encima del lienzo.
+//
+// Optimizado para que no se trabe en equipos modestos (el dibujo final es pixelado, así que
+// nada de esto cambia cómo se ve):
+// - se dibuja a media resolución y el navegador lo agranda sin suavizar (image-rendering: pixelated);
+// - sin antialias ni multisampling (el composer traía 8x por defecto) ni preserveDrawingBuffer;
+// - buffers de 8 bits en vez de half-float;
+// - como máximo 30 cuadros por segundo: las ondas son lentas y así la tarjeta trabaja la mitad.
 import { forwardRef, useEffect, useRef, type ComponentType, type Ref } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { EffectComposer, wrapEffect } from "@react-three/postprocessing";
 import { Effect } from "postprocessing";
 import * as THREE from "three";
+import { UnsignedByteType } from "three";
 
 export type RGB = [number, number, number];
 
@@ -171,6 +179,24 @@ const RetroEffect = forwardRef<RetroEffectImpl, { colorNum: number; pixelSize: n
 ));
 RetroEffect.displayName = "RetroEffect";
 
+/** Pide un cuadro nuevo como máximo `fps` veces por segundo (el Canvas usa frameloop="demand"). */
+function FrameLimiter({ fps }: Readonly<{ fps: number }>) {
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    const interval = 1000 / fps;
+    let last = 0;
+    let frame = requestAnimationFrame(function tick(time) {
+      frame = requestAnimationFrame(tick);
+      if (time - last >= interval - 2) {
+        last = time;
+        invalidate();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fps, invalidate]);
+  return null;
+}
+
 interface DitherProps {
   waveSpeed?: number;
   waveFrequency?: number;
@@ -182,6 +208,10 @@ interface DitherProps {
   disableAnimation?: boolean;
   enableMouseInteraction?: boolean;
   mouseRadius?: number;
+  /** Fracción de la resolución de pantalla a la que se dibuja (0.5 = media resolución). */
+  renderScale?: number;
+  /** Máximo de cuadros por segundo. */
+  maxFps?: number;
 }
 
 function DitheredWaves({
@@ -195,7 +225,7 @@ function DitheredWaves({
   disableAnimation,
   enableMouseInteraction,
   mouseRadius
-}: Required<DitherProps>) {
+}: Required<Omit<DitherProps, "renderScale" | "maxFps">>) {
   const mouseRef = useRef(new THREE.Vector2());
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const { viewport, size, gl } = useThree();
@@ -264,7 +294,7 @@ function DitheredWaves({
         <planeGeometry args={[1, 1]} />
         <shaderMaterial ref={materialRef} vertexShader={waveVertexShader} fragmentShader={waveFragmentShader} uniforms={waveUniformsRef.current} />
       </mesh>
-      <EffectComposer>
+      <EffectComposer frameBufferType={UnsignedByteType} multisampling={0}>
         <RetroEffect colorNum={colorNum} pixelSize={pixelSize} />
       </EffectComposer>
     </>
@@ -281,10 +311,19 @@ export default function Dither({
   pixelSize = 2,
   disableAnimation = false,
   enableMouseInteraction = true,
-  mouseRadius = 1
+  mouseRadius = 1,
+  renderScale = 0.5,
+  maxFps = 30
 }: DitherProps) {
   return (
-    <Canvas className="dither-container" camera={{ position: [0, 0, 6] }} dpr={1} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+    <Canvas
+      className="dither-container"
+      camera={{ position: [0, 0, 6] }}
+      dpr={renderScale}
+      frameloop="demand"
+      gl={{ antialias: false, preserveDrawingBuffer: false, powerPreference: "high-performance" }}
+    >
+      <FrameLimiter fps={maxFps} />
       <DitheredWaves
         waveSpeed={waveSpeed}
         waveFrequency={waveFrequency}
@@ -292,7 +331,7 @@ export default function Dither({
         waveColor={waveColor}
         backgroundColor={backgroundColor}
         colorNum={colorNum}
-        pixelSize={pixelSize}
+        pixelSize={Math.max(1, pixelSize * renderScale)}
         disableAnimation={disableAnimation}
         enableMouseInteraction={enableMouseInteraction}
         mouseRadius={mouseRadius}

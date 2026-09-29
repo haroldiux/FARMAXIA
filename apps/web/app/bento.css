@@ -1,0 +1,318 @@
+/* ═════════════════════════════════════════════════════════════
+   FARMAXIA · Bento Grid colorido del sistema interno
+   Todo está dentro de .app-shell (farmacia y plataforma): el login,
+   el registro y el login de plataforma no se ven afectados.
+   ═════════════════════════════════════════════════════════════ */
+
+/* ── 1. Paleta de tonos (derivada de la marca) ─────────────────
+   grad: degradado intenso · solid: color sólido · soft/soft2: pasteles
+   line: borde · text: texto sobre pastel · glow: sombra de color */
+:root {
+  --tn-blue-grad: linear-gradient(135deg, #3552e0 0%, #5477ff 55%, #7d97ff 100%);
+  --tn-blue-solid: #4a68f5; --tn-blue-soft: #eef1ff; --tn-blue-soft2: #e2e8ff; --tn-blue-line: #d3dbff; --tn-blue-text: #2f45b0; --tn-blue-glow: rgba(84, 119, 255, .32);
+
+  --tn-indigo-grad: linear-gradient(135deg, #101d35 0%, #243a74 60%, #3a57a6 100%);
+  --tn-indigo-solid: #2a4283; --tn-indigo-soft: #eceff8; --tn-indigo-soft2: #dfe4f3; --tn-indigo-line: #d0d7ec; --tn-indigo-text: #1c2d52; --tn-indigo-glow: rgba(28, 45, 82, .3);
+
+  --tn-lilac-grad: linear-gradient(135deg, #6a4ce8 0%, #8b6dff 55%, #b09cff 100%);
+  --tn-lilac-solid: #7a5cf5; --tn-lilac-soft: #f3efff; --tn-lilac-soft2: #e9e2ff; --tn-lilac-line: #ddd3ff; --tn-lilac-text: #5638c9; --tn-lilac-glow: rgba(139, 109, 255, .32);
+
+  --tn-orange-grad: linear-gradient(135deg, #e8662a 0%, #f59a5b 55%, #f8b884 100%);
+  --tn-orange-solid: #ee7d3c; --tn-orange-soft: #fff2e7; --tn-orange-soft2: #ffe5d0; --tn-orange-line: #fad6bb; --tn-orange-text: #9a4d17; --tn-orange-glow: rgba(245, 154, 91, .35);
+
+  --tn-green-grad: linear-gradient(135deg, #1f8f63 0%, #3fae82 55%, #6dcca2 100%);
+  --tn-green-solid: #2c9e70; --tn-green-soft: #e8f7ef; --tn-green-soft2: #d6f0e2; --tn-green-line: #c3e7d4; --tn-green-text: #1f6b4a; --tn-green-glow: rgba(82, 181, 139, .32);
+
+  --tn-amber-grad: linear-gradient(135deg, #c97c06 0%, #e5a82e 55%, #f2c85c 100%);
+  --tn-amber-solid: #d9960f; --tn-amber-soft: #fdf5dd; --tn-amber-soft2: #fbeabc; --tn-amber-line: #f1dea0; --tn-amber-text: #7a5200; --tn-amber-glow: rgba(229, 168, 46, .35);
+
+  --tn-sky-grad: linear-gradient(135deg, #147399 0%, #2f9dc6 55%, #5cc2e0 100%);
+  --tn-sky-solid: #2390bb; --tn-sky-soft: #e6f5fb; --tn-sky-soft2: #d1edf7; --tn-sky-line: #bfe3f1; --tn-sky-text: #185f7d; --tn-sky-glow: rgba(47, 157, 198, .32);
+
+  --bento-radius: 22px;
+  --bento-radius-sm: 16px;
+  --bento-gap: 18px;
+}
+
+:root[data-theme="dark"] {
+  --tn-blue-soft: #151f45; --tn-blue-soft2: #1b2858; --tn-blue-line: #2b3a73; --tn-blue-text: #b3c1ff;
+  --tn-indigo-soft: #141c31; --tn-indigo-soft2: #1a2440; --tn-indigo-line: #2a3656; --tn-indigo-text: #bac6f0;
+  --tn-lilac-soft: #1e183a; --tn-lilac-soft2: #271f4c; --tn-lilac-line: #3d2f73; --tn-lilac-text: #d0c3ff;
+  --tn-orange-soft: #2a1c12; --tn-orange-soft2: #372517; --tn-orange-line: #5a3a22; --tn-orange-text: #f8c198;
+  --tn-green-soft: #0f261d; --tn-green-soft2: #143226; --tn-green-line: #1f4d3a; --tn-green-text: #93dfbb;
+  --tn-amber-soft: #29210e; --tn-amber-soft2: #352b12; --tn-amber-line: #57461c; --tn-amber-text: #f2d282;
+  --tn-sky-soft: #0e222c; --tn-sky-soft2: #122d3a; --tn-sky-line: #1d4a5c; --tn-sky-text: #94d6ef;
+}
+
+/* data-tone = color principal (--m-*), data-alt-tone = secundario (--a-*), .tone-x = tarjeta suelta (--c-*) */
+[data-tone="blue"] { --m-grad: var(--tn-blue-grad); --m-solid: var(--tn-blue-solid); --m-soft: var(--tn-blue-soft); --m-soft2: var(--tn-blue-soft2); --m-line: var(--tn-blue-line); --m-text: var(--tn-blue-text); --m-glow: var(--tn-blue-glow); }
+[data-tone="indigo"] { --m-grad: var(--tn-indigo-grad); --m-solid: var(--tn-indigo-solid); --m-soft: var(--tn-indigo-soft); --m-soft2: var(--tn-indigo-soft2); --m-line: var(--tn-indigo-line); --m-text: var(--tn-indigo-text); --m-glow: var(--tn-indigo-glow); }
+[data-tone="lilac"] { --m-grad: var(--tn-lilac-grad); --m-solid: var(--tn-lilac-solid); --m-soft: var(--tn-lilac-soft); --m-soft2: var(--tn-lilac-soft2); --m-line: var(--tn-lilac-line); --m-text: var(--tn-lilac-text); --m-glow: var(--tn-lilac-glow); }
+[data-tone="orange"] { --m-grad: var(--tn-orange-grad); --m-solid: var(--tn-orange-solid); --m-soft: var(--tn-orange-soft); --m-soft2: var(--tn-orange-soft2); --m-line: var(--tn-orange-line); --m-text: var(--tn-orange-text); --m-glow: var(--tn-orange-glow); }
+[data-tone="green"] { --m-grad: var(--tn-green-grad); --m-solid: var(--tn-green-solid); --m-soft: var(--tn-green-soft); --m-soft2: var(--tn-green-soft2); --m-line: var(--tn-green-line); --m-text: var(--tn-green-text); --m-glow: var(--tn-green-glow); }
+[data-tone="amber"] { --m-grad: var(--tn-amber-grad); --m-solid: var(--tn-amber-solid); --m-soft: var(--tn-amber-soft); --m-soft2: var(--tn-amber-soft2); --m-line: var(--tn-amber-line); --m-text: var(--tn-amber-text); --m-glow: var(--tn-amber-glow); }
+[data-tone="sky"] { --m-grad: var(--tn-sky-grad); --m-solid: var(--tn-sky-solid); --m-soft: var(--tn-sky-soft); --m-soft2: var(--tn-sky-soft2); --m-line: var(--tn-sky-line); --m-text: var(--tn-sky-text); --m-glow: var(--tn-sky-glow); }
+
+[data-alt-tone="blue"] { --a-grad: var(--tn-blue-grad); --a-solid: var(--tn-blue-solid); --a-soft: var(--tn-blue-soft); --a-soft2: var(--tn-blue-soft2); --a-line: var(--tn-blue-line); --a-text: var(--tn-blue-text); --a-glow: var(--tn-blue-glow); }
+[data-alt-tone="indigo"] { --a-grad: var(--tn-indigo-grad); --a-solid: var(--tn-indigo-solid); --a-soft: var(--tn-indigo-soft); --a-soft2: var(--tn-indigo-soft2); --a-line: var(--tn-indigo-line); --a-text: var(--tn-indigo-text); --a-glow: var(--tn-indigo-glow); }
+[data-alt-tone="lilac"] { --a-grad: var(--tn-lilac-grad); --a-solid: var(--tn-lilac-solid); --a-soft: var(--tn-lilac-soft); --a-soft2: var(--tn-lilac-soft2); --a-line: var(--tn-lilac-line); --a-text: var(--tn-lilac-text); --a-glow: var(--tn-lilac-glow); }
+[data-alt-tone="orange"] { --a-grad: var(--tn-orange-grad); --a-solid: var(--tn-orange-solid); --a-soft: var(--tn-orange-soft); --a-soft2: var(--tn-orange-soft2); --a-line: var(--tn-orange-line); --a-text: var(--tn-orange-text); --a-glow: var(--tn-orange-glow); }
+[data-alt-tone="green"] { --a-grad: var(--tn-green-grad); --a-solid: var(--tn-green-solid); --a-soft: var(--tn-green-soft); --a-soft2: var(--tn-green-soft2); --a-line: var(--tn-green-line); --a-text: var(--tn-green-text); --a-glow: var(--tn-green-glow); }
+[data-alt-tone="amber"] { --a-grad: var(--tn-amber-grad); --a-solid: var(--tn-amber-solid); --a-soft: var(--tn-amber-soft); --a-soft2: var(--tn-amber-soft2); --a-line: var(--tn-amber-line); --a-text: var(--tn-amber-text); --a-glow: var(--tn-amber-glow); }
+[data-alt-tone="sky"] { --a-grad: var(--tn-sky-grad); --a-solid: var(--tn-sky-solid); --a-soft: var(--tn-sky-soft); --a-soft2: var(--tn-sky-soft2); --a-line: var(--tn-sky-line); --a-text: var(--tn-sky-text); --a-glow: var(--tn-sky-glow); }
+
+.tone-blue { --c-grad: var(--tn-blue-grad); --c-solid: var(--tn-blue-solid); --c-soft: var(--tn-blue-soft); --c-soft2: var(--tn-blue-soft2); --c-line: var(--tn-blue-line); --c-text: var(--tn-blue-text); --c-glow: var(--tn-blue-glow); }
+.tone-indigo { --c-grad: var(--tn-indigo-grad); --c-solid: var(--tn-indigo-solid); --c-soft: var(--tn-indigo-soft); --c-soft2: var(--tn-indigo-soft2); --c-line: var(--tn-indigo-line); --c-text: var(--tn-indigo-text); --c-glow: var(--tn-indigo-glow); }
+.tone-lilac { --c-grad: var(--tn-lilac-grad); --c-solid: var(--tn-lilac-solid); --c-soft: var(--tn-lilac-soft); --c-soft2: var(--tn-lilac-soft2); --c-line: var(--tn-lilac-line); --c-text: var(--tn-lilac-text); --c-glow: var(--tn-lilac-glow); }
+.tone-orange { --c-grad: var(--tn-orange-grad); --c-solid: var(--tn-orange-solid); --c-soft: var(--tn-orange-soft); --c-soft2: var(--tn-orange-soft2); --c-line: var(--tn-orange-line); --c-text: var(--tn-orange-text); --c-glow: var(--tn-orange-glow); }
+.tone-green { --c-grad: var(--tn-green-grad); --c-solid: var(--tn-green-solid); --c-soft: var(--tn-green-soft); --c-soft2: var(--tn-green-soft2); --c-line: var(--tn-green-line); --c-text: var(--tn-green-text); --c-glow: var(--tn-green-glow); }
+.tone-amber { --c-grad: var(--tn-amber-grad); --c-solid: var(--tn-amber-solid); --c-soft: var(--tn-amber-soft); --c-soft2: var(--tn-amber-soft2); --c-line: var(--tn-amber-line); --c-text: var(--tn-amber-text); --c-glow: var(--tn-amber-glow); }
+.tone-sky { --c-grad: var(--tn-sky-grad); --c-solid: var(--tn-sky-solid); --c-soft: var(--tn-sky-soft); --c-soft2: var(--tn-sky-soft2); --c-line: var(--tn-sky-line); --c-text: var(--tn-sky-text); --c-glow: var(--tn-sky-glow); }
+
+/* ── 2. Lienzo del área principal ─────────────────────────────── */
+.app-shell { background: var(--paper); }
+.app-shell .app-content {
+  --k-grad: var(--m-grad); --k-solid: var(--m-solid); --k-soft: var(--m-soft); --k-soft2: var(--m-soft2); --k-line: var(--m-line); --k-text: var(--m-text); --k-glow: var(--m-glow);
+  background:
+    radial-gradient(900px 420px at 100% -8%, color-mix(in srgb, var(--m-solid) 9%, transparent), transparent 70%),
+    radial-gradient(700px 380px at -10% 110%, color-mix(in srgb, var(--a-solid) 7%, transparent), transparent 70%),
+    var(--paper);
+}
+.app-shell :is(.catalog-page, .inventory-page, .procurement-page, .receiving-page, .cash-page, .dashboard-main) { width: min(100%, 1480px); max-width: none; margin: 0 auto; padding: 28px clamp(16px, 3vw, 40px) 64px; }
+.app-shell .page-transition { animation: bento-enter 320ms var(--ease) both; }
+@keyframes bento-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ── 3. Encabezado de cada página: tarjeta "hero" con el color del módulo ── */
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) {
+  position: relative;
+  isolation: isolate;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 30px clamp(22px, 3vw, 36px);
+  overflow: hidden;
+  border: 0;
+  border-radius: calc(var(--bento-radius) + 4px);
+  background: var(--m-grad);
+  color: #fff;
+  box-shadow: 0 22px 44px -26px var(--m-glow), 0 2px 6px -2px rgba(16, 29, 53, .12);
+}
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar)::before,
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar)::after { position: absolute; z-index: -1; border-radius: 50%; content: ""; pointer-events: none; }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar)::before { width: 340px; height: 340px; top: -170px; right: -60px; background: radial-gradient(circle, rgba(255, 255, 255, .26) 0%, rgba(255, 255, 255, 0) 70%); }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar)::after { width: 220px; height: 220px; right: 18%; bottom: -150px; border: 34px solid rgba(255, 255, 255, .08); }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) h1 { color: #fff; font-size: clamp(26px, 3.2vw, 40px); }
+.app-shell :is(.catalog-lede, .inventory-lede, .procurement-lede, .cash-lede) { color: rgba(255, 255, 255, .86); }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) .eyebrow { display: inline-flex; margin-bottom: 12px; padding: 5px 11px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .18); color: #fff; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) :is(.back-link, .quiet-button, .secondary-button) { border-color: rgba(255, 255, 255, .3); background: rgba(255, 255, 255, .14); color: #fff; box-shadow: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) :is(.back-link, .quiet-button, .secondary-button):hover { border-color: rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .24); color: #fff; }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) .primary-button { background: #fff; color: var(--m-solid); box-shadow: 0 10px 22px -12px rgba(0, 0, 0, .45); }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) .primary-button span { color: var(--m-solid); }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) :is(.context-pill) { border-color: rgba(255, 255, 255, .28); background: rgba(255, 255, 255, .14); box-shadow: none; }
+.app-shell .topbar .context-pill small { color: rgba(255, 255, 255, .75); }
+.app-shell .topbar .context-pill strong { color: #fff; }
+.app-shell .catalog-header .product-badge { border-color: rgba(255, 255, 255, .3); background: rgba(255, 255, 255, .18); color: #fff; }
+.app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header) + * { margin-top: var(--bento-gap); }
+
+/* ── 4. Tarjetas Bento: tono por tarjeta (--k-*), alternando principal/secundario ── */
+.app-shell :is(.panel, .product-list-panel, .create-product-panel, .profile-panel) {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--bento-radius);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(16, 29, 53, .04), 0 16px 32px -24px rgba(16, 29, 53, .22);
+  transition: box-shadow 220ms var(--ease), transform 220ms var(--ease), border-color 220ms var(--ease);
+}
+/* Línea de color superior: identifica el tono de la tarjeta sin cargarla */
+.app-shell :is(.panel, .product-list-panel, .create-product-panel, .profile-panel)::before { position: absolute; top: 0; left: 22px; right: 22px; height: 3px; border-radius: 0 0 4px 4px; background: var(--k-grad); content: ""; opacity: .9; }
+.app-shell :is(.panel, .product-list-panel, .create-product-panel, .profile-panel):hover { box-shadow: 0 1px 2px rgba(16, 29, 53, .05), 0 22px 40px -24px color-mix(in srgb, var(--k-solid) 45%, transparent); }
+
+/* Segunda, cuarta… tarjeta de cada grupo: color secundario del módulo */
+.app-shell :is(.catalog-layout, .inventory-layout, .procurement-layout, .receiving-layout, .cash-layout, .lower-grid, .account-grid, .billing-overview, .product-detail-layout, .procurement-side) > :nth-child(even),
+.app-shell :is(.catalog-page, .inventory-page, .procurement-page, .receiving-page, .cash-page, .dashboard-main) > .panel:nth-of-type(even) {
+  --k-grad: var(--a-grad); --k-solid: var(--a-solid); --k-soft: var(--a-soft); --k-soft2: var(--a-soft2); --k-line: var(--a-line); --k-text: var(--a-text); --k-glow: var(--a-glow);
+}
+
+/* Paneles laterales y de formulario: fondo de color suave (pastel) */
+.app-shell :is(.create-product-panel, .inventory-action-panel, .cash-form-panel, .procurement-form-panel, .receiving-form, .profile-panel) {
+  border-color: var(--k-line);
+  background: linear-gradient(165deg, var(--k-soft) 0%, color-mix(in srgb, var(--k-soft) 55%, var(--surface)) 100%);
+}
+.app-shell :is(.create-product-panel, .inventory-action-panel, .cash-form-panel, .procurement-form-panel, .receiving-form, .profile-panel) :is(.field input:not([type="checkbox"]):not([type="radio"]), .field select, .field textarea) { border-color: var(--k-line); background-color: var(--surface); }
+:root[data-theme="dark"] .app-shell :is(.create-product-panel, .inventory-action-panel, .cash-form-panel, .procurement-form-panel, .receiving-form, .profile-panel) :is(.field input:not([type="checkbox"]):not([type="radio"]), .field select, .field textarea) { background-color: var(--input-bg); }
+
+/* Encabezado de tarjeta: etiqueta en píldora y contador de color */
+.app-shell .section-kicker { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-pill); background: var(--k-soft); color: var(--k-text); letter-spacing: .1em; }
+.app-shell :is(.create-product-panel, .inventory-action-panel, .cash-form-panel, .procurement-form-panel, .receiving-form, .profile-panel) .section-kicker { background: var(--surface); }
+.app-shell .panel-heading h2, .app-shell .panel-heading h3 { letter-spacing: -.02em; }
+.app-shell .panel-count { min-width: 38px; height: 38px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--k-grad); color: #fff; font-weight: 700; box-shadow: 0 8px 18px -10px var(--k-glow); }
+.app-shell .sparkle { color: var(--k-solid); }
+
+/* Grillas Bento: más aire y proporciones variadas */
+.app-shell :is(.catalog-layout, .inventory-layout, .procurement-layout, .receiving-layout, .cash-layout, .lower-grid, .account-grid, .billing-overview, .product-detail-layout) { gap: var(--bento-gap); margin-top: var(--bento-gap); }
+.app-shell :is(.catalog-page, .inventory-page, .procurement-page, .receiving-page, .cash-page) > :is(.panel, section, .inventory-subnav) { margin-top: var(--bento-gap); }
+
+/* ── 5. Estadísticas, filtros y barras de herramientas ─────────── */
+.app-shell :is(.inventory-summary, .catalog-counter) { border: 0; border-radius: var(--bento-radius-sm); background: var(--a-grad); color: #fff; box-shadow: 0 12px 24px -16px var(--a-glow); }
+.app-shell :is(.inventory-summary, .catalog-counter) :is(strong, span, small) { color: #fff; }
+.app-shell :is(.inventory-toolbar, .catalog-toolbar, .audit-toolbar) { border: 1px solid var(--a-line); border-radius: var(--bento-radius); background: linear-gradient(135deg, var(--a-soft) 0%, var(--surface) 100%); }
+.app-shell .inventory-subnav { border-color: var(--m-line); background: var(--surface); box-shadow: 0 10px 24px -20px var(--m-glow); }
+.app-shell .inventory-subnav a:hover { background: var(--m-soft); color: var(--m-text); }
+:root .app-shell .inventory-subnav a.is-active, :root .app-shell .segmented button.is-active { background: var(--m-grad); color: #fff; box-shadow: 0 8px 18px -10px var(--m-glow); }
+.app-shell .segmented { border-color: var(--m-line); background: var(--surface); }
+
+/* Tarjetas de métricas (Reporte global, plataforma): bloques de color intenso */
+:root .app-shell .metric-card { overflow: hidden; border: 0; border-radius: var(--bento-radius); color: #fff; box-shadow: 0 18px 34px -24px rgba(16, 29, 53, .45); transition: transform 220ms var(--ease), box-shadow 220ms var(--ease); }
+:root .app-shell .metric-card.accent-blue { background: var(--tn-blue-grad); }
+:root .app-shell .metric-card.accent-orange { background: var(--tn-orange-grad); }
+:root .app-shell .metric-card.accent-green { background: var(--tn-green-grad); }
+.app-shell .metric-card :is(p, strong, small) { color: #fff; }
+.app-shell .metric-card small { opacity: .85; }
+:root .app-shell .metric-index { background: rgba(255, 255, 255, .2); color: #fff; }
+.app-shell .metric-card:hover { transform: translateY(-2px); }
+
+/* ── 6. Listas y tablas: cabecera teñida, filas con resaltado ───── */
+.app-shell :is(.inventory-table-head, .audit-head, .count-head, .platform-row-head, .receiving-line-head) { border-radius: 12px; background: var(--k-soft); color: var(--k-text); }
+.app-shell .invoice-table th { background: var(--k-soft); color: var(--k-text); }
+.app-shell :is(.category-row, .product-row, .user-row, .inventory-alert-row, .audit-row, .platform-row:not(.platform-row-head), .count-line, .order-card, .usage-row, .roadmap-row) { transition: background-color 180ms var(--ease), box-shadow 180ms var(--ease), transform 180ms var(--ease); }
+.app-shell :is(.category-row, .product-row, .user-row, .inventory-alert-row, .audit-row, .platform-row:not(.platform-row-head), .count-line):hover { background: color-mix(in srgb, var(--k-soft) 70%, transparent); }
+.app-shell .order-card:hover { border-color: var(--k-line); transform: translateY(-1px); }
+.app-shell :is(.lot-avatar, .product-avatar, .user-avatar-row) { background: var(--k-soft); color: var(--k-text); }
+
+/* ── 7. Botones ───────────────────────────────────────────────── */
+:root .app-shell .primary-button { background: var(--m-grad); box-shadow: 0 12px 24px -14px var(--m-glow); transition: transform 160ms var(--ease), box-shadow 200ms var(--ease), filter 200ms var(--ease); }
+:root .app-shell .primary-button:hover:not(:disabled) { background: var(--m-grad); filter: brightness(1.06) saturate(1.05); box-shadow: 0 16px 28px -14px var(--m-glow); transform: translateY(-1px); }
+.app-shell .primary-button span { color: rgba(255, 255, 255, .8); }
+.app-shell :is(.secondary-button, .row-action:not(.row-action-danger):not(.row-action-muted)) { border-color: var(--k-line); background: var(--k-soft); color: var(--k-text); }
+.app-shell :is(.secondary-button, .row-action:not(.row-action-danger):not(.row-action-muted)):hover:not(:disabled) { border-color: var(--k-solid); background: var(--k-soft2); }
+.app-shell :is(.primary-button, .secondary-button, .quiet-button, .row-action, .search-button):focus-visible { outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--k-solid) 30%, transparent); }
+.app-shell .search-button { background: var(--m-grad); }
+
+/* ── 8. Estados vacíos, de carga y avisos ─────────────────────── */
+.app-shell :is(.empty-symbol, .catalog-empty > span) { display: inline-grid; width: 48px; height: 48px; place-items: center; border-radius: 16px; background: var(--k-grad); color: #fff; box-shadow: 0 12px 24px -14px var(--k-glow); }
+.app-shell .loading-orb { border-color: var(--m-line); border-top-color: var(--m-solid); }
+.app-shell :is(.subscription-notice, .credential-card) { border-radius: var(--bento-radius-sm); }
+.app-shell .field-hint { color: var(--muted); }
+
+/* ── 9. Sidebar: cada módulo con su color ─────────────────────── */
+.app-shell .nav-item[data-tone] .nav-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: color-mix(in srgb, var(--m-solid) 18%, transparent); color: color-mix(in srgb, var(--m-solid) 55%, #fff); transition: background-color 180ms var(--ease), color 180ms var(--ease); }
+.app-shell .nav-item[data-tone]:hover .nav-icon { background: color-mix(in srgb, var(--m-solid) 30%, transparent); color: #fff; }
+:root .app-shell .nav-item[data-tone].is-active { background: color-mix(in srgb, var(--m-solid) 24%, rgba(255, 255, 255, .06)); color: #fff; }
+:root .app-shell .nav-item[data-tone].is-active .nav-icon { background: var(--m-grad); color: #fff; box-shadow: 0 6px 14px -6px var(--m-glow); }
+.tenant-shell .nav-item[data-tone].is-active::before { background: var(--m-solid); }
+.tenant-shell.is-collapsed .nav-item[data-tone] .nav-icon { width: 34px; height: 34px; }
+
+/* ── 10. Resumen (dashboard) en Bento Grid ────────────────────── */
+.app-shell .bento-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-flow: row dense; gap: var(--bento-gap); margin-top: var(--bento-gap); }
+.app-shell .bento-card { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 10px; padding: 22px; overflow: hidden; border: 1px solid var(--c-line, var(--line)); border-radius: var(--bento-radius); background: linear-gradient(160deg, var(--c-soft, var(--surface)) 0%, color-mix(in srgb, var(--c-soft, var(--surface)) 45%, var(--surface)) 100%); color: var(--ink); box-shadow: 0 16px 32px -26px rgba(16, 29, 53, .3); animation: bento-enter 360ms var(--ease) both; transition: transform 220ms var(--ease), box-shadow 220ms var(--ease); }
+.app-shell .bento-card.is-strong :is(h1, h2, h3, .bento-value) { color: #fff; }
+.app-shell .bento-card.is-strong { border: 0; background: var(--c-grad); color: #fff; box-shadow: 0 22px 40px -24px var(--c-glow); }
+.app-shell .bento-card.is-strong::after { position: absolute; width: 260px; height: 260px; top: -130px; right: -90px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 255, 255, .24) 0%, rgba(255, 255, 255, 0) 70%); content: ""; pointer-events: none; }
+.app-shell a.bento-card { text-decoration: none; }
+.app-shell a.bento-card:hover { transform: translateY(-3px); box-shadow: 0 24px 40px -24px var(--c-glow); }
+.app-shell a.bento-card:focus-visible { outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-solid) 35%, transparent); }
+.app-shell .bento-card :is(h2, h3, p) { margin: 0; }
+.app-shell .bento-label { color: var(--c-text, var(--muted)); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.app-shell .bento-card.is-strong .bento-label { color: rgba(255, 255, 255, .78); }
+.app-shell .bento-value { font-size: clamp(30px, 3.4vw, 42px); font-weight: 750; letter-spacing: -.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.app-shell .bento-note { color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+.app-shell .bento-card.is-strong .bento-note { color: rgba(255, 255, 255, .85); }
+.app-shell .bento-icon { display: grid; width: 42px; height: 42px; flex-shrink: 0; place-items: center; border-radius: 14px; background: var(--c-grad); color: #fff; box-shadow: 0 10px 20px -12px var(--c-glow); }
+.app-shell .bento-card.is-strong .bento-icon { background: rgba(255, 255, 255, .2); box-shadow: none; }
+.app-shell .bento-icon svg { width: 20px; height: 20px; }
+.app-shell .bento-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; }
+.app-shell .bento-link { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--radius-pill); background: var(--c-grad); color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; transition: filter 180ms var(--ease), transform 180ms var(--ease); }
+.app-shell .bento-card.is-strong .bento-link { background: #fff; color: var(--c-solid); }
+.app-shell .bento-card.is-strong .bento-link.is-ghost { border: 1px solid rgba(255, 255, 255, .35); background: rgba(255, 255, 255, .12); color: #fff; }
+.app-shell .bento-link:hover { filter: brightness(1.06); transform: translateY(-1px); }
+
+.app-shell .span-12 { grid-column: span 12; }
+.app-shell .span-8 { grid-column: span 8; }
+.app-shell .span-7 { grid-column: span 7; }
+.app-shell .span-6 { grid-column: span 6; }
+.app-shell .span-5 { grid-column: span 5; }
+.app-shell .span-4 { grid-column: span 4; }
+.app-shell .span-3 { grid-column: span 3; }
+.app-shell .row-2 { grid-row: span 2; }
+
+.app-shell .dashboard-hero { min-height: 260px; justify-content: space-between; padding: 30px; }
+.app-shell .dashboard-hero h1 { max-width: 620px; margin: 6px 0 0; color: #fff; font-size: clamp(28px, 3.4vw, 44px); letter-spacing: -.04em; line-height: 1.05; }
+.app-shell .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-shell .hero-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .16); color: #fff; font-size: 12px; font-weight: 600; }
+.app-shell .hero-chip .status-dot { box-shadow: none; }
+.app-shell .quick-tile { min-height: 150px; }
+.app-shell .quick-tile h3 { color: var(--ink); font-size: 16px; letter-spacing: -.01em; }
+.app-shell .quick-tile .bento-note { margin-top: auto; }
+.app-shell .quick-tile-arrow { position: absolute; top: 20px; right: 20px; color: var(--c-text); font-size: 18px; transition: transform 200ms var(--ease); }
+.app-shell a.quick-tile:hover .quick-tile-arrow { transform: translate(3px, -3px); }
+.app-shell .usage-meter { display: grid; gap: 12px; }
+.app-shell .usage-meter-row { display: grid; gap: 6px; }
+.app-shell .usage-meter-row > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.app-shell .usage-meter-row strong { font-weight: 600; }
+.app-shell .usage-meter-row span { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.app-shell .meter { height: 8px; overflow: hidden; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--c-solid) 16%, transparent); }
+.app-shell .meter > span { display: block; height: 100%; border-radius: inherit; background: var(--c-grad); transition: width 600ms var(--ease); }
+.app-shell .chip-cloud { display: flex; flex-wrap: wrap; gap: 6px; }
+.app-shell .chip-cloud span { padding: 4px 9px; border: 1px solid var(--c-line); border-radius: var(--radius-pill); background: var(--surface); color: var(--c-text); font-family: var(--font-mono); font-size: 11px; }
+.app-shell .check-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.app-shell .check-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.app-shell .check-list li::before { display: grid; width: 20px; height: 20px; flex-shrink: 0; place-items: center; border-radius: 50%; background: var(--c-grad); color: #fff; font-size: 11px; font-weight: 700; content: "✓"; }
+.app-shell .check-list li.is-off::before { background: var(--pastel-gray); color: var(--muted); content: "–"; }
+
+/* ── 11. Responsive del Bento según el espacio disponible ─────── */
+@container app-content (max-width: 1100px) {
+  .app-shell .span-3 { grid-column: span 6; }
+  .app-shell .span-4 { grid-column: span 6; }
+  .app-shell .span-8, .app-shell .span-7 { grid-column: span 12; }
+  .app-shell .span-5 { grid-column: span 12; }
+  .app-shell .row-2 { grid-row: auto; }
+}
+@container app-content (max-width: 640px) {
+  .app-shell .bento-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .app-shell :is(.span-3, .span-4, .span-5, .span-6, .span-7, .span-8, .span-12) { grid-column: 1 / -1; }
+  .app-shell .dashboard-hero { min-height: 0; padding: 22px; }
+  .app-shell :is(.catalog-header, .inventory-header, .procurement-header, .cash-header, .topbar) { padding: 22px 20px; border-radius: var(--bento-radius); }
+  .app-shell :is(.catalog-page, .inventory-page, .procurement-page, .receiving-page, .cash-page, .dashboard-main) { padding: 18px 14px 48px; }
+}
+
+/* ── 12. Movimiento reducido y documentos impresos ────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .page-transition, .app-shell .bento-card { animation: none; }
+  .app-shell :is(.panel, .bento-card, .metric-card, .order-card, .primary-button, .bento-link, .meter > span) { transition: none; }
+  .app-shell :is(a.bento-card, .metric-card, .order-card, .primary-button):hover { transform: none; }
+}
+@media print {
+  .app-shell .app-content { background: #fff; }
+  .app-shell .page-transition { animation: none; }
+}
+
+/* ── 13. Ajustes por módulo ───────────────────────────────────── */
+/* Ventas POS: productos a la izquierda, cobro a la derecha */
+.app-shell .sales-layout { align-items: start; }
+.app-shell .sales-layout > .cash-shifts-panel { display: flex; flex-direction: column; gap: 16px; }
+.app-shell .sales-layout > .cash-shifts-panel > .quiet-button { align-self: flex-start; }
+.app-shell .sales-summary { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 14px; }
+.app-shell .sales-summary .primary-button { margin-top: 4px; }
+.app-shell .sales-estimate { display: grid; gap: 4px; padding: 18px; border-radius: var(--bento-radius-sm); background: var(--k-grad); color: #fff; box-shadow: 0 14px 28px -18px var(--k-glow); }
+.app-shell .sales-estimate span { font-size: 11px; font-weight: 700; letter-spacing: .12em; opacity: .85; text-transform: uppercase; }
+.app-shell .sales-estimate strong { font-size: clamp(28px, 3vw, 36px); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.app-shell .sales-estimate small { font-size: 12px; opacity: .85; }
+.app-shell .sale-confirmed { border: 0; background: var(--tn-green-grad); color: #fff; }
+:root .app-shell .sale-confirmed :is(h2, p) { color: #fff; }
+:root .app-shell .sale-confirmed p:not(.section-kicker) { color: rgba(255, 255, 255, .88); }
+.app-shell .sale-confirmed .section-kicker { background: rgba(255, 255, 255, .2); color: #fff; }
+.app-shell .sale-confirmed::before { display: none; }
+
+/* Caja: los campos de fecha y hora no caben de a dos en el panel lateral */
+.app-shell .cash-time-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.app-shell .cash-time-grid input { min-width: 0; }
+
+/* Suscripción: el plan actual es la tarjeta protagonista */
+:root .app-shell .plan-hero { position: relative; overflow: hidden; border: 0; border-radius: var(--bento-radius); background: var(--m-grad); color: #fff; box-shadow: 0 22px 44px -26px var(--m-glow); }
+:root .app-shell .plan-hero.status-past_due { background: var(--tn-amber-grad); }
+:root .app-shell .plan-hero.status-suspended { background: var(--tn-orange-grad); }
+:root .app-shell .plan-hero.status-trialing { background: var(--tn-sky-grad); }
+.app-shell .plan-hero::after { position: absolute; width: 280px; height: 280px; top: -140px; right: -90px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 255, 255, .24) 0%, rgba(255, 255, 255, 0) 70%); content: ""; pointer-events: none; }
+.app-shell .plan-hero :is(h2, .plan-hero-price, dt, dd, .form-note) { color: #fff; }
+.app-shell .plan-hero :is(.plan-hero-price small, dt, .form-note) { color: rgba(255, 255, 255, .78); }
+.app-shell .plan-hero .section-kicker { background: rgba(255, 255, 255, .2); color: #fff; }
+.app-shell .plan-hero .subscription-badge { background: rgba(255, 255, 255, .92); }

@@ -4,58 +4,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { accountProfile, type AccountProfile } from "../lib/account";
+import { moduleForPath, moduleSections } from "../lib/modules";
 import { currentSession, logout, type AuthSession } from "../lib/session";
-import { NavIcon, type NavIconName } from "./nav-icon";
+import { NavIcon } from "./nav-icon";
 import { ThemeToggle } from "./theme-toggle";
-
-interface NavigationItem {
-  label: string;
-  icon: NavIconName;
-  href: string;
-  permission?: string;
-}
-
-// Secciones del menú. Solo se muestran las opciones para las que el usuario tiene permiso.
-const sections: Array<{ label: string; items: NavigationItem[] }> = [
-  { label: "General", items: [{ label: "Resumen", icon: "overview", href: "/dashboard" }] },
-  {
-    label: "Operación",
-    items: [
-      { label: "Ventas POS", icon: "sales", href: "/sales", permission: "sales.confirm" },
-      { label: "Caja y turnos", icon: "cash", href: "/cash", permission: "cash.manage" },
-      { label: "Catálogo", icon: "catalog", href: "/catalog", permission: "catalog.manage" },
-      { label: "Inventario", icon: "inventory", href: "/inventory", permission: "inventory.manage" },
-      { label: "Compras", icon: "procurement", href: "/procurement", permission: "inventory.manage" }
-    ]
-  },
-  {
-    label: "Control",
-    items: [
-      { label: "Reporte global", icon: "report", href: "/inventory/report", permission: "inventory.report.global" },
-      { label: "Auditoría", icon: "audit", href: "/audit", permission: "audit.read" }
-    ]
-  },
-  {
-    label: "Administración",
-    items: [
-      { label: "Usuarios y roles", icon: "users", href: "/users", permission: "users.manage" },
-      { label: "Suscripción", icon: "billing", href: "/billing", permission: "billing.manage" },
-      { label: "Mi cuenta", icon: "account", href: "/account" }
-    ]
-  }
-];
 
 /** Rutas del sistema interno de la farmacia: todas llevan el sidebar. */
 const tenantRoutes = ["/dashboard", "/catalog", "/inventory", "/procurement", "/cash", "/sales", "/audit", "/users", "/billing", "/account"];
 
 function isTenantRoute(pathname: string): boolean {
   return tenantRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
-}
-
-/** La opción activa es la de ruta más larga que coincide (así /inventory/report no marca Inventario). */
-function activeHref(pathname: string, items: NavigationItem[]): string | null {
-  const matches = items.filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-  return matches.sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
 }
 
 function initials(name: string): string {
@@ -146,10 +104,11 @@ function AppShell({ children }: Readonly<{ children: ReactNode }>) {
   }
 
   const { session, account } = value;
-  const visibleSections = sections
+  const visibleSections = moduleSections
     .map((section) => ({ ...section, items: section.items.filter((item) => !item.permission || session.permissions.includes(item.permission)) }))
     .filter((section) => section.items.length > 0);
-  const current = activeHref(pathname, visibleSections.flatMap((section) => section.items));
+  const currentModule = moduleForPath(pathname);
+  const current = moduleForPath(pathname, visibleSections.flatMap((section) => section.items))?.href ?? null;
   const displayName = account?.displayName ?? "Usuario";
 
   return (
@@ -187,7 +146,7 @@ function AppShell({ children }: Readonly<{ children: ReactNode }>) {
                 {section.items.map((item) => {
                   const active = item.href === current;
                   return (
-                    <Link aria-current={active ? "page" : undefined} className={`nav-item ${active ? "is-active" : ""}`} href={item.href} key={item.href} title={collapsed ? item.label : undefined}>
+                    <Link aria-current={active ? "page" : undefined} className={`nav-item ${active ? "is-active" : ""}`} data-tone={item.tone} href={item.href} key={item.href} title={collapsed ? item.label : undefined}>
                       <span className="nav-icon"><NavIcon name={item.icon} /></span>
                       <span className="sidebar-text">{item.label}</span>
                     </Link>
@@ -207,7 +166,10 @@ function AppShell({ children }: Readonly<{ children: ReactNode }>) {
           </div>
         </aside>
 
-        <div className="app-content">{children}</div>
+        <div className="app-content" data-alt-tone={currentModule?.altTone ?? "lilac"} data-module={currentModule?.key ?? "dashboard"} data-tone={currentModule?.tone ?? "blue"}>
+          {/* key: al cambiar de página el contenido vuelve a entrar con una transición suave */}
+          <div className="page-transition" key={pathname}>{children}</div>
+        </div>
       </div>
     </ShellContext.Provider>
   );
