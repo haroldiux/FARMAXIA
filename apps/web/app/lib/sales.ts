@@ -116,3 +116,16 @@ export function confirmCashSale(input: Omit<ConfirmSaleInput, "idempotencyKey" |
     body: JSON.stringify({ ...input, idempotencyKey, paymentMethod: "CASH" })
   });
 }
+
+/** Resumen de ventas de la sucursal para el panel (montos en BOB como texto exacto). */
+export interface SalesSummary {
+  today: { totalBob: string; count: number };
+  month: { totalBob: string; count: number; units: number; averageTicketBob: string };
+  monthly: Array<{ month: string; totalBob: string; count: number }>;
+  daily: Array<{ day: string; totalBob: string; count: number }>;
+  recent: Array<{ id: string; createdAt: string; totalBob: string; items: number; cashierName: string | null }>;
+}
+
+export async function salesSummary(): Promise<SalesSummary> {
+  return request<SalesSummary>("/api/v1/sales/summary");
+}

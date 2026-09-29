@@ -42,6 +42,15 @@ export interface ConfirmedSaleItem {
   allocations: SaleAllocation[];
 }
 
+/** Resumen de ventas de la sucursal para el panel (hora de Bolivia). Montos en BOB como texto exacto. */
+export interface SalesSummary {
+  today: { totalBob: string; count: number };
+  month: { totalBob: string; count: number; units: number; averageTicketBob: string };
+  monthly: Array<{ month: string; totalBob: string; count: number }>;
+  daily: Array<{ day: string; totalBob: string; count: number }>;
+  recent: Array<{ id: string; createdAt: string; totalBob: string; items: number; cashierName: string | null }>;
+}
+
 export interface ConfirmedSale {
   id: string;
   cashShiftId: string;
@@ -339,6 +348,76 @@ export class SalesService {
       paidAmountBob: input.paidAmountBob,
       items
     };
+  }
+
+  /** Totales de hoy y del mes, últimos 8 meses, últimos 14 días y últimas ventas de la sucursal activa. */
+  async summary(scope: TenantScope): Promise<SalesSummary> {
+    return this.database.withScope(scope, async (client) => {
+      const zone = "America/La_Paz";
+      const params = [scope.tenantId, scope.branchId, zone];
+      const totals = await client.query<{
+        todayTotal: string; todayCount: number; monthTotal: string; monthCount: number; monthUnits: string;
+      }>(
+        `with local_sales as (
+           select s.id, s.total_amount_bob, (s.created_at at time zone $3) as local_at
+           from sales s where s.tenant_id = $1 and s.branch_id = $2 and s.status = 'CONFIRMED'
+         ), now_local as (select (now() at time zone $3) as at)
+         select
+           coalesce(sum(total_amount_bob) filter (where local_at::date = (select at from now_local)::date), 0)::text as "todayTotal",
+           (count(*) filter (where local_at::date = (select at from now_local)::date))::int as "todayCount",
+           coalesce(sum(total_amount_bob) filter (where date_trunc('month', local_at) = date_trunc('month', (select at from now_local))), 0)::text as "monthTotal",
+           (count(*) filter (where date_trunc('month', local_at) = date_trunc('month', (select at from now_local))))::int as "monthCount",
+           coalesce((select sum(i.quantity) from sale_items i join local_sales ls on ls.id = i.sale_id
+                     where i.tenant_id = $1 and date_trunc('month', ls.local_at) = date_trunc('month', (select at from now_local))), 0)::text as "monthUnits"
+         from local_sales`,
+        params
+      );
+      const monthly = await client.query<{ month: string; totalBob: string; count: number }>(
+        `with months as (
+           select generate_series(date_trunc('month', now() at time zone $3) - interval '7 months', date_trunc('month', now() at time zone $3), interval '1 month') as month
+         )
+         select to_char(m.month, 'YYYY-MM') as month,
+                coalesce(sum(s.total_amount_bob), 0)::text as "totalBob",
+                count(s.id)::int as count
+         from months m
+         left join sales s on s.tenant_id = $1 and s.branch_id = $2 and s.status = 'CONFIRMED'
+           and date_trunc('month', s.created_at at time zone $3) = m.month
+         group by m.month order by m.month`,
+        params
+      );
+      const daily = await client.query<{ day: string; totalBob: string; count: number }>(
+        `with days as (
+           select generate_series((now() at time zone $3)::date - 13, (now() at time zone $3)::date, interval '1 day')::date as day
+         )
+         select to_char(d.day, 'YYYY-MM-DD') as day,
+                coalesce(sum(s.total_amount_bob), 0)::text as "totalBob",
+                count(s.id)::int as count
+         from days d
+         left join sales s on s.tenant_id = $1 and s.branch_id = $2 and s.status = 'CONFIRMED'
+           and (s.created_at at time zone $3)::date = d.day
+         group by d.day order by d.day`,
+        params
+      );
+      const recent = await client.query<{ id: string; createdAt: Date; totalBob: string; items: number; cashierName: string | null }>(
+        `select s.id, s.created_at as "createdAt", s.total_amount_bob::text as "totalBob",
+                (select count(*) from sale_items i where i.sale_id = s.id)::int as items,
+                u.display_name as "cashierName"
+         from sales s left join users u on u.id = s.created_by_user_id
+         where s.tenant_id = $1 and s.branch_id = $2 and s.status = 'CONFIRMED'
+         order by s.created_at desc limit 6`,
+        [scope.tenantId, scope.branchId]
+      );
+      const row = totals.rows[0]!;
+      const monthCount = row.monthCount;
+      const average = monthCount ? (Number(row.monthTotal) / monthCount).toFixed(2) : "0.00";
+      return {
+        today: { totalBob: row.todayTotal, count: row.todayCount },
+        month: { totalBob: row.monthTotal, count: monthCount, units: Number(row.monthUnits), averageTicketBob: average },
+        monthly: monthly.rows,
+        daily: daily.rows,
+        recent: recent.rows.map((sale) => ({ ...sale, createdAt: sale.createdAt.toISOString() }))
+      };
+    });
   }
 
   private async sumTotal(client: PoolClient, saleId: string): Promise<string> {

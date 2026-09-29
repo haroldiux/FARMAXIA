@@ -120,6 +120,30 @@ describe("F11 cash sale confirmation against the database", () => {
     expect(Number(control.rows[0]!.expected)).toBe(137.5);
   });
 
+  it("summarizes today, the month, the charts and the recent sales of the branch", async () => {
+    const empty = await sales.summary(scope);
+    expect(empty.today).toEqual({ totalBob: "0", count: 0 });
+    expect(empty.monthly).toHaveLength(8);
+    expect(empty.daily).toHaveLength(14);
+
+    await sales.confirm(scope, {
+      idempotencyKey: "sale-db-summary",
+      cashShiftId: shiftId,
+      warehouseId,
+      paymentMethod: "CASH",
+      paidAmountBob: "37.5000",
+      lines: [{ presentationId, quantity: 3, unitPriceBob: "12.5000" }]
+    });
+    const summary = await sales.summary(scope);
+    expect(summary.today.count).toBe(1);
+    expect(Number(summary.today.totalBob)).toBe(37.5);
+    expect(summary.month).toMatchObject({ count: 1, units: 3, averageTicketBob: "37.50" });
+    expect(Number(summary.monthly.at(-1)!.totalBob)).toBe(37.5);
+    expect(summary.daily.at(-1)!.count).toBe(1);
+    expect(summary.recent).toHaveLength(1);
+    expect(summary.recent[0]).toMatchObject({ items: 1, cashierName: "Cajero" });
+  });
+
   it("rejects a payment that does not match the exact total without moving stock", async () => {
     await expect(
       sales.confirm(scope, {

@@ -5,6 +5,8 @@ import { themeBootScript } from "./lib/theme-script";
 import "./globals.css";
 // Rediseño Bento del sistema interno (solo aplica dentro de .app-shell, nunca al login).
 import "./bento.css";
+// Login, registro y login de plataforma (solo aplica a .lx-page).
+import "./login.css";
 
 export const metadata: Metadata = {
   title: "FARMAXIA · Operación inteligente",

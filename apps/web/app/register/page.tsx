@@ -1,6 +1,6 @@
 "use client";
 
-import { LoginBackground } from "../components/login-background";
+import { AuthBrand, AuthShowcase } from "../components/auth-showcase";
 import { ThemeToggle } from "../components/theme-toggle";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
@@ -65,19 +65,16 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="login-page">
-      <LoginBackground />
+    <main className="login-page lx-page">
       <ThemeToggle className="login-theme-toggle" />
       <section className="login-intro">
-        <div className="brand-lockup brand-lockup-dark">
-          <div className="brand-mark">F</div>
-          <div><strong>FARMAXIA</strong><span>operación inteligente</span></div>
-        </div>
+        <AuthBrand subtitle="operación inteligente" />
         <div className="intro-copy">
           <p className="eyebrow">Prueba gratis 7 días</p>
           <h1>Tu farmacia,<br /><em>en orden.</em></h1>
           <p>Registra tu farmacia en un minuto. Empiezas con la sucursal, el almacén y la caja listos para operar.</p>
         </div>
+        <AuthShowcase variant="register" />
         <div className="intro-footer"><span>●</span> Sin tarjeta · Cancela cuando quieras <span>2026</span></div>
       </section>
 
