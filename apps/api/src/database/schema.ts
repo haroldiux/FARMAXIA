@@ -1042,9 +1042,21 @@ export const purchaseOrders = pgTable(
     warehouseId: uuid("warehouse_id").notNull(),
     status: varchar("status", { length: 24 }).default("DRAFT").notNull(),
     orderedAt: timestamp("ordered_at", { withTimezone: true }).defaultNow().notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedByUserId: uuid("closed_by_user_id"),
+    closeReason: varchar("close_reason", { length: 255 }),
     createdAt
   },
   (table) => [
+    foreignKey({
+      name: "purchase_orders_closed_by_fk",
+      columns: [table.closedByUserId],
+      foreignColumns: [users.id]
+    }),
+    check(
+      "purchase_orders_status_check",
+      sql`${table.status} in ('DRAFT', 'SUBMITTED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELED', 'CLOSED')`
+    ),
     foreignKey({
       name: "purchase_orders_tenant_supplier_fk",
       columns: [table.tenantId, table.supplierId],
@@ -1545,9 +1557,13 @@ export const payables = pgTable(
     originalAmount: numeric("original_amount", { precision: 18, scale: 4 }).notNull(),
     outstandingAmount: numeric("outstanding_amount", { precision: 18, scale: 4 }).notNull(),
     status: varchar("status", { length: 24 }).default("OPEN").notNull(),
+    scheduledOn: date("scheduled_on"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt
   },
   (table) => [
+    check("payables_status_check", sql`${table.status} in ('OPEN', 'PARTIAL', 'PAID')`),
+    check("payables_outstanding_le_original_check", sql`${table.outstandingAmount} <= ${table.originalAmount}`),
     foreignKey({
       name: "payables_tenant_invoice_fk",
       columns: [table.tenantId, table.supplierInvoiceId],
@@ -1826,5 +1842,53 @@ export const platformAuditEvents = pgTable(
       foreignColumns: [platformOperators.id]
     }),
     index("platform_audit_events_occurred_idx").on(table.occurredAt)
+  ]
+);
+
+export const supplierPayments = pgTable(
+  "supplier_payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    payableId: uuid("payable_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    paidOn: date("paid_on").notNull(),
+    amount: numeric("amount", { precision: 18, scale: 4 }).notNull(),
+    method: varchar("method", { length: 16 }).notNull(),
+    reference: varchar("reference", { length: 120 }),
+    notes: varchar("notes", { length: 255 }),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    unique("supplier_payments_tenant_id_unique").on(table.tenantId, table.id),
+    unique("supplier_payments_tenant_idempotency_unique").on(table.tenantId, table.idempotencyKey),
+    check("supplier_payments_amount_positive_check", sql`${table.amount} > 0`),
+    check("supplier_payments_method_check", sql`${table.method} in ('CASH', 'TRANSFER', 'CHECK', 'QR', 'OTHER')`),
+    foreignKey({ name: "supplier_payments_payable_fk", columns: [table.tenantId, table.payableId], foreignColumns: [payables.tenantId, payables.id] }),
+    foreignKey({ name: "supplier_payments_supplier_fk", columns: [table.tenantId, table.supplierId], foreignColumns: [suppliers.tenantId, suppliers.id] }),
+    foreignKey({ name: "supplier_payments_created_by_fk", columns: [table.createdByUserId], foreignColumns: [users.id] }),
+    index("supplier_payments_payable_idx").on(table.tenantId, table.payableId, table.paidOn)
+  ]
+);
+
+export const presentationCosts = pgTable(
+  "presentation_costs",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    averageUnitCost: numeric("average_unit_cost", { precision: 18, scale: 6 }).notNull(),
+    lastUnitCost: numeric("last_unit_cost", { precision: 18, scale: 4 }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    primaryKey({ name: "presentation_costs_pk", columns: [table.tenantId, table.presentationId] }),
+    check("presentation_costs_non_negative_check", sql`${table.averageUnitCost} >= 0 and ${table.lastUnitCost} >= 0`),
+    foreignKey({
+      name: "presentation_costs_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    })
   ]
 );

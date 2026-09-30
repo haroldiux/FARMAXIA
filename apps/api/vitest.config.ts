@@ -25,7 +25,8 @@ export default defineConfig({
       "test/identity.spec.ts",
       "test/catalog-profile.spec.ts",
       "test/inventory-operations.spec.ts",
-      "test/sales-confirm.spec.ts"
+      "test/sales-confirm.spec.ts",
+      "test/procurement-module4.spec.ts"
     ],
     fileParallelism: false
   }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { ProcurementNav } from "../../components/procurement-nav";
 import { currentSession, type AuthSession } from "../../lib/session";
 import {
   createSupplierInvoice,
@@ -99,7 +100,8 @@ export default function SupplierInvoicesPage() {
   if (!session.permissions.includes("inventory.manage")) return <main className="center-state inventory-denied"><div><strong>Acceso restringido</strong><p>Tu sesión no tiene permiso para administrar compras.</p><Link href="/dashboard">Volver al resumen</Link></div></main>;
 
   return <main className="receiving-page">
-    <header className="procurement-header"><div><Link className="back-link" href="/procurement">← Volver a compras</Link><p className="eyebrow">F10 · Cuentas por pagar</p><h1>Facturas bajo control.</h1><p className="procurement-lede">Relaciona cada factura con una recepción y conserva sus importes exactos.</p></div></header>
+    <header className="procurement-header"><div><p className="eyebrow">Compras · Facturas</p><h1>Facturas bajo control.</h1><p className="procurement-lede">Relaciona cada factura con una recepción y conserva sus importes exactos.</p></div></header>
+      <ProcurementNav />
     {error ? <p className="form-error procurement-message" role="alert">{error}</p> : null}
     {notice ? <p className="form-success procurement-message" role="status">{notice}</p> : null}
     <section className="receiving-layout">

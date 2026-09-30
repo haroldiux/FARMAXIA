@@ -1,7 +1,7 @@
 # FARMAXIA — Estado de funcionalidades
 
-**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 27 de septiembre de 2026 (módulos 0, 1, 2 y 3 completados)
-**Rama revisada:** `Denil` (commit `240f272`, basado en `main` `38709c8`); módulos 0 y 1 en el commit `83ad80f` y módulos 2 y 3 sin commit en `Denil`
+**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 29 de septiembre de 2026 (módulos 0 al 4 completados)
+**Rama revisada:** `Denil` (commit `240f272`, basado en `main` `38709c8`); módulos 0 al 3 subidos a `Denil` y módulo 4 sin commit
 **Autor:** Denilson Godoy
 
 ## 1. Propósito de este documento
@@ -38,7 +38,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 1. Seguridad y roles | 9 | 0 | 0 |
 | 2. Catálogo farmacéutico | 10 | 0 | 0 |
 | 3. Inventario, lotes y almacenes | 11 | 0 | 0 |
-| 4. Compras y proveedores | 3 | 2 | 4 |
+| 4. Compras y proveedores | 9 | 0 | 0 |
 | 5. Punto de venta y caja | 5 | 0 | 10 |
 | 6. Facturación SIAT | 0 | 0 | 8 |
 | 7. Traspasos entre sucursales | 0 | 0 | 5 |
@@ -47,9 +47,9 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
 | 11. Analítica | 1 | 0 | 5 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **52** | **3** | **47** |
+| **Total** | **58** | **1** | **43** |
 
-**Avance aproximado: ~50%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~57%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -115,12 +115,13 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 - ✅ Registro de proveedores con NIT
 - ✅ Órdenes de compra
 - ✅ Recepción por lote, sin superar lo ordenado (recepciones parciales)
-- 🟡 Facturas de proveedor y cuentas por pagar: se registra la deuda inicial, pero no hay pagos
-- 🟡 Órdenes con varios productos: la API lo permite, la pantalla solo admite uno por orden
-- ❌ Pagos a proveedores y programación de pagos
-- ❌ Costo promedio ponderado (decisión D08 pendiente)
-- ❌ Reposición sugerida según el stock
-- ❌ Cancelación de órdenes de compra
+- ✅ Facturas de proveedor y cuentas por pagar con saldo, estado (pendiente, pago parcial, vencida, pagada) y pagos registrados
+- ✅ Órdenes con varios productos desde la pantalla, con costo promedio sugerido, total estimado y avance de lo recibido por línea
+- ✅ Pagos a proveedores (`/procurement/payables`): parciales o totales, sin pasarse del saldo, con método, referencia, historial y auditoría. Permiso nuevo «Registrar pagos a proveedores» (D41)
+- ✅ Programación de pagos: agenda de vencidas, esta semana, próximos 30 días y más adelante, con fecha planificada por factura
+- ✅ Costo promedio ponderado por presentación, recalculado en cada recepción y sugerido al armar órdenes (D40, pendiente de confirmar)
+- ✅ Reposición sugerida (`/procurement/reorder`): según la venta de 30 días, el stock libre y lo ya pedido; crea la orden con un clic (D42)
+- ✅ Cancelación de órdenes sin recepciones y cierre del saldo pendiente de las parciales, con motivo y auditoría
 
 ### 5. Punto de venta (POS) y caja
 

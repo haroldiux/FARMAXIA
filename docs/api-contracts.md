@@ -402,3 +402,21 @@ lote se queda sin stock o pasa de "por vencer" a "vencido".
 
 CORS: la API ahora acepta `PUT`, `PATCH` y `DELETE` desde la web (antes Fastify solo
 permitía `GET`, `HEAD` y `POST` y el navegador bloqueaba las ediciones).
+
+## Compras: órdenes, pagos, costos y reposición (módulo 4)
+
+Migración `0019_procurement_payments.sql`. Rutas bajo `/api/v1/procurement`, funcionalidad de plan
+`procurement` y permiso `inventory.manage`; registrar pagos y programarlos exige además el permiso
+nuevo `payables.manage` («Registrar pagos a proveedores», Propietario y Encargado).
+
+| Ruta | Contrato |
+| --- | --- |
+| `POST purchase-orders` | (Existente) acepta varias líneas; la web ya las envía. |
+| `GET purchase-orders` | Cada línea incluye `receivedBase`; la orden incluye `closeReason` y `closedAt`. |
+| `POST purchase-orders/:id/cancel` | `{ reason }` (3–255). `SUBMITTED` → `CANCELED`; `PARTIALLY_RECEIVED` → `CLOSED` (cierra el saldo; lo recibido se mantiene). Otra situación → `409`. Una orden cancelada o cerrada ya no se recibe. Auditoría `procurement.purchase_order_canceled` / `_closed`. |
+| `GET costs` | Costo promedio ponderado vigente por presentación (`averageUnitCost`, `lastUnitCost`). Se recalcula en cada recepción (D40). |
+| `GET reorder-suggestions?coverageDays=30` | Por presentación vendida en la sucursal: vendido en 30 días, promedio diario, stock libre en almacenes de despacho, pendiente en órdenes abiertas, días que alcanza, cantidad sugerida, costo promedio, costo estimado y último proveedor. `coverageDays` 7–120. |
+| `GET payables` | Cuentas por pagar con saldo, pagado, estado (`OPEN`, `PARTIAL`, `OVERDUE`, `PAID`), tramo de la agenda (`overdue`, `thisWeek`, `next30`, `later`, `paid`) según la fecha programada o el vencimiento, y totales pendientes por tramo y moneda. |
+| `GET payables/:id/payments` | Historial de pagos de la cuenta. |
+| `POST payables/:id/payments` | `{ idempotencyKey, amount, paidOn, method: CASH\|TRANSFER\|CHECK\|QR\|OTHER, reference?, notes? }`. Nunca más que el saldo (`409`); un reintento con la misma clave devuelve el mismo pago. Actualiza saldo y estado; auditoría `procurement.supplier_payment_registered`. |
+| `PATCH payables/:id/schedule` | `{ scheduledOn: "AAAA-MM-DD" \| null }` fija o quita la fecha planificada; no aplica a cuentas pagadas. |

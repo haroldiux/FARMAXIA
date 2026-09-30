@@ -479,3 +479,69 @@ html:has(.ax-shell), body:has(.ax-shell) { background: #ffffff; }
   html:has(.ax-shell), body:has(.ax-shell) { background: var(--ax-panel, #f2f4f7); }
   :root[data-theme="dark"]:has(.ax-shell), :root[data-theme="dark"] body:has(.ax-shell) { background: #111318; }
 }
+
+/* ── 8. Compras: órdenes con varias líneas, pagos y reposición ── */
+.ax-shell .order-closed { background: var(--ax-sand); color: var(--ax-sand-text); }
+.ax-shell .order-draft-lines { display: flex; flex-direction: column; gap: 12px; }
+.ax-shell .order-draft-line { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: var(--ax-card); }
+.ax-shell .order-draft-line > .row-action { align-self: flex-start; }
+.ax-shell .order-draft-total { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 2px 0; color: var(--ax-soft); font-size: 13px; }
+.ax-shell .order-draft-total strong { color: var(--ax-ink); font-size: 20px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ax-shell .order-close-form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+.ax-shell .order-close-note { margin: 10px 0 0; }
+
+/* Agenda de pagos: cuatro tarjetas pastel como las métricas del Resumen */
+.ax-shell .payable-buckets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.ax-shell .payable-bucket { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; border-radius: 22px; background: var(--tint-bg); color: var(--ax-ink); }
+.ax-shell .payable-bucket.tint-peach { --tint-bg: var(--ax-peach); }
+.ax-shell .payable-bucket.tint-sand { --tint-bg: var(--ax-sand); }
+.ax-shell .payable-bucket.tint-lilac { --tint-bg: var(--ax-lilac); }
+.ax-shell .payable-bucket.tint-mint { --tint-bg: var(--ax-mint); }
+.ax-shell .payable-bucket span { font-size: 14px; font-weight: 600; }
+.ax-shell .payable-bucket strong { font-size: clamp(20px, 2vw, 26px); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ax-shell .payable-bucket small { color: var(--ax-soft); font-size: 12.5px; }
+.ax-shell .payable-row { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ax-shell .payable-row.is-selected { background: var(--blue-soft); }
+.ax-shell .payable-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ax-shell .payable-row-side strong { font-variant-numeric: tabular-nums; }
+.ax-shell .payable-open { background: var(--blue-soft); color: var(--blue-ink); }
+.ax-shell .payable-partial { background: var(--ax-sand); color: var(--ax-sand-text); }
+.ax-shell .payable-paid { background: var(--ax-mint); color: var(--ax-mint-text); }
+.ax-shell .payable-overdue { background: var(--ax-peach); color: var(--ax-peach-text); }
+.ax-shell .payable-schedule { padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+.ax-shell .payment-history { display: flex; flex-direction: column; gap: 8px; }
+.ax-shell .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--ax-card); }
+.ax-shell .payment-row strong { display: block; font-variant-numeric: tabular-nums; }
+.ax-shell .payment-row small { color: var(--ax-muted); font-size: 12px; }
+.ax-shell .cash-form-panel { display: flex; flex-direction: column; gap: 14px; }
+
+/* Reposición sugerida */
+.ax-shell .reorder-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; padding: 16px 18px; }
+.ax-shell .reorder-toolbar .inventory-summary { margin-left: auto; }
+.ax-shell .reorder-create { width: auto; margin-top: 0; }
+.ax-shell .reorder-table { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.ax-shell .reorder-head, .ax-shell .reorder-row { display: grid; grid-template-columns: 26px minmax(0, 2fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, .8fr) 96px 110px; align-items: center; gap: 12px; padding: 10px 14px; }
+.ax-shell .reorder-head { color: var(--ax-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.ax-shell .reorder-row { border-radius: 18px; font-size: 13.5px; transition: background-color 160ms var(--ease), opacity 160ms var(--ease); }
+.ax-shell .reorder-row:hover { background: var(--blue-soft); }
+.ax-shell .reorder-row.is-off { opacity: .5; }
+.ax-shell .reorder-row > div { display: flex; min-width: 0; flex-direction: column; }
+.ax-shell .reorder-row small { color: var(--ax-muted); font-size: 12px; }
+.ax-shell .reorder-row input:not([type="checkbox"]) { width: 100%; min-height: 38px; padding: 6px 10px; border: 1px solid var(--ax-line); border-radius: 12px; background: var(--input-bg); color: var(--ax-ink); font-variant-numeric: tabular-nums; }
+.ax-shell .reorder-row input:focus { border-color: var(--ax-indigo); outline: none; box-shadow: var(--ring); }
+.ax-shell .reorder-note { margin-top: 12px; }
+
+@container app-content (max-width: 1100px) {
+  .ax-shell .payable-buckets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container app-content (max-width: 900px) {
+  .ax-shell .reorder-head { display: none; }
+  .ax-shell .reorder-row { grid-template-columns: 26px repeat(2, minmax(0, 1fr)); border: 1px solid var(--ax-line); }
+  .ax-shell .reorder-row > div { grid-column: 2 / -1; }
+  .ax-shell .reorder-row > :nth-child(n + 3) { grid-column: auto; }
+  .ax-shell .reorder-row [data-label]::before { display: block; color: var(--ax-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; content: attr(data-label); }
+}
+@container app-content (max-width: 560px) {
+  .ax-shell .payable-buckets { grid-template-columns: minmax(0, 1fr); }
+  .ax-shell .reorder-toolbar .inventory-summary { margin-left: 0; }
+}

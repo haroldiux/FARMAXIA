@@ -134,6 +134,13 @@
       "when": 1790500000000,
       "tag": "0018_inventory_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0019_procurement_payments",
+      "breakpoints": true
     }
   ]
 }

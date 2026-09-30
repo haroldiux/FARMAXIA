@@ -6,6 +6,7 @@ export const tenantPermissions = [
   { code: "catalog.manage", description: "Manage catalog and prices", label: "Administrar catálogo y precios", module: "Catálogo", sortOrder: 10 },
   { code: "inventory.manage", description: "Manage inventory operations", label: "Administrar inventario y compras", module: "Inventario", sortOrder: 20 },
   { code: "inventory.count.approve", description: "Approve physical inventory counts", label: "Aprobar conteos de inventario", module: "Inventario", sortOrder: 35 },
+  { code: "payables.manage", description: "Register supplier payments and schedule payables", label: "Registrar pagos a proveedores", module: "Compras", sortOrder: 25 },
   { code: "inventory.report.global", description: "Read tenant-wide inventory reports", label: "Ver reporte global de inventario", module: "Inventario", sortOrder: 30 },
   { code: "cash.manage", description: "Manage cash registers and shifts", label: "Operar caja y turnos", module: "Caja y ventas", sortOrder: 40 },
   { code: "cash.shift.approve", description: "Approve non-zero cash shift differences", label: "Aprobar diferencias de caja", module: "Caja y ventas", sortOrder: 50 },
@@ -41,7 +42,7 @@ export const systemRoles: ReadonlyArray<{
     code: "encargado",
     name: "Encargado de sucursal",
     description: "Operación completa de la sucursal, sin usuarios ni suscripción.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "cash.manage", "cash.shift.approve", "sales.confirm", "audit.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "cash.manage", "cash.shift.approve", "sales.confirm", "audit.read"]
   },
   { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm"] },
   { code: "almacenero", name: "Almacenero", description: "Inventario, compras y recepción.", permissions: ["inventory.manage"] }
