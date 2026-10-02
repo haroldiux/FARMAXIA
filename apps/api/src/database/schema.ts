@@ -10,6 +10,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  text,
   timestamp,
   unique,
   uniqueIndex,
@@ -1983,6 +1984,47 @@ export const salesQuoteItems = pgTable(
   ]
 );
 
+// F13 (0026): scaffold for module 6 fiscal invoicing (SIAT). D03 (SIN modality/contract/certificate)
+// is external and pending; this table only supports the FiscalProvider port + StubFiscalProvider,
+// never a real SIN connection. See D50-D52 in REGISTRO_DECISIONES.md.
+export const fiscalInvoices = pgTable(
+  "fiscal_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    status: varchar("status", { length: 24 }).default("PENDING_PROVIDER").notNull(),
+    cuf: varchar("cuf", { length: 100 }),
+    cufd: varchar("cufd", { length: 100 }),
+    xml: text("xml"),
+    qrData: text("qr_data"),
+    providerName: varchar("provider_name", { length: 60 }),
+    errorMessage: varchar("error_message", { length: 500 }),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "fiscal_invoices_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "fiscal_invoices_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    unique("fiscal_invoices_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("fiscal_invoices_tenant_branch_sale_unique").on(table.tenantId, table.branchId, table.saleId),
+    index("fiscal_invoices_branch_status_idx").on(table.tenantId, table.branchId, table.status),
+    check(
+      "fiscal_invoices_status_check",
+      sql`${table.status} in ('PENDING_PROVIDER', 'ISSUED', 'CONTINGENCY', 'VOIDED', 'ERROR')`
+    )
+  ]
+);
+
 // Core SaaS (migración 0015): funcionalidades contratables, extras por suscripción,
 // comprobantes, pagos declarados y operadores de plataforma.
 export const saasFeatures = pgTable("saas_features", {
@@ -2171,5 +2213,100 @@ export const presentationCosts = pgTable(
       columns: [table.tenantId, table.presentationId],
       foreignColumns: [productPresentations.tenantId, productPresentations.id]
     })
+  ]
+);
+
+// F14 (T1): branch-to-branch transfers (module 7). Stock leaves the origin's inventory_balances
+// at DISPATCH and enters the destination's at RECEPTION, by the quantity actually received (D55).
+// Visible from both the origin and destination branch (RLS checks either warehouse's branch).
+export const transfers = pgTable(
+  "transfers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    originWarehouseId: uuid("origin_warehouse_id").notNull(),
+    destinationWarehouseId: uuid("destination_warehouse_id").notNull(),
+    status: varchar("status", { length: 24 }).default("REQUESTED").notNull(),
+    requestedByUserId: uuid("requested_by_user_id").notNull(),
+    dispatchedByUserId: uuid("dispatched_by_user_id"),
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    // F14 (T2): approval flow bookkeeping (Premium plan only, D53). See 0028_transfer_approval.sql.
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedByUserId: uuid("approved_by_user_id"),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectionReason: varchar("rejection_reason", { length: 255 }),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "transfers_tenant_origin_warehouse_fk",
+      columns: [table.tenantId, table.originWarehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "transfers_tenant_destination_warehouse_fk",
+      columns: [table.tenantId, table.destinationWarehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "transfers_requested_by_fk",
+      columns: [table.requestedByUserId],
+      foreignColumns: [users.id]
+    }),
+    foreignKey({
+      name: "transfers_dispatched_by_fk",
+      columns: [table.dispatchedByUserId],
+      foreignColumns: [users.id]
+    }),
+    foreignKey({
+      name: "transfers_approved_by_fk",
+      columns: [table.approvedByUserId],
+      foreignColumns: [users.id]
+    }),
+    unique("transfers_tenant_id_unique").on(table.tenantId, table.id),
+    check(
+      "transfers_status_check",
+      sql`${table.status} in ('REQUESTED', 'APPROVED', 'DISPATCHED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'REJECTED', 'CANCELLED')`
+    ),
+    check("transfers_origin_destination_distinct_check", sql`${table.originWarehouseId} <> ${table.destinationWarehouseId}`)
+  ]
+);
+
+export const transferItems = pgTable(
+  "transfer_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    transferId: uuid("transfer_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    requestedQty: bigint("requested_qty", { mode: "number" }).notNull(),
+    dispatchedQty: bigint("dispatched_qty", { mode: "number" }),
+    receivedQty: bigint("received_qty", { mode: "number" }).default(0).notNull(),
+    differenceReason: varchar("difference_reason", { length: 255 }),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "transfer_items_tenant_transfer_fk",
+      columns: [table.tenantId, table.transferId],
+      foreignColumns: [transfers.tenantId, transfers.id]
+    }),
+    foreignKey({
+      name: "transfer_items_tenant_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    foreignKey({
+      name: "transfer_items_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    unique("transfer_items_tenant_id_unique").on(table.tenantId, table.id),
+    check("transfer_items_requested_qty_positive_check", sql`${table.requestedQty} > 0`),
+    check("transfer_items_dispatched_qty_non_negative_check", sql`${table.dispatchedQty} is null or ${table.dispatchedQty} >= 0`),
+    check("transfer_items_received_qty_non_negative_check", sql`${table.receivedQty} >= 0`)
   ]
 );

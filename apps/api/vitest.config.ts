@@ -32,7 +32,10 @@ export default defineConfig({
       "test/sales-lookup.spec.ts",
       "test/sales-fefo-override.spec.ts",
       "test/sales-quotes.spec.ts",
-      "test/procurement-module4.spec.ts"
+      "test/procurement-module4.spec.ts",
+      "test/fiscal-invoices.spec.ts",
+      "test/transfers.spec.ts",
+      "test/transfers-approval.spec.ts"
     ],
     fileParallelism: false
   }

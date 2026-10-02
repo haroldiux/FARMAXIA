@@ -227,6 +227,34 @@ Decisión provisional D48. Una proforma no reserva stock, no toca caja y no es u
 
 Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `inventory.report.global`, `sales.read`, `sales.confirm`, `sales.void`, `cash.manage`, `cash.shift.approve`, `quotes.manage`, `documents.reprint`, `audit.read`.
 
+## Facturación fiscal — scaffold técnico (módulo 6, F13)
+
+Decisiones provisionales D50-D52 (a revisar con el docente). El módulo 6 (facturación SIAT real) sigue 0/8 en `ESTADO_FUNCIONALIDADES.md`, bloqueado por D03 (modalidad SIN, contrato y certificado digital, externo). Esta sección documenta solo el "enchufe" técnico: el puerto `FiscalProvider`, la tabla `fiscal_invoices` y el stub de desarrollo — nunca un cliente SOAP ni una emisión real.
+
+- Cada `POST /api/v1/sales/confirm` crea, en la misma transacción que la venta, una fila en `fiscal_invoices` con estado `PENDING_PROVIDER` (D51). El único `FiscalProvider` disponible es `StubFiscalProvider`, que nunca genera un CUF real ni reporta `ISSUED` (D52).
+- `GET /api/v1/fiscal/invoices/{saleId}`: requiere el permiso `fiscal.read` (migración `0026_fiscal_invoices.sql`, seedeado a los mismos role templates que ya tienen `sales.read`: `owner`, `regente`, `encargado`, `cajero`). Aísla por tenant/sucursal (RLS); `404` si la venta no tiene fila fiscal o es de otra sucursal. Responde `{ id, saleId, status, cuf, cufd, qrData, providerName, errorMessage, createdAt }` con `status` siempre `PENDING_PROVIDER` por ahora.
+- Web: panel de solo lectura en `/sales/{saleId}` ("Comprobante fiscal: pendiente (SIAT no conectado)"); sin entrada nueva en el menú lateral (decisión explícita del usuario).
+
+## Traspasos entre sucursales (módulo 7, F14)
+
+Decisiones provisionales D53-D56. Todas las rutas están en `/api/v1/transfers`, requieren la funcionalidad de plan `transfers` (Profesional y Premium) y el permiso `transfers.manage`, salvo `approve`/`reject`, que requieren solo `transfers.approve`. Un traspaso es visible desde la sucursal de origen y desde la de destino (RLS); otra farmacia recibe `404`. Migraciones `0027_transfers.sql` y `0028_transfer_approval.sql`.
+
+Estados: `REQUESTED → (APPROVED, solo Premium) → DISPATCHED → PARTIALLY_RECEIVED → RECEIVED`, más `REJECTED`/`CANCELLED`.
+
+| Ruta | Contrato |
+|---|---|
+| `GET /api/v1/transfers` | Lista de traspasos visibles para la sucursal actual. |
+| `GET /api/v1/transfers/lookup/warehouses` | Almacenes de la farmacia que pueden ser origen o destino (de cualquier sucursal). |
+| `GET /api/v1/transfers/lookup/stock?warehouseId=` | Lotes con saldo disponible en ese almacén, para elegir qué enviar. |
+| `GET /api/v1/transfers/:transferId` | Detalle con ítems (`requestedQty`, `dispatchedQty`, `receivedQty`, `differenceReason`). |
+| `POST /api/v1/transfers` | `{ idempotencyKey, originWarehouseId, destinationWarehouseId, items: [{ presentationId, batchId, requestedQty }] }`. Origen distinto de destino; el origen no puede ser de cuarentena. Queda `REQUESTED`. |
+| `POST /api/v1/transfers/:transferId/approve` | `{ idempotencyKey }`. Solo `REQUESTED → APPROVED`; `400` si el plan no tiene `transfers.approval` (D53). |
+| `POST /api/v1/transfers/:transferId/reject` | `{ idempotencyKey, reason }` (motivo obligatorio, máx. 255). Desde `REQUESTED` o `APPROVED`. |
+| `POST /api/v1/transfers/:transferId/dispatch` | `{ idempotencyKey }`. Desde `REQUESTED` (Profesional) o `APPROVED` (Premium). Descuenta todo lo solicitado del origen y registra `TRANSFER_OUT`; `409` si falta stock en algún ítem, sin descontar nada (D55). |
+| `POST /api/v1/transfers/:transferId/receive` | `{ idempotencyKey, items: [{ itemId, receivedQty, differenceReason? }] }`. Acredita el destino con lo recibido y registra `TRANSFER_IN`; queda `PARTIALLY_RECEIVED` hasta completar todo lo despachado (D54). |
+
+Todas las escrituras son idempotentes (misma clave, misma respuesta, un solo movimiento), auditadas y publicadas al outbox.
+
 ## Turnos de caja F6-WEB
 
 Todas las rutas requieren `cash.manage` y usan exclusivamente el tenant y la

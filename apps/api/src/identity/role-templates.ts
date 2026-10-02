@@ -8,10 +8,13 @@ export const tenantPermissions = [
   { code: "inventory.count.approve", description: "Approve physical inventory counts", label: "Aprobar conteos de inventario", module: "Inventario", sortOrder: 35 },
   { code: "payables.manage", description: "Register supplier payments and schedule payables", label: "Registrar pagos a proveedores", module: "Compras", sortOrder: 25 },
   { code: "inventory.report.global", description: "Read tenant-wide inventory reports", label: "Ver reporte global de inventario", module: "Inventario", sortOrder: 30 },
+  { code: "transfers.manage", description: "Request, dispatch and receive branch-to-branch transfers", label: "Solicitar, despachar y recibir traspasos", module: "Traspasos", sortOrder: 36 },
+  { code: "transfers.approve", description: "Approve branch-to-branch transfer requests before dispatch", label: "Aprobar traspasos antes del despacho", module: "Traspasos", sortOrder: 37 },
   { code: "cash.manage", description: "Manage cash registers and shifts", label: "Operar caja y turnos", module: "Caja y ventas", sortOrder: 40 },
   { code: "cash.shift.approve", description: "Approve non-zero cash shift differences", label: "Aprobar diferencias de caja", module: "Caja y ventas", sortOrder: 50 },
   { code: "sales.confirm", description: "Confirm non-fiscal cash sales", label: "Registrar ventas", module: "Caja y ventas", sortOrder: 60 },
   { code: "sales.read", description: "Read sales history, sale details and receipts", label: "Consultar ventas", module: "Caja y ventas", sortOrder: 65 },
+  { code: "fiscal.read", description: "Read the fiscal invoice status of a sale", label: "Consultar comprobante fiscal", module: "Caja y ventas", sortOrder: 66 },
   { code: "sales.void", description: "Void sales and register returns", label: "Anular ventas y registrar devoluciones", module: "Caja y ventas", sortOrder: 67 },
   { code: "sales.fefo.override", description: "Choose a lot different from FEFO when selling", label: "Elegir lote distinto al FEFO", module: "Caja y ventas", sortOrder: 68 },
   { code: "audit.read", description: "Read the tenant audit log within the plan retention", label: "Ver bitácora de auditoría", module: "Administración", sortOrder: 70 },
@@ -39,14 +42,14 @@ export const systemRoles: ReadonlyArray<{
     code: "regente",
     name: "Regente farmacéutico",
     description: "Catálogo, inventario, ventas y auditoría.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "sales.confirm", "sales.read", "sales.void", "sales.fefo.override", "audit.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "transfers.manage", "transfers.approve", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read"]
   },
   {
     code: "encargado",
     name: "Encargado de sucursal",
     description: "Operación completa de la sucursal, sin usuarios ni suscripción.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "cash.manage", "cash.shift.approve", "sales.confirm", "sales.read", "sales.void", "sales.fefo.override", "audit.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "transfers.manage", "transfers.approve", "cash.manage", "cash.shift.approve", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read"]
   },
-  { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm", "sales.read"] },
-  { code: "almacenero", name: "Almacenero", description: "Inventario, compras y recepción.", permissions: ["inventory.manage"] }
+  { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm", "sales.read", "fiscal.read"] },
+  { code: "almacenero", name: "Almacenero", description: "Inventario, compras y recepción.", permissions: ["inventory.manage", "transfers.manage"] }
 ];

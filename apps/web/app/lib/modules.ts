@@ -32,7 +32,8 @@ export const moduleSections: Array<{ label: string; items: AppModule[] }> = [
       { key: "cash", label: "Caja y turnos", icon: "cash", href: "/cash", permission: "cash.manage", tone: "green", altTone: "blue", description: "Turnos, apertura y cierre de caja" },
       { key: "catalog", label: "Catálogo", icon: "catalog", href: "/catalog", permission: "catalog.manage", tone: "lilac", altTone: "blue", description: "Productos, ficha sanitaria y precios" },
       { key: "inventory", label: "Inventario", icon: "inventory", href: "/inventory", permission: "inventory.manage", tone: "sky", altTone: "green", description: "Lotes, vencimientos y almacenes" },
-      { key: "procurement", label: "Compras", icon: "procurement", href: "/procurement", permission: "inventory.manage", tone: "orange", altTone: "amber", description: "Órdenes, recepción y facturas" }
+      { key: "procurement", label: "Compras", icon: "procurement", href: "/procurement", permission: "inventory.manage", tone: "orange", altTone: "amber", description: "Órdenes, recepción y facturas" },
+      { key: "transfers", label: "Traspasos", icon: "transfer", href: "/transfers", permission: "transfers.manage", tone: "sky", altTone: "indigo", description: "Solicita, despacha y recibe entre sucursales" }
     ]
   },
   {

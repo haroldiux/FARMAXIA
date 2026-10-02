@@ -49,6 +49,7 @@ export type { RegisteredReturn, RegisterReturnInput, VoidedSale, VoidSaleInput }
 export type { SaleDetail, SalesAccess, SalesListQuery, SalesListResult } from "./sales-history.js";
 import { AuditService } from "../transversal/audit.service.js";
 import { OutboxService } from "../transversal/outbox.service.js";
+import { FiscalService } from "../fiscal/fiscal.service.js";
 import {
   IdempotencyService,
   IdempotencyKeyReusedError,
@@ -315,6 +316,8 @@ export class SalesService {
   private readonly audit = new AuditService();
   private readonly outbox = new OutboxService();
   private readonly sequences = new DocumentSequenceService();
+  /** F13 (D51): creates the fiscal_invoices draft row synchronously, inside the sale-confirm transaction. */
+  private readonly fiscal: FiscalService;
   private readonly history: SalesHistoryReader;
   private readonly catalogLookup: SalesLookupReader;
   private readonly returns: SalesReturnsWriter;
@@ -325,6 +328,7 @@ export class SalesService {
     this.catalogLookup = new SalesLookupReader(database);
     this.returns = new SalesReturnsWriter(database);
     this.quotes = new SalesQuotes(database);
+    this.fiscal = new FiscalService(database);
   }
 
   createQuote(scope: TenantScope, input: CreateQuoteInput): Promise<QuoteDetail> {
@@ -633,6 +637,12 @@ export class SalesService {
       aggregateId: saleRow.id,
       eventType: "sales.cash_sale_confirmed",
       payload: { saleId: saleRow.id, totalBob: total, changeBob: evaluation.changeBob }
+    });
+    // F13 (T2/D51): every confirmed sale gets its fiscal_invoices draft row in the same transaction.
+    await this.fiscal.createDraftInTransaction(client, scope, {
+      saleId: saleRow.id,
+      saleNumber,
+      totalBob: total
     });
     return {
       id: saleRow.id,

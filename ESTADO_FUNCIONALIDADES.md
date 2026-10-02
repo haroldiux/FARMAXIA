@@ -41,13 +41,13 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 4. Compras y proveedores | 9 | 0 | 0 |
 | 5. Punto de venta y caja | 14 | 0 | 2 |
 | 6. Facturación SIAT | 0 | 0 | 8 |
-| 7. Traspasos entre sucursales | 0 | 0 | 5 |
+| 7. Traspasos entre sucursales | 5 | 0 | 0 |
 | 8. Medicamentos controlados (AGEMED) | 0 | 0 | 4 |
 | 9. Personal, turnos y comisiones | 0 | 0 | 3 |
 | 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
 | 11. Analítica | 1 | 0 | 5 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **67** | **1** | **35** |
+| **Total** | **72** | **1** | **30** |
 
 **Avance aproximado: ~65%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
@@ -155,13 +155,15 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 > Requiere elementos externos al código: credenciales del SIN, certificado digital y asesoría tributaria (decisión D03).
 
+> **F13 (scaffold técnico, octubre 2026):** ninguna de las 8 funcionalidades de arriba pasó a ✅ — todas siguen bloqueadas por D03. Lo que sí existe ahora es la base técnica para engancharlas: el puerto `FiscalProvider` (`issueInvoice`/`voidInvoice`), la tabla `fiscal_invoices` (tenant/branch, RLS, FK a `sales`) y un `StubFiscalProvider` que crea cada factura en estado `PENDING_PROVIDER` y nunca simula una emisión real (D50-D52). Cada venta confirmada ya genera su fila de borrador; el adaptador SIAT real sigue pendiente de D03.
+
 ### 7. Traspasos entre sucursales
 
-- ❌ Solicitud de mercadería a otra sucursal o al almacén central
-- ❌ Despacho (mercadería en tránsito)
-- ❌ Recepción con verificación física
-- ❌ Registro de diferencias y daños durante el traslado
-- ❌ Flujo de aprobación (plan Premium)
+- ✅ Solicitud de mercadería a otra sucursal o al almacén central (`/transfers`), eligiendo almacén de origen, destino y lote; nunca desde un almacén de cuarentena
+- ✅ Despacho (mercadería en tránsito): el stock sale del origen al despachar, sin dejar saldo negativo; lo pendiente en tránsito es lo despachado menos lo recibido (D55)
+- ✅ Recepción con verificación física: recepción parcial en varias entregas; el destino solo se acredita con lo realmente recibido (D54)
+- ✅ Registro de diferencias y daños durante el traslado: motivo de diferencia por ítem, en texto libre; la baja o cuarentena sigue siendo manual (D54)
+- ✅ Flujo de aprobación (plan Premium): aprobar o rechazar con motivo, permiso `transfers.approve`; en Profesional se despacha directo (D53, D56)
 
 ### 8. Medicamentos controlados (AGEMED / regencia)
 
@@ -208,7 +210,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
 | 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja). Quedan crédito/convenio (módulo 10) y receta en controlados (módulo 8) |
 | 4 | Facturación SIAT | ❌ No iniciado |
-| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | ❌ No iniciado |
+| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ completo (módulo 7, D53-D56); libro AGEMED, comisiones y matriz ABC pendientes |
 
 ## 6. Propuesta de orden para completar el sistema
 

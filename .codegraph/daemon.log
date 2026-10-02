@@ -69,3 +69,7 @@
 [CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not auto-update; run `codegraph sync` (or install the git sync hooks via `codegraph init`) to refresh.
 [CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
 [CodeGraph daemon] Another daemon (pid 15088) already holds the lock; exiting.
+[2026-10-02T18:19:44.732Z] [CodeGraph daemon] Listening on \\.\pipe\codegraph-922ba8313a2c491e (pid 12616, v1.6.1). Idle timeout 300000ms.
+[2026-10-02T18:19:45.634Z] [CodeGraph MCP] File watcher active for C:\Users\pachi\Farmacia\FARMAXIA — graph will auto-sync on changes
+[2026-10-02T18:19:45.637Z] [CodeGraph MCP] Query pool: up to 3 worker thread(s) for concurrent reads.
+[2026-10-02T18:24:45.333Z] [CodeGraph daemon] Shutting down (idle timeout; clients=0).

@@ -5,8 +5,18 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { SaleActions } from "../../components/sale-actions";
 import { SalesNav } from "../../components/sales-nav";
+import { getFiscalInvoice, type FiscalInvoiceStatus } from "../../lib/fiscal";
 import { currentSession } from "../../lib/session";
 import { getSale, salePaymentMethodLabels, saleStatusLabels, type SaleDetail } from "../../lib/sales";
+
+/** F13 scaffold: SIAT is not connected yet (D03 pending), so only PENDING_PROVIDER is expected today. */
+const fiscalStatusLabels: Record<FiscalInvoiceStatus, string> = {
+  PENDING_PROVIDER: "pendiente (SIAT no conectado)",
+  ISSUED: "emitido",
+  CONTINGENCY: "en contingencia",
+  VOIDED: "anulado",
+  ERROR: "con error"
+};
 
 type PaperWidth = 58 | 80;
 
@@ -29,6 +39,7 @@ export default function SaleDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [width, setWidth] = useState<PaperWidth>(80);
   const [canVoid, setCanVoid] = useState(false);
+  const [fiscalStatus, setFiscalStatus] = useState<FiscalInvoiceStatus | null>(null);
 
   useEffect(() => {
     try {
@@ -52,8 +63,17 @@ export default function SaleDetailPage() {
   }, [reload]);
 
   useEffect(() => {
-    currentSession().then((session) => setCanVoid(session.permissions.includes("sales.void"))).catch(() => undefined);
-  }, []);
+    currentSession()
+      .then((session) => {
+        setCanVoid(session.permissions.includes("sales.void"));
+        if (session.permissions.includes("fiscal.read")) {
+          getFiscalInvoice(saleId)
+            .then((invoice) => setFiscalStatus(invoice.status))
+            .catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
+  }, [saleId]);
 
   function chooseWidth(value: PaperWidth): void {
     setWidth(value);
@@ -104,6 +124,13 @@ export default function SaleDetailPage() {
           </ul>
         ) : null}
       </section>
+
+      {fiscalStatus ? (
+        <section className="panel no-print">
+          <p className="section-kicker">Comprobante fiscal</p>
+          <p className="field-hint">Comprobante fiscal: {fiscalStatusLabels[fiscalStatus]}</p>
+        </section>
+      ) : null}
 
       {canVoid ? <SaleActions onChanged={reload} sale={sale} /> : null}
 
