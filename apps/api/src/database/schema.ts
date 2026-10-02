@@ -516,6 +516,52 @@ export const cashShiftControls = pgTable(
   ]
 );
 
+export const cashMovements = pgTable(
+  "cash_movements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    cashShiftId: uuid("cash_shift_id").notNull(),
+    type: varchar("type", { length: 8 }).notNull(),
+    amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reason: varchar("reason", { length: 200 }).notNull(),
+    category: varchar("category", { length: 24 }),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "cash_movements_shift_fk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId],
+      foreignColumns: [cashShifts.tenantId, cashShifts.branchId, cashShifts.id]
+    }),
+    foreignKey({
+      name: "cash_movements_created_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
+    }),
+    unique("cash_movements_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("cash_movements_shift_idx").on(
+      table.tenantId,
+      table.branchId,
+      table.cashShiftId,
+      table.createdAt
+    ),
+    check("cash_movements_type_check", sql`${table.type} in ('IN', 'OUT')`),
+    check("cash_movements_amount_positive_check", sql`${table.amountBob} > 0`),
+    check("cash_movements_reason_check", sql`length(btrim(${table.reason})) > 0`),
+    check(
+      "cash_movements_category_check",
+      sql`${table.category} is null or ${table.category} in ('CHANGE_FUND', 'EXPENSE', 'DEPOSIT', 'OTHER')`
+    )
+  ]
+);
+
 export const roles = pgTable(
   "roles",
   {
@@ -1587,7 +1633,12 @@ export const sales = pgTable(
     status: varchar("status", { length: 24 }).default("CONFIRMED").notNull(),
     totalAmountBob: numeric("total_amount_bob", { precision: 18, scale: 4 }).notNull(),
     paidAmountBob: numeric("paid_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    changeAmountBob: numeric("change_amount_bob", { precision: 18, scale: 4 }).default("0").notNull(),
+    saleNumber: varchar("sale_number", { length: 40 }).notNull(),
     createdByUserId: uuid("created_by_user_id").notNull(),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedByUserId: uuid("voided_by_user_id"),
+    voidReason: varchar("void_reason", { length: 200 }),
     createdAt
   },
   (table) => [
@@ -1612,10 +1663,24 @@ export const sales = pgTable(
       foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
     }),
     unique("sales_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("sales_tenant_branch_number_unique").on(table.tenantId, table.branchId, table.saleNumber),
     index("sales_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt),
-    check("sales_status_check", sql`${table.status} in ('CONFIRMED')`),
+    foreignKey({
+      name: "sales_voided_membership_fk",
+      columns: [table.voidedByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    check(
+      "sales_status_check",
+      sql`${table.status} in ('CONFIRMED', 'VOIDED', 'PARTIALLY_RETURNED', 'RETURNED')`
+    ),
+    check(
+      "sales_void_consistency_check",
+      sql`(${table.status} = 'VOIDED' and ${table.voidedAt} is not null and ${table.voidedByUserId} is not null and ${table.voidReason} is not null and length(btrim(${table.voidReason})) > 0) or (${table.status} <> 'VOIDED' and ${table.voidedAt} is null and ${table.voidedByUserId} is null and ${table.voidReason} is null)`
+    ),
     check("sales_total_nonnegative_check", sql`${table.totalAmountBob} >= 0`),
-    check("sales_paid_nonnegative_check", sql`${table.paidAmountBob} >= 0`)
+    check("sales_paid_nonnegative_check", sql`${table.paidAmountBob} >= 0`),
+    check("sales_change_nonnegative_check", sql`${table.changeAmountBob} >= 0`)
   ]
 );
 
@@ -1631,6 +1696,8 @@ export const saleItems = pgTable(
     quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
     unitPriceBob: numeric("unit_price_bob", { precision: 18, scale: 4 }).notNull(),
     lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
+    fefoOverride: boolean("fefo_override").notNull().default(false),
+    fefoOverrideReason: varchar("fefo_override_reason", { length: 200 }),
     createdAt
   },
   (table) => [
@@ -1647,7 +1714,11 @@ export const saleItems = pgTable(
     unique("sale_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
     index("sale_items_sale_idx").on(table.tenantId, table.branchId, table.saleId),
     check("sale_items_quantity_positive_check", sql`${table.quantity} > 0 and ${table.quantityBase} > 0`),
-    check("sale_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`)
+    check("sale_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`),
+    check(
+      "sale_items_fefo_override_check",
+      sql`(${table.fefoOverride} and ${table.fefoOverrideReason} is not null and length(btrim(${table.fefoOverrideReason})) > 0) or (not ${table.fefoOverride} and ${table.fefoOverrideReason} is null)`
+    )
   ]
 );
 
@@ -1660,6 +1731,8 @@ export const salePayments = pgTable(
     saleId: uuid("sale_id").notNull(),
     method: varchar("method", { length: 16 }).notNull(),
     amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reference: varchar("reference", { length: 64 }),
+    reversedAt: timestamp("reversed_at", { withTimezone: true }),
     createdAt
   },
   (table) => [
@@ -1669,7 +1742,11 @@ export const salePayments = pgTable(
       foreignColumns: [sales.tenantId, sales.branchId, sales.id]
     }),
     unique("sale_payments_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
-    check("sale_payments_method_check", sql`${table.method} = 'CASH'`),
+    check("sale_payments_method_check", sql`${table.method} in ('CASH', 'CARD', 'QR')`),
+    check(
+      "sale_payments_reference_check",
+      sql`(${table.method} = 'CASH' and ${table.reference} is null) or (${table.method} in ('CARD', 'QR') and ${table.reference} is not null and length(btrim(${table.reference})) > 0)`
+    ),
     check("sale_payments_amount_nonnegative_check", sql`${table.amountBob} >= 0`)
   ]
 );
@@ -1683,6 +1760,7 @@ export const saleAllocations = pgTable(
     saleItemId: uuid("sale_item_id").notNull(),
     batchId: uuid("batch_id").notNull(),
     quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    fefoOverride: boolean("fefo_override").notNull().default(false),
     createdAt
   },
   (table) => [
@@ -1699,6 +1777,209 @@ export const saleAllocations = pgTable(
     unique("sale_allocations_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
     index("sale_allocations_item_idx").on(table.tenantId, table.branchId, table.saleItemId),
     check("sale_allocations_quantity_positive_check", sql`${table.quantityBase} > 0`)
+  ]
+);
+
+export const saleReturns = pgTable(
+  "sale_returns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    returnNumber: varchar("return_number", { length: 40 }).notNull(),
+    refundMethod: varchar("refund_method", { length: 8 }).notNull(),
+    refundReference: varchar("refund_reference", { length: 64 }),
+    refundAmountBob: numeric("refund_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reason: varchar("reason", { length: 200 }).notNull(),
+    restock: boolean("restock").notNull(),
+    cashShiftId: uuid("cash_shift_id"),
+    cashMovementId: uuid("cash_movement_id"),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_returns_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    foreignKey({
+      name: "sale_returns_shift_fk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId],
+      foreignColumns: [cashShifts.tenantId, cashShifts.branchId, cashShifts.id]
+    }),
+    foreignKey({
+      name: "sale_returns_movement_fk",
+      columns: [table.tenantId, table.branchId, table.cashMovementId],
+      foreignColumns: [cashMovements.tenantId, cashMovements.branchId, cashMovements.id]
+    }),
+    foreignKey({
+      name: "sale_returns_created_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    unique("sale_returns_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("sale_returns_tenant_branch_number_unique").on(table.tenantId, table.branchId, table.returnNumber),
+    index("sale_returns_sale_idx").on(table.tenantId, table.branchId, table.saleId),
+    check("sale_returns_method_check", sql`${table.refundMethod} in ('CASH', 'CARD', 'QR')`),
+    check(
+      "sale_returns_reference_check",
+      sql`(${table.refundMethod} = 'CASH' and ${table.refundReference} is null) or (${table.refundMethod} in ('CARD', 'QR') and ${table.refundReference} is not null and length(btrim(${table.refundReference})) > 0)`
+    ),
+    check("sale_returns_cash_shift_check", sql`(${table.refundMethod} = 'CASH') = (${table.cashShiftId} is not null)`),
+    check("sale_returns_amount_positive_check", sql`${table.refundAmountBob} > 0`),
+    check("sale_returns_reason_check", sql`length(btrim(${table.reason})) > 0`)
+  ]
+);
+
+export const saleReturnItems = pgTable(
+  "sale_return_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleReturnId: uuid("sale_return_id").notNull(),
+    saleItemId: uuid("sale_item_id").notNull(),
+    quantity: bigint("quantity", { mode: "number" }).notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    unitPriceBob: numeric("unit_price_bob", { precision: 18, scale: 4 }).notNull(),
+    lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_return_items_return_fk",
+      columns: [table.tenantId, table.branchId, table.saleReturnId],
+      foreignColumns: [saleReturns.tenantId, saleReturns.branchId, saleReturns.id]
+    }),
+    foreignKey({
+      name: "sale_return_items_item_fk",
+      columns: [table.tenantId, table.branchId, table.saleItemId],
+      foreignColumns: [saleItems.tenantId, saleItems.branchId, saleItems.id]
+    }),
+    unique("sale_return_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("sale_return_items_item_idx").on(table.tenantId, table.branchId, table.saleItemId),
+    index("sale_return_items_return_idx").on(table.tenantId, table.branchId, table.saleReturnId),
+    check("sale_return_items_quantity_positive_check", sql`${table.quantity} > 0 and ${table.quantityBase} > 0`),
+    check("sale_return_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`)
+  ]
+);
+
+export const saleReturnAllocations = pgTable(
+  "sale_return_allocations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleReturnItemId: uuid("sale_return_item_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_return_allocations_item_fk",
+      columns: [table.tenantId, table.branchId, table.saleReturnItemId],
+      foreignColumns: [saleReturnItems.tenantId, saleReturnItems.branchId, saleReturnItems.id]
+    }),
+    foreignKey({
+      name: "sale_return_allocations_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    index("sale_return_allocations_item_idx").on(table.tenantId, table.branchId, table.saleReturnItemId),
+    check("sale_return_allocations_quantity_positive_check", sql`${table.quantityBase} > 0`)
+  ]
+);
+
+// Module 5 (migration 0025): quotes (proformas). No stock reservation; EXPIRED is derived at read time.
+export const salesQuotes = pgTable(
+  "sales_quotes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    quoteNumber: varchar("quote_number", { length: 40 }).notNull(),
+    status: varchar("status", { length: 16 }).default("OPEN").notNull(),
+    customerName: varchar("customer_name", { length: 120 }),
+    customerNote: varchar("customer_note", { length: 500 }),
+    validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+    totalAmountBob: numeric("total_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt,
+    convertedSaleId: uuid("converted_sale_id"),
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    canceledByUserId: uuid("canceled_by_user_id")
+  },
+  (table) => [
+    foreignKey({
+      name: "sales_quotes_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "sales_quotes_created_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    foreignKey({
+      name: "sales_quotes_canceled_membership_fk",
+      columns: [table.canceledByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    foreignKey({
+      name: "sales_quotes_sale_fk",
+      columns: [table.tenantId, table.branchId, table.convertedSaleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    unique("sales_quotes_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("sales_quotes_tenant_branch_number_unique").on(table.tenantId, table.branchId, table.quoteNumber),
+    index("sales_quotes_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt),
+    check("sales_quotes_status_check", sql`${table.status} in ('OPEN', 'CONVERTED', 'CANCELED')`),
+    check("sales_quotes_total_nonnegative_check", sql`${table.totalAmountBob} >= 0`),
+    check(
+      "sales_quotes_customer_name_check",
+      sql`${table.customerName} is null or length(btrim(${table.customerName})) > 0`
+    ),
+    check(
+      "sales_quotes_state_check",
+      sql`(${table.status} = 'OPEN' and ${table.convertedSaleId} is null and ${table.convertedAt} is null and ${table.canceledAt} is null and ${table.canceledByUserId} is null) or (${table.status} = 'CONVERTED' and ${table.convertedSaleId} is not null and ${table.convertedAt} is not null and ${table.canceledAt} is null and ${table.canceledByUserId} is null) or (${table.status} = 'CANCELED' and ${table.convertedSaleId} is null and ${table.convertedAt} is null and ${table.canceledAt} is not null and ${table.canceledByUserId} is not null)`
+    )
+  ]
+);
+
+export const salesQuoteItems = pgTable(
+  "sales_quote_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    quoteId: uuid("quote_id").notNull(),
+    position: integer("position").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    quantity: bigint("quantity", { mode: "number" }).notNull(),
+    unitPriceBob: numeric("unit_price_bob", { precision: 18, scale: 4 }).notNull(),
+    lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sales_quote_items_quote_fk",
+      columns: [table.tenantId, table.branchId, table.quoteId],
+      foreignColumns: [salesQuotes.tenantId, salesQuotes.branchId, salesQuotes.id]
+    }),
+    foreignKey({
+      name: "sales_quote_items_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    unique("sales_quote_items_position_unique").on(table.tenantId, table.branchId, table.quoteId, table.position),
+    unique("sales_quote_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("sales_quote_items_quote_idx").on(table.tenantId, table.branchId, table.quoteId),
+    check("sales_quote_items_quantity_positive_check", sql`${table.quantity} > 0`),
+    check("sales_quote_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`)
   ]
 );
 

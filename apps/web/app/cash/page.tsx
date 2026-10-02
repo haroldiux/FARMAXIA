@@ -15,6 +15,7 @@ import {
   type CashShift,
   type EligibleCashUser
 } from "../lib/cash";
+import { CashMovementsPanel } from "../components/cash-movements-panel";
 import { currentSession, type AuthSession } from "../lib/session";
 
 function formatTimestamp(value: string): string {
@@ -225,6 +226,7 @@ export default function CashPage() {
               </> : <>
                 <div className="cash-control-heading"><strong>Control de caja</strong><span className={`cash-control-status cash-control-status-${shift.control.status.toLowerCase()}`}>{shift.control.status === "OPEN" ? "Abierto" : shift.control.status === "PENDING_APPROVAL" ? "Pendiente de aprobación" : "Cerrado"}</span></div>
                 <p className="cash-control-values">Esperado: <strong>{shift.control.expectedAmountBob} BOB</strong>{shift.control.differenceAmountBob !== null ? <> · Diferencia: <strong>{shift.control.differenceAmountBob} BOB</strong></> : null}</p>
+                {shift.control.status === "OPEN" ? <CashMovementsPanel canRegister={shift.users.some((user) => user.id === session.userId)} control={shift.control} onChanged={refresh} shiftId={shift.id} /> : null}
                 {shift.control.status === "OPEN" && shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action">
                   <label className="field"><span>Conteo final (BOB)</span><input type="text" inputMode="decimal" placeholder="0.0000" value={countingDrafts[shift.id] ?? ""} onChange={(event) => setCountingDrafts((current) => ({ ...current, [shift.id]: event.target.value }))} /></label>
                   <button className="secondary-button" disabled={controlBusy === `${shift.id}:count`} onClick={() => void handleCount(shift)} type="button">{controlBusy === `${shift.id}:count` ? "Guardando…" : "Guardar conteo"}</button>

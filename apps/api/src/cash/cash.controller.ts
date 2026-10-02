@@ -12,7 +12,10 @@ import {
   type OpenCashShiftInput,
   type CountCashShiftInput,
   type ApproveCashShiftInput,
-  type CashShiftControlSummary
+  type CashShiftControlSummary,
+  type CashMovementCreated,
+  type CashMovementListResult,
+  type CreateCashMovementInput
 } from "./cash.service.js";
 
 function scopeFrom(request: AuthenticatedRequest) {
@@ -80,5 +83,23 @@ export class CashController {
     @Body() input: ApproveCashShiftInput
   ): Promise<CashShiftControlSummary> {
     return this.cash.approveShift(scopeFrom(request), shiftId, input);
+  }
+
+  @Post("shifts/:shiftId/movements")
+  createMovement(
+    @Req() request: AuthenticatedRequest,
+    @Param("shiftId") shiftId: string,
+    @Body() input: CreateCashMovementInput
+  ): Promise<CashMovementCreated> {
+    return this.cash.createMovement(scopeFrom(request), shiftId, input);
+  }
+
+  @Get("shifts/:shiftId/movements")
+  @RequireAnyPermission("cash.manage", "cash.shift.approve")
+  listMovements(
+    @Req() request: AuthenticatedRequest,
+    @Param("shiftId") shiftId: string
+  ): Promise<CashMovementListResult> {
+    return this.cash.listMovements(scopeFrom(request), shiftId);
   }
 }

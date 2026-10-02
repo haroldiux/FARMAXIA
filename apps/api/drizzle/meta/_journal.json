@@ -141,6 +141,48 @@
       "when": 1790600000000,
       "tag": "0019_procurement_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0020_sale_payment_methods",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0021_sales_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0022_cash_movements",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0023_sale_voids_returns",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0024_fefo_override",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0025_sales_quotes",
+      "breakpoints": true
     }
   ]
 }

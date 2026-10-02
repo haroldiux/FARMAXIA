@@ -40,6 +40,42 @@ export interface CashShiftControl {
   closedByUserId: string | null;
   closedAt: string | null;
   approvalNote: string | null;
+  cashSalesBob: string;
+  movementsInBob: string;
+  movementsOutBob: string;
+}
+
+export type CashMovementType = "IN" | "OUT";
+export type CashMovementCategory = "CHANGE_FUND" | "EXPENSE" | "DEPOSIT" | "OTHER";
+
+export interface CashMovement {
+  id: string;
+  cashShiftId: string;
+  type: CashMovementType;
+  amountBob: string;
+  reason: string;
+  category: CashMovementCategory | null;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface CashMovementList {
+  items: CashMovement[];
+  summary: {
+    openingAmountBob: string;
+    cashSalesBob: string;
+    movementsInBob: string;
+    movementsOutBob: string;
+    expectedAmountBob: string;
+  };
+}
+
+export interface CreateCashMovementInput {
+  idempotencyKey: string;
+  type: CashMovementType;
+  amountBob: string;
+  reason: string;
+  category?: CashMovementCategory | null;
 }
 
 export interface CreateCashShiftInput {
@@ -80,8 +116,11 @@ async function parseError(response: Response): Promise<Error> {
       error?: { message?: string };
       code?: string;
     };
+    const nested = (body as { response?: { code?: string } }).response?.code;
     if (body.code === "CASH_SHIFT_OVERLAP") {
       message = "La caja ya tiene un turno dentro de ese horario.";
+    } else if (body.code === "CASH_MOVEMENT_EXCEEDS_EXPECTED" || nested === "CASH_MOVEMENT_EXCEEDS_EXPECTED") {
+      message = "El egreso no puede superar el efectivo esperado del turno.";
     } else if (Array.isArray(body.message)) {
       message = body.message.join(" ");
     } else {
@@ -145,6 +184,18 @@ export function countCashShift(shiftId: string, input: CountCashShiftInput): Pro
 
 export function approveCashShift(shiftId: string, input: ApproveCashShiftInput): Promise<CashShiftControl> {
   return request(`/api/v1/cash/shifts/${shiftId}/approve`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": input.idempotencyKey },
+    body: JSON.stringify(input)
+  });
+}
+
+export function listCashMovements(shiftId: string): Promise<CashMovementList> {
+  return request(`/api/v1/cash/shifts/${shiftId}/movements`);
+}
+
+export function createCashMovement(shiftId: string, input: CreateCashMovementInput): Promise<CashMovement> {
+  return request(`/api/v1/cash/shifts/${shiftId}/movements`, {
     method: "POST",
     headers: { "content-type": "application/json", "idempotency-key": input.idempotencyKey },
     body: JSON.stringify(input)

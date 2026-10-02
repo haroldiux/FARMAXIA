@@ -1,6 +1,6 @@
 # FARMAXIA — Estado de funcionalidades
 
-**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 29 de septiembre de 2026 (módulos 0 al 4 completados)
+**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 1 de octubre de 2026 (módulos 0 al 5 completados)
 **Rama revisada:** `Denil` (commit `240f272`, basado en `main` `38709c8`); módulos 0 al 3 subidos a `Denil` y módulo 4 sin commit
 **Autor:** Denilson Godoy
 
@@ -17,10 +17,10 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 **Estado real** (qué existe hoy), revisado directamente en el código:
 
-- Tablas de base de datos creadas por las migraciones (`apps/api/drizzle/0000` a `0014`).
+- Tablas de base de datos creadas por las migraciones (`apps/api/drizzle/0000` a `0025`).
 - Rutas de la API (`apps/api/src/*/*.controller.ts`).
 - Pantallas de la web (`apps/web/app`).
-- Pruebas automáticas: 71 de 71 pasan (`pnpm --filter @farmaxia/api test`).
+- Pruebas automáticas: 211 de 211 pasan en 28 archivos (`pnpm --filter @farmaxia/api test`, 1 de octubre de 2026).
 
 **Leyenda:**
 
@@ -39,7 +39,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 2. Catálogo farmacéutico | 10 | 0 | 0 |
 | 3. Inventario, lotes y almacenes | 11 | 0 | 0 |
 | 4. Compras y proveedores | 9 | 0 | 0 |
-| 5. Punto de venta y caja | 5 | 0 | 10 |
+| 5. Punto de venta y caja | 14 | 0 | 2 |
 | 6. Facturación SIAT | 0 | 0 | 8 |
 | 7. Traspasos entre sucursales | 0 | 0 | 5 |
 | 8. Medicamentos controlados (AGEMED) | 0 | 0 | 4 |
@@ -47,9 +47,9 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
 | 11. Analítica | 1 | 0 | 5 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **58** | **1** | **43** |
+| **Total** | **67** | **1** | **35** |
 
-**Avance aproximado: ~57%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~65%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -129,17 +129,18 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 - ✅ Apertura de turno con fondo inicial
 - ✅ Conteo al cierre con cálculo de diferencia
 - ✅ Aprobación de diferencias por un supervisor
-- ✅ Venta en efectivo (no fiscal) que descuenta stock por FEFO
-- ❌ Pagos con tarjeta, QR, crédito y convenio
-- ❌ Búsqueda rápida y escaneo de código de barras en la venta
-- ❌ Recibo e impresión térmica (58 / 80 mm)
-- ❌ Proformas o cotizaciones
-- ❌ Anulación de ventas y devoluciones
-- ❌ Cambio de lote autorizado (saltar el FEFO con permiso)
-- ❌ Movimientos menores de caja (ingresos y egresos de efectivo)
-- ❌ Historial y consulta de ventas
+- ✅ Venta (no fiscal) que descuenta stock por FEFO; el precio lo fija siempre el servidor según la lista de precios vigente y se rechaza la venta si no hay precio
+- ✅ Pagos con efectivo, tarjeta y QR, combinables en una misma venta, con cálculo de vuelto. Tarjeta y QR se registran con número de referencia, sin pasarela (D43)
+- ❌ Pagos a crédito y por convenio (dependen de clientes y convenios, módulo 10)
+- ✅ Búsqueda rápida (nombre, genérico, principio activo, laboratorio o código de barras) con precio y stock disponible, y lector de código de barras que agrega el producto al carrito
+- ✅ Recibo no fiscal imprimible en papel térmico de 58 / 80 mm desde el navegador, con número de venta `V-<sucursal>-000001` (D44)
+- ✅ Proformas (`/sales/quotes`): numeradas `P-<sucursal>-000001`, válidas 7 días (1 a 30), imprimibles, sin apartar stock ni mover caja; se convierten en venta con el precio vigente (D48)
+- ✅ Anulación de ventas (solo con el turno de la venta abierto: el stock vuelve a los mismos lotes y el efectivo sale de la caja) y devoluciones parciales o totales en cualquier fecha, con reembolso en efectivo, tarjeta o QR, numeradas `D-<sucursal>-000001` y con opción de reponer o no al stock. Permiso nuevo «Anular ventas y registrar devoluciones» (D46)
+- ✅ Cambio de lote autorizado: quien tiene el permiso «Elegir lote distinto al FEFO» puede elegir otro lote disponible con un motivo obligatorio; queda en la auditoría y en el recibo (D47)
+- ✅ Movimientos de caja (ingresos y egresos de efectivo) en turnos abiertos, con motivo y categoría, inmutables y auditados; ajustan el efectivo esperado al cierre. Un egreso no puede superar el efectivo esperado (D49)
+- ✅ Historial de ventas (`/sales/history`) con filtros por fecha, turno, cajero y estado, y detalle de cada venta con lotes consumidos y pagos. El cajero ve solo sus ventas; Propietario, Regente y Encargado ven toda la sucursal (D45)
 - ❌ Exigir receta al vender medicamentos controlados (depende del módulo 8)
-- ❌ Interfaz táctil y atajos de teclado
+- ✅ Pantalla de mostrador táctil y atajos de teclado (F2 buscar, F4 pago, F9 confirmar, Esc limpiar)
 
 ### 6. Facturación SIAT (Servicio de Impuestos Nacionales)
 
@@ -205,7 +206,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 |---|---|---|
 | 1 | Núcleo, multi-tenancy, suscripciones, autenticación y RBAC | ✅ Casi completo (falta resolver la empresa por subdominio) |
 | 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
-| 3 | POS y control de turnos | 🟡 Falta receta en controlados, impresión térmica y otros medios de pago |
+| 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja). Quedan crédito/convenio (módulo 10) y receta en controlados (módulo 8) |
 | 4 | Facturación SIAT | ❌ No iniciado |
 | 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | ❌ No iniciado |
 
@@ -213,8 +214,8 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 | Fase | Contenido | Justificación |
 |---|---|---|
-| 1. Operación básica | POS completo (medios de pago, búsqueda y escaneo, recibo, anulaciones, historial), usuarios y roles, ficha sanitaria del producto | Sin esto el sistema no puede usarse en un mostrador real |
-| 2. Completar lo parcial | Pantallas de presentaciones, categorías e inventario físico; pagos a proveedores; órdenes con varios productos; almacenes | Aprovecha la API existente: alto impacto con poco esfuerzo |
+| 1. Operación básica ✅ | POS completo (medios de pago, búsqueda y escaneo, recibo, anulaciones, historial), usuarios y roles, ficha sanitaria del producto | Sin esto el sistema no puede usarse en un mostrador real |
+| 2. Completar lo parcial ✅ | Pantallas de presentaciones, categorías e inventario físico; pagos a proveedores; órdenes con varios productos; almacenes | Aprovecha la API existente: alto impacto con poco esfuerzo |
 | 3. Cumplimiento legal | Controlados (AGEMED) y facturación SIAT | Obligatorio para operar en Bolivia |
 | 4. Multi-sucursal y planes | Traspasos; planes Básico / Profesional / Premium aplicados en el servidor | Necesario para cadenas de farmacias y para cobrar por plan |
 | 5. Crecimiento | Clientes y convenios, comisiones, analítica, onboarding y cobro del SaaS | Valor agregado sobre una operación ya estable |

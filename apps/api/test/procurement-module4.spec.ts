@@ -180,8 +180,8 @@ describe("módulo 4: compras, pagos, costo promedio y reposición", () => {
     );
     for (const [daysAgo, quantity] of [[3, 25], [12, 35], [45, 500]] as const) {
       const sale = await ownerPool.query<{ id: string }>(
-        `insert into sales (tenant_id, branch_id, cash_shift_id, warehouse_id, total_amount_bob, paid_amount_bob, created_by_user_id, created_at)
-         values ($1, $2, $3, $4, 0, 0, $5, now() - make_interval(days => $6)) returning id`,
+        `insert into sales (tenant_id, branch_id, cash_shift_id, warehouse_id, total_amount_bob, paid_amount_bob, created_by_user_id, created_at, sale_number)
+         values ($1, $2, $3, $4, 0, 0, $5, now() - make_interval(days => $6), 'V-TEST-' || $6::text) returning id`,
         [tenantId, branchId, shiftId, warehouseId, userId, daysAgo]
       );
       await ownerPool.query(

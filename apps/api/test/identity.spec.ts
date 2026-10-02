@@ -157,8 +157,8 @@ describe("Usuarios, roles y seguridad", () => {
       const pharmacy = await registerPharmacy("Farmacia Roles");
       const roles = await identity.listRoles(pharmacy.scope);
       expect(roles.map((role) => role.code).sort()).toEqual(["almacenero", "cajero", "encargado", "owner", "regente"]);
-      expect(roles.find((role) => role.code === "cajero")?.permissions).toEqual(["cash.manage", "sales.confirm"]);
-      expect(await identity.listPermissions(pharmacy.scope)).toHaveLength(11);
+      expect(roles.find((role) => role.code === "cajero")?.permissions).toEqual(["cash.manage", "sales.confirm", "sales.read"]);
+      expect(await identity.listPermissions(pharmacy.scope)).toHaveLength(14);
 
       const cashier = await roleId(pharmacy, "cajero");
       await expect(identity.updateRole(pharmacy.scope, cashier, { name: "Otro" })).rejects.toMatchObject({ status: 409 });
@@ -190,7 +190,7 @@ describe("Usuarios, roles y seguridad", () => {
       const pharmacy = await registerPharmacy("Farmacia Caja");
       const cashier = await addUser(pharmacy, ["cajero"], "cajero@farmacia.bo");
 
-      expect(await auth.permissionsFor(cashier)).toEqual(["cash.manage", "sales.confirm"]);
+      expect(await auth.permissionsFor(cashier)).toEqual(["cash.manage", "sales.confirm", "sales.read"]);
       session(await auth.login({ email: "cajero@farmacia.bo", password }));
 
       // Básico permite 2 usuarios: dueña + cajero.
@@ -228,7 +228,7 @@ describe("Usuarios, roles y seguridad", () => {
     it("nadie otorga permisos que no tiene ni administra a alguien con más permisos", async () => {
       const pharmacy = await registerPharmacy("Farmacia Escalada", "PREMIUM");
       const { id: supervisorRole } = await identity.createRole(pharmacy.scope, {
-        name: "Supervisor", permissionCodes: ["users.manage", "sales.confirm", "cash.manage"]
+        name: "Supervisor", permissionCodes: ["users.manage", "sales.confirm", "sales.read", "cash.manage"]
       });
       const { id: supervisorId } = await identity.createUser(pharmacy.scope, {
         displayName: "Supervisor", email: "super@farmacia.bo", password, roleIds: [supervisorRole], branchIds: [pharmacy.branchId]

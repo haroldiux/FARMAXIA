@@ -1,3 +1,4 @@
+import { ConflictException } from "@nestjs/common";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { dirname, resolve } from "node:path";
@@ -60,6 +61,11 @@ describe("F11 cash sale confirmation against the database", () => {
       "insert into product_presentations (id, tenant_id, product_id, name, base_unit_factor) values ($1, $2, $3, 'Caja x 10', 10)",
       [presentationId, tenantId, productId]
     );
+    await ownerPool.query("insert into price_lists (id, tenant_id, name, currency) values ($1, $2, 'General', 'BOB')", ["00000000-0000-4000-8000-000000000f01", tenantId]);
+    await ownerPool.query(
+      "insert into presentation_prices (tenant_id, price_list_id, presentation_id, amount, valid_from) values ($1, $2, $3, 12.5000, now() - interval '1 day')",
+      [tenantId, "00000000-0000-4000-8000-000000000f01", presentationId]
+    );
     await ownerPool.query(
       `insert into inventory_batches (id, tenant_id, presentation_id, lot_code, expires_on, unit_cost) values
          ($1, $3, $4, 'LOT-SOON', current_date + 60, 5.0000),
@@ -121,7 +127,7 @@ describe("F11 cash sale confirmation against the database", () => {
   });
 
   it("summarizes today, the month, the charts and the recent sales of the branch", async () => {
-    const empty = await sales.summary(scope);
+    const empty = await sales.summary(scope, { viewAll: true });
     expect(empty.today).toEqual({ totalBob: "0", count: 0 });
     expect(empty.monthly).toHaveLength(8);
     expect(empty.daily).toHaveLength(14);
@@ -134,7 +140,7 @@ describe("F11 cash sale confirmation against the database", () => {
       paidAmountBob: "37.5000",
       lines: [{ presentationId, quantity: 3, unitPriceBob: "12.5000" }]
     });
-    const summary = await sales.summary(scope);
+    const summary = await sales.summary(scope, { viewAll: true });
     expect(summary.today.count).toBe(1);
     expect(Number(summary.today.totalBob)).toBe(37.5);
     expect(summary.month).toMatchObject({ count: 1, units: 3, averageTicketBob: "37.50" });
@@ -154,8 +160,115 @@ describe("F11 cash sale confirmation against the database", () => {
         paidAmountBob: "30.0000",
         lines: [{ presentationId, quantity: 3, unitPriceBob: "12.5000" }]
       })
-    ).rejects.toThrow(/exact sale total/);
+    ).rejects.toThrow(/cover the sale total/);
     const total = await ownerPool.query<{ sum: string }>("select sum(quantity_base)::text as sum from inventory_balances where warehouse_id = $1", [warehouseId]);
     expect(total.rows[0]!.sum).toBe("70");
+  });
+
+  it("records mixed CASH, CARD and QR payments and counts only net cash in the shift", async () => {
+    const sale = await sales.confirm(scope, {
+      idempotencyKey: "sale-db-mixed",
+      cashShiftId: shiftId,
+      warehouseId,
+      payments: [
+        { method: "CARD", amountBob: "10.0000", reference: "AUTH-123" },
+        { method: "QR", amountBob: "7.5000", reference: "QR-9" },
+        { method: "CASH", amountBob: "30.0000" }
+      ],
+      lines: [{ presentationId, quantity: 3, unitPriceBob: "12.5000" }]
+    });
+    expect(sale.totalBob).toBe("37.5000");
+    expect(sale.paidAmountBob).toBe("47.5000");
+    expect(sale.changeAmountBob).toBe("10.0000");
+    expect(sale.payments.map((payment) => payment.method)).toEqual(["CARD", "QR", "CASH"]);
+
+    const rows = await ownerPool.query<{ method: string; amount: string; reference: string | null }>(
+      "select method, amount_bob::text as amount, reference from sale_payments where sale_id = $1 order by method",
+      [sale.id]
+    );
+    expect(rows.rows).toEqual([
+      { method: "CARD", amount: "10.0000", reference: "AUTH-123" },
+      { method: "CASH", amount: "30.0000", reference: null },
+      { method: "QR", amount: "7.5000", reference: "QR-9" }
+    ]);
+    const saleRow = await ownerPool.query<{ change: string }>("select change_amount_bob::text as change from sales where id = $1", [sale.id]);
+    expect(saleRow.rows[0]!.change).toBe("10.0000");
+    // Opening 100 + cash received 30 - change 10 = 120 (card/QR never enter the drawer).
+    const control = await ownerPool.query<{ expected: string }>("select expected_amount_bob::text as expected from cash_shift_controls where id = $1", [controlId]);
+    expect(Number(control.rows[0]!.expected)).toBe(120);
+  });
+
+  it("rejects underpayment and card overpayment without moving stock", async () => {
+    await expect(
+      sales.confirm(scope, {
+        idempotencyKey: "sale-db-under",
+        cashShiftId: shiftId,
+        warehouseId,
+        payments: [{ method: "QR", amountBob: "30.0000", reference: "Q" }],
+        lines: [{ presentationId, quantity: 3, unitPriceBob: "12.5000" }]
+      })
+    ).rejects.toThrow(/cover the sale total/);
+    await expect(
+      sales.confirm(scope, {
+        idempotencyKey: "sale-db-over",
+        cashShiftId: shiftId,
+        warehouseId,
+        payments: [{ method: "CARD", amountBob: "40.0000", reference: "A" }],
+        lines: [{ presentationId, quantity: 3, unitPriceBob: "12.5000" }]
+      })
+    ).rejects.toThrow(/card or qr/i);
+    const total = await ownerPool.query<{ sum: string }>("select sum(quantity_base)::text as sum from inventory_balances where warehouse_id = $1", [warehouseId]);
+    expect(total.rows[0]!.sum).toBe("70");
+  });
+
+  it("charges the list price when the client omits the unit price", async () => {
+    const sale = await sales.confirm(scope, {
+      idempotencyKey: "sale-price-omitted",
+      cashShiftId: shiftId,
+      warehouseId,
+      payments: [{ method: "CASH", amountBob: "25.0000" }],
+      lines: [{ presentationId, quantity: 2 }]
+    });
+    expect(sale.totalBob).toBe("25.0000");
+    expect(sale.items[0]).toMatchObject({ unitPriceBob: "12.5000", lineTotalBob: "25.0000" });
+    const stored = await ownerPool.query<{ price: string }>("select unit_price_bob::text as price from sale_items where sale_id = $1", [sale.id]);
+    expect(stored.rows[0]!.price).toBe("12.5000");
+  });
+
+  it("rejects a tampered unit price with PRICE_CHANGED and moves nothing", async () => {
+    const error = await sales
+      .confirm(scope, {
+        idempotencyKey: "sale-price-tampered",
+        cashShiftId: shiftId,
+        warehouseId,
+        payments: [{ method: "CASH", amountBob: "1.0000" }],
+        lines: [{ presentationId, quantity: 2, unitPriceBob: "0.5000" }]
+      })
+      .catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: "PRICE_CHANGED",
+      presentationId,
+      currentPriceBob: "12.5000"
+    });
+    const count = await ownerPool.query<{ n: string }>("select count(*)::text as n from sales");
+    expect(count.rows[0]!.n).toBe("0");
+    const stock = await ownerPool.query<{ sum: string }>("select sum(quantity_base)::text as sum from inventory_balances where warehouse_id = $1", [warehouseId]);
+    expect(stock.rows[0]!.sum).toBe("70");
+  });
+
+  it("rejects a sale of a presentation without a current price with PRICE_NOT_FOUND", async () => {
+    await ownerPool.query("delete from presentation_prices where presentation_id = $1", [presentationId]);
+    const error = await sales
+      .confirm(scope, {
+        idempotencyKey: "sale-price-missing",
+        cashShiftId: shiftId,
+        warehouseId,
+        payments: [{ method: "CASH", amountBob: "25.0000" }],
+        lines: [{ presentationId, quantity: 2, unitPriceBob: "12.5000" }]
+      })
+      .catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({ code: "PRICE_NOT_FOUND", presentationId });
   });
 });

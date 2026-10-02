@@ -28,7 +28,7 @@ todas las autorizaciones declaradas.
 
 ## `POST /api/v1/sales/confirm` (F11)
 
-F11 confirma una venta **no fiscal y solo en efectivo**. Requiere el permiso `sales.confirm`; el backend deriva `tenantId`, `branchId` y `userId` de la sesión autenticada. No acepta `branchId`, `cashRegisterId` ni otro dato del cliente como autorización.
+Confirma una venta **no fiscal** pagada en efectivo, tarjeta o QR (F11 + módulo 5 T1; pagos combinados permitidos). Requiere el permiso `sales.confirm`; el backend deriva `tenantId`, `branchId` y `userId` de la sesión autenticada. No acepta `branchId`, `cashRegisterId` ni otro dato del cliente como autorización.
 
 El cliente Web envía el encabezado `Idempotency-Key` y repite ese valor en `idempotencyKey` del cuerpo. La implementación del endpoint toma la clave del cuerpo; el encabezado por sí solo no sustituye `idempotencyKey`. Reutilizar la misma clave con el mismo cuerpo normalizado reproduce el resultado original; reutilizarla con un cuerpo distinto genera un conflicto de idempotencia.
 
@@ -37,8 +37,10 @@ El cliente Web envía el encabezado `Idempotency-Key` y repite ese valor en `ide
   "idempotencyKey": "uuid",
   "cashShiftId": "uuid",
   "warehouseId": "uuid",
-  "paymentMethod": "CASH",
-  "paidAmountBob": "25.0000",
+  "payments": [
+    { "method": "CARD", "amountBob": "10.0000", "reference": "AUTH-123" },
+    { "method": "CASH", "amountBob": "20.0000" }
+  ],
   "lines": [
     {
       "presentationId": "uuid",
@@ -53,23 +55,29 @@ El cliente Web envía el encabezado `Idempotency-Key` y repite ese valor en `ide
 | --- | --- |
 | `cashShiftId` | Debe corresponder a un control de caja `OPEN`, asignado al usuario autenticado, dentro del tenant y sucursal de la sesión. |
 | `warehouseId` | Debe existir en el tenant/sucursal de la sesión y tener despacho habilitado. |
-| `paymentMethod` | Solo admite `CASH`. |
-| `paidAmountBob`, `unitPriceBob` | Son cadenas decimales no negativas, con hasta cuatro decimales. Se conservan como cadenas decimales exactas, sin conversión a punto flotante. |
+| `payments` | Entre 1 y 10 pagos `{ method, amountBob, reference? }`. `method` es `CASH`, `CARD` o `QR`; `amountBob` es un decimal mayor que cero. `CARD` y `QR` exigen `reference` (máx. 64 caracteres, registrada manualmente: sin pasarela, decisión provisional D43); `CASH` no admite referencia. |
+| Compatibilidad | Si se omite `payments`, se acepta la forma anterior `paymentMethod` + `paidAmountBob` como un único pago. |
+| `unitPriceBob` | Cadena decimal no negativa, con hasta cuatro decimales. Los montos se conservan como cadenas decimales exactas; las sumas se calculan con enteros escalados (nunca punto flotante). |
 | `lines` | Debe contener entre 1 y 100 líneas; cada `presentationId` debe ser vendible y cada `quantity` un entero positivo seguro. |
 
-La confirmación asigna y consume stock disponible por FEFO (vencimiento ascendente y, ante empate, identificador de lote), sin usar lotes vencidos. El importe pagado debe coincidir exactamente con el total calculado. Venta, ítems, pago en efectivo, consumo/movimientos de inventario, actualización del control de caja, auditoría y evento outbox se ejecutan de forma transaccional.
+La confirmación asigna y consume stock disponible por FEFO (vencimiento ascendente y, ante empate, identificador de lote), sin usar lotes vencidos. Los pagos deben cubrir el total calculado; solo el efectivo puede excederlo y el exceso es el cambio (`changeAmountBob`, nunca mayor que el efectivo entregado). Los pagos `CARD`/`QR` no pueden superar lo que falta por cobrar. Al control de caja solo se suma el efectivo neto (efectivo entregado menos cambio); tarjeta y QR no entran al efectivo esperado. Venta, ítems, pagos, consumo/movimientos de inventario, actualización del control de caja, auditoría y evento outbox se ejecutan de forma transaccional.
 
 La respuesta es un `ConfirmedSale`:
 
 ```json
 {
   "id": "uuid",
+  "saleNumber": "V-MAIN-000001",
   "cashShiftId": "uuid",
   "warehouseId": "uuid",
   "status": "CONFIRMED",
-  "paymentMethod": "CASH",
   "totalBob": "25.0000",
-  "paidAmountBob": "25.0000",
+  "paidAmountBob": "30.0000",
+  "changeAmountBob": "5.0000",
+  "payments": [
+    { "method": "CARD", "amountBob": "10.0000", "reference": "AUTH-123" },
+    { "method": "CASH", "amountBob": "20.0000", "reference": null }
+  ],
   "items": [
     {
       "presentationId": "uuid",
@@ -92,24 +100,132 @@ La respuesta es un `ConfirmedSale`:
 
 | Situación | Comportamiento implementado |
 | --- | --- |
-| Datos inválidos | Error de validación para campos requeridos, decimales, cantidades, líneas o un método de pago distinto de `CASH`. |
+| Datos inválidos | Error de validación para campos requeridos, decimales, cantidades, líneas o pagos inválidos (método desconocido, `CARD`/`QR` sin referencia, pagos que no cubren el total o tarjeta/QR por encima de lo adeudado). |
 | Sin `sales.confirm` | Acceso prohibido. |
 | Turno ausente, no abierto o no asignado | Conflicto: se requiere un turno abierto asignado al usuario autenticado. |
 | Almacén o presentación no disponible | La operación se rechaza cuando el almacén no permite despacho o la presentación no es vendible en el tenant. |
 | Inventario insuficiente | Conflicto sin confirmar una venta parcial. |
 | Reutilización de `idempotencyKey` | El mismo cuerpo normalizado reproduce la venta; un cuerpo diferente provoca conflicto. |
 
-**Fuera del alcance de F11:** documentos fiscales, pagos con tarjeta o QR, devoluciones, cotizaciones, impuestos, promociones, conversiones de moneda, conciliación de pasarelas y liquidación contable.
+`saleNumber` es el número legible por sucursal `V-<código de sucursal>-000001`, consecutivo y único por sucursal (secuencia documental `SALE`).
+
+## `GET /api/v1/sales` y `GET /api/v1/sales/{saleId}` (módulo 5 T2)
+
+Historial, detalle y datos del recibo. Permiso nuevo `sales.read` ("Consultar ventas", módulo "Caja y ventas"), sembrado por la migración `0021_sales_history.sql` para Propietario, Regente, Encargado y Cajero de las farmacias existentes y definido en las plantillas de rol de las nuevas.
+
+- **Alcance:** siempre el tenant y la sucursal activa de la sesión. Una venta de otra sucursal o farmacia responde `404`.
+- **Quién ve qué:** quien tiene `sales.read` y además `cash.shift.approve` o `catalog.manage` (Propietario, Regente, Encargado) ve todas las ventas de la sucursal. Los demás (por ejemplo, un Cajero con `sales.confirm` + `sales.read`) ven solo las ventas que ellos registraron; ver una venta ajena responde `404`.
+- `GET /api/v1/sales` exige `sales.read`. `GET /api/v1/sales/{saleId}` acepta `sales.read` o `sales.confirm` (este último solo para una venta propia, para imprimir el recibo tras cobrar).
+
+`GET /api/v1/sales` admite los filtros `from`/`to` (fechas `YYYY-MM-DD` inclusivas, hora de Bolivia `America/La_Paz`), `cashShiftId`, `cashierId`, `status` (`CONFIRMED` o `VOIDED`), `limit` (1–200, por defecto 50) y `offset`. Orden: más recientes primero. Fecha, UUID o estado inválidos responden `400`.
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "number": "V-MAIN-000002",
+      "createdAt": "2026-01-10T15:00:00.000Z",
+      "status": "CONFIRMED",
+      "cashierId": "uuid",
+      "cashierName": "Cajero Dos",
+      "cashShiftId": "uuid",
+      "totalBob": "25.0000",
+      "paidAmountBob": "30.0000",
+      "changeAmountBob": "5.0000",
+      "paymentMethods": ["CARD", "CASH"]
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+`GET /api/v1/sales/{saleId}` devuelve la cabecera (`id`, `number`, `status`, `createdAt`, montos exactos como cadenas), `cashier { id, name }`, `shift { id, registerCode }`, `branch { id, code, name }`, `pharmacy { name, legalName, taxId }`, `warehouse { id, name }`, `items[]` (`productName`, `presentationName`, `quantity`, `quantityBase`, `unitPriceBob`, `lineTotalBob`, `allocations[]` con `lotCode`, `expiresOn`, `quantityBase`) y `payments[]` (`method`, `amountBob`, `reference`, ordenados por método). El recibo imprimible es **no fiscal** (decisión provisional D44): HTML para impresión del navegador en papel térmico de 58 u 80 mm, sin controlador de impresora.
+
+La migración `0021` también separa la política RLS de `sales`: la lectura queda abierta a los miembros de la sucursal (el API restringe a los cajeros a sus ventas) y la escritura sigue limitada al usuario que registró la venta.
+
+**Fuera de alcance:** documentos fiscales, pasarelas y conciliación de tarjeta/QR, pagos a crédito o convenio, devoluciones, cotizaciones, impuestos, promociones, conversiones de moneda, conciliación de pasarelas y liquidación contable.
+
+## `GET /api/v1/sales/lookup` (módulo 5 T3)
+
+Búsqueda compacta del mostrador. Exige `sales.confirm` (módulo `pos`) y se limita al tenant y la sucursal del token.
+
+- Parámetros: `q` (obligatorio, 1–80 caracteres), `warehouseId` (obligatorio, almacén activo de la sucursal; otro almacén responde `404`) y `limit` (1–50, por defecto 20). Entradas inválidas responden `400`.
+- Busca, sin distinguir mayúsculas, en nombre del producto, DCI (`genericName`), principio activo, laboratorio y nombre de la presentación; un código de barras exacto se resuelve primero. Solo presentaciones vendibles y activas de productos activos.
+- Respuesta `{ items[] }` con `presentationId`, `productId`, `productName`, `presentationName`, `genericName`, `activeIngredient`, `laboratory`, `baseUnitFactor`, `priceBob` (precio vigente de la sucursal o de la lista general, cadena decimal exacta o `null`), `availableBase`, `availableQuantity` (unidades de presentación vendibles ahora: lotes `AVAILABLE`, no vencidos y sin reservas, en el almacén) y `barcode` (el código que coincidió o `null`).
+
+### Precio autoritativo en `POST /api/v1/sales/confirm`
+
+El servidor decide el precio de cada línea dentro de la transacción, con la misma resolución que `GET /api/v1/sales/lookup` (lista de la sucursal sobre la general, vigente ahora, moneda BOB).
+
+- `lines[].unitPriceBob` es opcional. Si se omite se cobra el precio vigente; si se envía y difiere, responde `409` con `{ code: "PRICE_CHANGED", presentationId, currentPriceBob }` y no se mueve stock ni caja.
+- Si la presentación no tiene precio vigente responde `409` con `{ code: "PRICE_NOT_FOUND", presentationId }`.
+- Los totales, la validación de pagos y los precios guardados en `sale_items` usan el precio resuelto. El hash de idempotencia sigue calculándose sobre la solicitud normalizada del cliente.
+
+## Cambio de lote autorizado (módulo 5 T6)
+
+Por defecto cada línea consume por FEFO. Un usuario con el permiso `sales.fefo.override` («Elegir lote distinto al FEFO»; Propietario, Regente y Encargado, no Cajero) puede fijar el lote. Decisión provisional D47.
+
+- `POST /api/v1/sales/confirm`: `lines[].batchId` (UUID, opcional) y `overrideReason` (obligatorio, 1 a 200 caracteres, cuando alguna línea trae `batchId`). Sin `batchId` el comportamiento no cambia. El hash de idempotencia incluye `batchId` y `overrideReason`.
+- Sin el permiso responde `403` con `{ code: "FEFO_OVERRIDE_FORBIDDEN" }`. Sin motivo o con más de 200 caracteres responde `400`.
+- El lote debe existir con stock en el almacén de la venta, ser del mismo producto, estar `AVAILABLE` y vigente, y cubrir toda la cantidad de la línea sin contar reservas; si no, `409` con `code` `FEFO_BATCH_NOT_FOUND`, `FEFO_BATCH_MISMATCH`, `FEFO_BATCH_UNAVAILABLE` o `FEFO_BATCH_INSUFFICIENT` (y `batchId`). No se mueve stock ni caja.
+- El consumo se registra como en FEFO (`sale_allocations`), así que anulaciones y devoluciones devuelven el stock al lote elegido. Si el lote elegido difiere del que habría elegido FEFO, `sale_items` y `sale_allocations` guardan `fefoOverride = true` (más `fefoOverrideReason` en la línea) y se audita `sales.fefo_override` con `saleItemId`, `presentationId`, `chosenBatchId`, `fefoBatchId` y `reason`.
+- Respuesta de la venta y `GET /api/v1/sales/:id`: cada línea trae `fefoOverride` y `fefoOverrideReason`; cada asignación trae `fefoOverride`. El recibo indica el lote elegido manualmente.
+- `GET /api/v1/sales/lookup/batches?presentationId=&warehouseId=` (permiso `sales.fefo.override`): lotes `AVAILABLE`, vigentes y con stock sin reservar de la presentación en el almacén, en orden FEFO, con `{ batchId, lotCode, expiresOn, availableBase, fefoSuggested }`; el primero es el sugerido.
+
+## Anulaciones y devoluciones (módulo 5 T5)
+
+Ambas rutas exigen el permiso `sales.void` («Anular ventas y registrar devoluciones»; Propietario, Regente y Encargado, no Cajero), requieren `idempotencyKey` (cuerpo o cabecera) y responden `404` para ventas de otra sucursal u otro tenant. Quien solo tiene visión propia (ver `sales.read`) únicamente alcanza sus ventas. Decisión provisional D46.
+
+Estados de venta: `CONFIRMED` (completada), `PARTIALLY_RETURNED`, `RETURNED`, `VOIDED`. `VOIDED` y `RETURNED` son terminales (también por trigger en base de datos).
+
+### `POST /api/v1/sales/{saleId}/void`
+
+Cuerpo: `{ idempotencyKey, reason }` (`reason` obligatorio, máx. 200).
+
+- Solo si la venta está `CONFIRMED` (sin devoluciones) y el turno de caja de la venta sigue `OPEN`; si no, `409`.
+- Atómico: cada cantidad consumida vuelve **al lote original exacto** (movimiento `SALE_VOID` de entrada vinculado a la venta; no se vuelve a ejecutar FEFO), el efectivo esperado del turno baja en el efectivo neto de la venta (efectivo recibido − cambio; `409 CASH_VOID_EXCEEDS_EXPECTED` si quedaría negativo), los pagos CARD/QR quedan marcados como revertidos (manual, sin pasarela) y la venta pasa a `VOIDED` con `voided_at`, `voided_by_user_id` y `void_reason`.
+- Respuesta `200`: `{ id, saleNumber, status: "VOIDED", reason, voidedAt, cashReversedBob }`. Auditoría `sales.sale_voided` y evento de outbox del mismo nombre. Un reintento con la misma clave devuelve la misma respuesta.
+
+### `POST /api/v1/sales/{saleId}/returns`
+
+Cuerpo: `{ idempotencyKey, reason, refundMethod: "CASH"|"CARD"|"QR", refundReference?, restock: boolean, lines: [{ saleItemId, quantity }] }`. `quantity` está en unidades de la presentación vendida; `restock` es obligatorio; CARD/QR exigen `refundReference` y CASH no la admite.
+
+- Permitida para ventas `CONFIRMED` o `PARTIALLY_RETURNED`, en cualquier fecha posterior. `quantity` no puede superar lo vendido menos lo ya devuelto de la línea (`409 RETURN_EXCEEDS_SOLD`).
+- Reembolso = cantidad × precio unitario guardado (decimal exacto). `CASH` exige que quien registra tenga un turno `OPEN` asignado en la sucursal: baja su efectivo esperado (`409 CASH_REFUND_EXCEEDS_EXPECTED` si lo superaría) y deja un movimiento de caja `OUT` (categoría `OTHER`, motivo «Devolución D-… (venta V-…)») enlazado a la devolución. CARD/QR no tocan la caja.
+- `restock: true`: las unidades vuelven a los lotes originales (primero el de mayor vencimiento, sin superar lo que cada lote aportó) con movimientos `SALE_RETURN`; si algún lote destino está en cuarentena, dado de baja o vencido responde `409 RESTOCK_BATCH_NOT_AVAILABLE` y hay que registrar la devolución con `restock: false`. `restock: false` no cambia el stock y se audita.
+- Numeración `D-<códigoSucursal>-000001` con la secuencia documental `SALE_RETURN`. Tablas inmutables `sale_returns`, `sale_return_items`, `sale_return_allocations`. El estado de la venta pasa a `PARTIALLY_RETURNED` o `RETURNED`.
+- Respuesta `201`: `{ id, returnNumber, saleId, saleNumber, saleStatus, refundMethod, refundReference, refundAmountBob, restock, reason, lines[], createdAt }`. Auditoría y outbox `sales.sale_returned`.
+
+### Lectura
+
+- `GET /api/v1/sales` acepta `status` = `CONFIRMED | VOIDED | PARTIALLY_RETURNED | RETURNED` y cada fila trae `refundedBob`.
+- `GET /api/v1/sales/{saleId}` añade `void` (`{ at, byUserId, byName, reason }` o `null`), `returns[]` (número, motivo, método y monto de reembolso, `restock`, líneas), `items[].id`, `items[].returnedQuantity` y `payments[].reversed`.
+- `GET /api/v1/sales/summary` es neto: excluye ventas `VOIDED` y `RETURNED` y resta los reembolsos de las `PARTIALLY_RETURNED` en la fecha de la venta (se mantiene la restricción a ventas propias).
+
+## Proformas (módulo 5 T7)
+
+Decisión provisional D48. Una proforma no reserva stock, no toca caja y no es una venta ni una factura. Todas las rutas requieren `sales.confirm` y aíslan por tenant y sucursal (otra sucursal recibe `404`). Migración `0025_sales_quotes.sql`.
+
+- `POST /api/v1/sales/quotes`: `{ idempotencyKey, lines: [{ presentationId, quantity }], customerName?, customerNote?, validDays? }`. El servidor resuelve el precio vigente de cada línea (no acepta precios del cliente); `409 PRICE_NOT_FOUND` si una línea no tiene precio, `404` si la presentación no está disponible. `customerName` ≤ 120, `customerNote` ≤ 500, `validDays` entero 1–30 (7 por defecto). Número `P-<códigoSucursal>-000001` con la secuencia documental `QUOTE`. Respuesta `201` con el detalle. Auditoría y outbox `sales.quote_created`. Idempotente: la misma clave y carga devuelve la misma proforma; otra carga con la misma clave da `409 IDEMPOTENCY_KEY_REUSED`.
+- `GET /api/v1/sales/quotes`: filtros `status` (`OPEN | CONVERTED | CANCELED | EXPIRED`), `from`, `to` (`YYYY-MM-DD`, hora de Bolivia), `limit` (50, máx. 200) y `offset`. Devuelve `{ items[], total, limit, offset }` con `{ id, number, status, createdAt, validUntil, customerName, totalBob, createdByName, convertedSaleId }`.
+- `GET /api/v1/sales/quotes/{quoteId}`: detalle con `status`, `validUntil`, `totalBob` (precios de la proforma), `currentTotalBob` (a precios de hoy, `null` si alguna línea ya no tiene precio), `pricesChanged`, `createdBy`, `convertedSaleId`/`convertedSaleNumber`, `branch`, `pharmacy` e `items[]` con `{ presentationId, productName, presentationName, quantity, quotedUnitPriceBob, lineTotalBob, currentUnitPriceBob, currentLineTotalBob, priceChanged }`.
+- `POST /api/v1/sales/quotes/{quoteId}/cancel`: `{ idempotencyKey }`; solo desde `OPEN` (si no, `409 QUOTE_NOT_OPEN`). Auditoría y outbox `sales.quote_canceled`.
+- Conversión: `POST /api/v1/sales/confirm` acepta `quoteId` opcional. En la misma transacción de la venta la proforma pasa a `CONVERTED` con `converted_sale_id` (auditoría y outbox `sales.quote_converted`). Una proforma convertida, anulada o vencida rechaza toda la venta con `409 QUOTE_NOT_OPEN`; `404` si no existe en la sucursal; `400` si `quoteId` no es un UUID. Las líneas del cobro pueden diferir de la proforma y el precio es siempre el vigente.
+- `EXPIRED` no se guarda: una proforma `OPEN` con `validUntil` vencida se muestra y filtra como `EXPIRED`. Las líneas son inmutables y una proforma solo transita `OPEN → CONVERTED | CANCELED` (trigger en base de datos).
+- Web: pestaña «Proformas» (`/sales/quotes`, `/sales/quotes/{id}`) con impresión 58 mm, 80 mm o A4 y el texto «Proforma — no es una venta ni una factura · válida hasta <fecha>»; «Convertir en venta» abre `/sales?quoteId=...` y precarga el carrito.
 
 ## Proformas, devoluciones y documentos
 
-- `POST /api/v1/quotes` y `POST /api/v1/quotes/{id}/convert`: permiso `quotes.manage` / `sales.confirm`; cotizar no crea venta, caja ni stock.
-- `POST /api/v1/sales/{id}/returns`: permiso `sales.return`; espera políticas D14/D18 y compensa una vez.
+- Proformas implementadas en el módulo de ventas: ver «Proformas (módulo 5 T7)». Cotizar no crea venta, caja ni stock.
+- `POST /api/v1/sales/{id}/returns`: ver «Anulaciones y devoluciones» (módulo 5 T5).
 - `GET /api/v1/sales/{id}/documents`: `sales.read` con aislamiento de tenant/sucursal.
 - `POST /api/v1/commercial-documents/{id}/reprint`: `documents.reprint`; no muta venta, pago o stock.
 - `GET /api/v1/fiscal-documents/{id}/status`: `fiscal.read`; muestra estado real sin inventar aceptación.
 
-Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `inventory.report.global`, `sales.read`, `sales.confirm`, `cash.manage`, `cash.shift.approve`, `quotes.manage`, `documents.reprint`, `audit.read`.
+Permisos iniciales: `platform.manage`, `tenant.manage`, `users.manage`, `catalog.manage`, `inventory.manage`, `inventory.report.global`, `sales.read`, `sales.confirm`, `sales.void`, `cash.manage`, `cash.shift.approve`, `quotes.manage`, `documents.reprint`, `audit.read`.
 
 ## Turnos de caja F6-WEB
 
@@ -140,11 +256,18 @@ esperado es únicamente el fondo inicial; no se deriva de ventas ni pagos.
 | `POST /api/v1/cash/shifts/{id}/open` | Requiere `cash.manage` y asignación activa. Recibe `{ idempotencyKey, openingAmountBob }` y crea un control `OPEN` una sola vez. |
 | `POST /api/v1/cash/shifts/{id}/count` | Requiere `cash.manage` y asignación activa. Recibe `{ idempotencyKey, countedAmountBob }`; calcula en SQL `counted - expected`. Cero cierra directamente y cualquier otra diferencia deja `PENDING_APPROVAL`. |
 | `POST /api/v1/cash/shifts/{id}/approve` | Requiere `cash.manage` y `cash.shift.approve`. Recibe `{ idempotencyKey, approvalNote? }`; solo un supervisor autorizado cierra un control `PENDING_APPROVAL`. |
+| `POST /api/v1/cash/shifts/{id}/movements` | Requiere `cash.manage` y asignación activa; solo en turnos `OPEN`. Recibe `{ idempotencyKey, type: "IN"\|"OUT", amountBob (> 0, hasta 4 decimales), reason (1-200), category? (CHANGE_FUND, EXPENSE, DEPOSIT, OTHER) }`. Ajusta `expectedAmountBob` de forma atómica (IN suma, OUT resta) y responde el movimiento con `expectedAmountBob` resultante. Un OUT mayor al efectivo esperado responde `409 CASH_MOVEMENT_EXCEEDS_EXPECTED` (D49). Turno no abierto o cerrado: `404`/`409`. Genera auditoría `cash.movement_registered` y evento outbox. |
+| `GET /api/v1/cash/shifts/{id}/movements` | Requiere `cash.manage` o `cash.shift.approve`. Responde `{ items, summary }` con `openingAmountBob`, `cashSalesBob`, `movementsInBob`, `movementsOutBob` y `expectedAmountBob`. |
 
 `GET /api/v1/cash/shifts` puede incluir `control` con estado, importes exactos,
 diferencia y actores/fechas. Las operaciones son idempotentes por clave y
 serializan sobre el control; todos los cambios generan auditoría. Reutilizar una
 clave con otro cuerpo responde `409 IDEMPOTENCY_KEY_REUSED`.
+
+`control` también expone `cashSalesBob`, `movementsInBob` y `movementsOutBob`:
+efectivo esperado = fondo inicial + ventas en efectivo + ingresos − egresos, y el
+conteo compara contra ese valor. Los movimientos (`cash_movements`) son
+inmutables (sin update/delete).
 
 ## Catálogo inicial
 

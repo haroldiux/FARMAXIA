@@ -11,6 +11,9 @@ export const tenantPermissions = [
   { code: "cash.manage", description: "Manage cash registers and shifts", label: "Operar caja y turnos", module: "Caja y ventas", sortOrder: 40 },
   { code: "cash.shift.approve", description: "Approve non-zero cash shift differences", label: "Aprobar diferencias de caja", module: "Caja y ventas", sortOrder: 50 },
   { code: "sales.confirm", description: "Confirm non-fiscal cash sales", label: "Registrar ventas", module: "Caja y ventas", sortOrder: 60 },
+  { code: "sales.read", description: "Read sales history, sale details and receipts", label: "Consultar ventas", module: "Caja y ventas", sortOrder: 65 },
+  { code: "sales.void", description: "Void sales and register returns", label: "Anular ventas y registrar devoluciones", module: "Caja y ventas", sortOrder: 67 },
+  { code: "sales.fefo.override", description: "Choose a lot different from FEFO when selling", label: "Elegir lote distinto al FEFO", module: "Caja y ventas", sortOrder: 68 },
   { code: "audit.read", description: "Read the tenant audit log within the plan retention", label: "Ver bitácora de auditoría", module: "Administración", sortOrder: 70 },
   { code: "billing.manage", description: "View the subscription, invoices and submit payments", label: "Ver suscripción y pagar", module: "Administración", sortOrder: 80 },
   { code: "users.manage", description: "Manage users, roles and branch access", label: "Administrar usuarios y roles", module: "Administración", sortOrder: 90 }
@@ -36,14 +39,14 @@ export const systemRoles: ReadonlyArray<{
     code: "regente",
     name: "Regente farmacéutico",
     description: "Catálogo, inventario, ventas y auditoría.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "sales.confirm", "audit.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "sales.confirm", "sales.read", "sales.void", "sales.fefo.override", "audit.read"]
   },
   {
     code: "encargado",
     name: "Encargado de sucursal",
     description: "Operación completa de la sucursal, sin usuarios ni suscripción.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "cash.manage", "cash.shift.approve", "sales.confirm", "audit.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "cash.manage", "cash.shift.approve", "sales.confirm", "sales.read", "sales.void", "sales.fefo.override", "audit.read"]
   },
-  { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm"] },
+  { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm", "sales.read"] },
   { code: "almacenero", name: "Almacenero", description: "Inventario, compras y recepción.", permissions: ["inventory.manage"] }
 ];

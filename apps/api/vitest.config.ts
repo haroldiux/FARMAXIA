@@ -19,6 +19,7 @@ export default defineConfig({
       "test/inventory.spec.ts",
       "test/inventory-report.spec.ts",
       "test/cash.spec.ts",
+      "test/cash-movements.spec.ts",
       "test/sales.spec.ts",
       "test/permissions.guard.spec.ts",
       "test/saas.spec.ts",
@@ -26,6 +27,11 @@ export default defineConfig({
       "test/catalog-profile.spec.ts",
       "test/inventory-operations.spec.ts",
       "test/sales-confirm.spec.ts",
+      "test/sales-history.spec.ts",
+      "test/sales-returns.spec.ts",
+      "test/sales-lookup.spec.ts",
+      "test/sales-fefo-override.spec.ts",
+      "test/sales-quotes.spec.ts",
       "test/procurement-module4.spec.ts"
     ],
     fileParallelism: false
