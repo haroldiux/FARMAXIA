@@ -1513,3 +1513,39 @@ select.pos-touch, input.pos-touch { min-height: 44px; }
 .receipt-a4 .receipt-lines { font-size: 13px; }
 .receipt-quote-note { margin: 8px 0 0; padding-top: 6px; border-top: 1px dashed #000; font-size: 11px; }
 .quote-banner { margin: 0; }
+
+/* Medicamentos controlados (POS y /controlled) */
+.controlled-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--pastel-orange); color: var(--orange-ink); font-size: 11px; font-style: normal; font-weight: 700; vertical-align: middle; }
+.rx-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 22, .55); overflow-y: auto; }
+.rx-dialog { display: flex; flex-direction: column; gap: 14px; width: min(640px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.rx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rx-dialog textarea { width: 100%; resize: vertical; }
+@media (max-width: 560px) { .rx-grid { grid-template-columns: 1fr; } }
+.controlled-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.controlled-filter-search { flex: 1 1 260px; }
+.controlled-table-wrap { overflow-x: auto; margin-top: 12px; }
+.controlled-table td, .controlled-table th { text-align: left; vertical-align: top; }
+.controlled-table th:last-child, .controlled-table td:last-child { text-align: left; white-space: normal; }
+.controlled-numeric td:not(:first-child), .controlled-numeric th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.controlled-sub { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.controlled-warning { color: var(--danger-ink); font-weight: 600; }
+.controlled-mismatch td { background: var(--danger-soft); }
+.controlled-breakdown summary { cursor: pointer; }
+.controlled-breakdown ul { margin: 6px 0 0; padding: 0; list-style: none; color: var(--ink-soft); font-size: 12px; text-align: right; }
+.controlled-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; color: var(--ink-soft); font-size: 13px; }
+.controlled-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 12px 0 0; }
+.controlled-details dt { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.controlled-details dd { margin: 4px 0 0; }
+.controlled-nav-locked { padding: 8px 14px; border-radius: 999px; color: var(--muted); font-size: 14px; cursor: not-allowed; opacity: .7; }
+.controlled-premium { max-width: 560px; }
+.controlled-subtitle { margin: 16px 0 6px; font-size: 14px; }
+.controlled-openings { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.controlled-openings li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.controlled-book-table { font-size: 12px; }
+@media print {
+  .controlled-book-page .controlled-book-sheet { border: 0; box-shadow: none; padding: 0; }
+  .controlled-book-page .controlled-table-wrap { overflow: visible; }
+  .controlled-book-table { font-size: 10px; }
+  .controlled-book-table th, .controlled-book-table td { padding: 4px 6px; }
+  .controlled-book-table tr { break-inside: avoid; }
+}

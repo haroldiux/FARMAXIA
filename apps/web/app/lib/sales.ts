@@ -34,6 +34,8 @@ export interface ConfirmSaleInput {
   overrideReason?: string;
   /** Quote being converted; the API marks it CONVERTED in the same transaction as the sale. */
   quoteId?: string;
+  /** Required by the API when any line is a controlled medicine; sent only in that case. */
+  prescription?: Record<string, string>;
 }
 
 export interface SaleAllocation {
@@ -66,6 +68,8 @@ export interface ConfirmedSale {
   changeAmountBob: string;
   payments: Array<{ method: SalePaymentMethod; amountBob: string; reference: string | null }>;
   items: ConfirmedSaleItem[];
+  /** Archived prescription (id + folio) when the sale dispensed a controlled medicine. */
+  prescription: { id: string; folio: string } | null;
 }
 
 export interface SalesShift {
@@ -100,6 +104,8 @@ export interface SalesLookupItem {
   availableQuantity: number;
   /** The barcode that matched exactly, otherwise null. */
   barcode: string | null;
+  /** Controlled medicine: the sale needs prescription data. */
+  isControlled: boolean;
 }
 
 function key(): string {
@@ -114,7 +120,8 @@ export class SalesApiError extends Error {
     message: string,
     readonly code?: string,
     readonly presentationId?: string,
-    readonly currentPriceBob?: string
+    readonly currentPriceBob?: string,
+    readonly field?: string
   ) {
     super(message);
   }
@@ -124,14 +131,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authenticatedFetch(path, init);
   if (!response.ok) {
     let message = "No pudimos completar la venta.";
-    let body: { message?: string; code?: string; presentationId?: string; currentPriceBob?: string } = {};
+    let body: { message?: string; code?: string; presentationId?: string; currentPriceBob?: string; field?: string } = {};
     try {
       body = (await response.json()) as typeof body;
       message = body.message ?? message;
     } catch {
       // Keep the stable fallback for non-JSON responses.
     }
-    throw new SalesApiError(message, body.code, body.presentationId, body.currentPriceBob);
+    throw new SalesApiError(message, body.code, body.presentationId, body.currentPriceBob, body.field);
   }
   return (await response.json()) as T;
 }

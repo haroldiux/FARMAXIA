@@ -25,6 +25,8 @@ export interface CartSource {
   priceBob: string | null;
   /** Whole presentation units that can be sold now in the dispatch warehouse. */
   availableQuantity: number;
+  /** Controlled medicine: the sale will need prescription data. */
+  isControlled?: boolean;
 }
 
 export interface CartLine {
@@ -33,6 +35,8 @@ export interface CartLine {
   unitPriceBob: string;
   quantity: number;
   available: number;
+  /** Controlled medicine: shown with a badge and it makes the cart require a prescription. */
+  isControlled?: boolean;
   /** Lot chosen instead of FEFO (authorized users only); absent means plain FEFO. */
   batchId?: string;
   batchLabel?: string;
@@ -68,7 +72,8 @@ export function addToCart(lines: readonly CartLine[], source: CartSource): CartR
           label: source.label,
           unitPriceBob: source.priceBob,
           quantity: 1,
-          available: source.availableQuantity
+          available: source.availableQuantity,
+          ...(source.isControlled ? { isControlled: true } : {})
         }
       ],
       warning: null
@@ -133,6 +138,11 @@ export function lineTotalUnits(line: CartLine): bigint {
 
 export function cartTotalUnits(lines: readonly CartLine[]): bigint {
   return lines.reduce((sum, line) => sum + lineTotalUnits(line), 0n);
+}
+
+/** True when any cart line is a controlled medicine (the sale then needs prescription data). */
+export function cartHasControlled(lines: readonly CartLine[]): boolean {
+  return lines.some((line) => line.isControlled === true);
 }
 
 export function isCartSellable(lines: readonly CartLine[]): boolean {

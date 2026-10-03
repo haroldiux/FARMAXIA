@@ -154,7 +154,7 @@ describe("Core SaaS", () => {
            (select count(*)::int from audit_events where tenant_id = $1 and action = 'tenant.registered') as audits`,
         [registered.tenantId]
       );
-      expect(structure.rows[0]).toEqual({ branches: 1, warehouses: 1, registers: 1, members: 1, permissions: 17, roles: 5, audits: 1 });
+      expect(structure.rows[0]).toEqual({ branches: 1, warehouses: 1, registers: 1, members: 1, permissions: 19, roles: 5, audits: 1 });
       expect(await subscriptionOf(registered.tenantId)).toMatchObject({ status: "TRIALING", planCode: "BASICO" });
 
       const invoices = await invoicesOf(registered.tenantId);

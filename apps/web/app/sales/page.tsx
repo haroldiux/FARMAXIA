@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SalesNav } from "../components/sales-nav";
 import {
   addToCart,
+  cartHasControlled,
   cartTotalUnits,
   decrementLine,
   fromUnits,
@@ -21,6 +22,13 @@ import {
   type CartLine,
   type CartResult
 } from "../lib/pos-cart";
+import {
+  emptyPrescription,
+  firstMissingPrescriptionField,
+  prescriptionFieldLabels,
+  prescriptionPayload,
+  type PrescriptionDraft
+} from "../lib/controlled";
 import { currentSession, type AuthSession } from "../lib/session";
 import {
   confirmSale,
@@ -61,6 +69,13 @@ function batchOptionLabel(option: SalesBatchOption): string {
   return `${option.lotCode} · vence ${option.expiresOn}`;
 }
 
+const prescriptionErrorCodes = new Set(["PRESCRIPTION_REQUIRED", "INVALID_INPUT"]);
+
+/** The API message already names the offending field (for example "La matrícula del médico es obligatoria"). */
+function prescriptionServerMessage(error: SalesApiError): string {
+  return error.message;
+}
+
 function itemLabel(item: SalesLookupItem): string {
   return `${item.productName} · ${item.presentationName}`;
 }
@@ -84,6 +99,10 @@ export default function SalesPage() {
   const [error, setError] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
   const [quote, setQuote] = useState<QuoteDetail | null>(null);
+  const [rxOpen, setRxOpen] = useState(false);
+  const [rxDraft, setRxDraft] = useState<PrescriptionDraft>(() => emptyPrescription());
+  const [rxError, setRxError] = useState<string | null>(null);
+  const rxOpenRef = useRef(false);
   const quoteLoaded = useRef(false);
   const [lotPicker, setLotPicker] = useState<{ presentationId: string; options: SalesBatchOption[]; loading: boolean } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -118,6 +137,7 @@ export default function SalesPage() {
 
   const canOverrideFefo = session?.permissions.includes("sales.fefo.override") ?? false;
   const hasOverride = cart.some((line) => line.batchId !== undefined);
+  const needsPrescription = cartHasControlled(cart);
   const estimatedUnits = cartTotalUnits(cart);
   const validPayments = payments.filter((payment) => isDecimal(payment.amountBob));
   const paidUnits = validPayments.reduce((sum, payment) => sum + toUnits(payment.amountBob), 0n);
@@ -146,7 +166,7 @@ export default function SalesPage() {
         for (const item of loaded.items) {
           const label = `${item.productName} · ${item.presentationName}`;
           const found = (await lookupSalesPresentations(item.productName, warehouseId)).find((entry) => entry.presentationId === item.presentationId);
-          const added = found ? addToCart(lines, { presentationId: found.presentationId, label, priceBob: found.priceBob, availableQuantity: found.availableQuantity }) : null;
+          const added = found ? addToCart(lines, { presentationId: found.presentationId, label, priceBob: found.priceBob, availableQuantity: found.availableQuantity, isControlled: found.isControlled }) : null;
           if (!added || added.lines.length === lines.length) {
             skipped.push(label);
             continue;
@@ -191,7 +211,8 @@ export default function SalesPage() {
       presentationId: item.presentationId,
       label: itemLabel(item),
       priceBob: item.priceBob,
-      availableQuantity: item.availableQuantity
+      availableQuantity: item.availableQuantity,
+      isControlled: item.isControlled
     }));
     resetSearch();
     focusSearch();
@@ -305,7 +326,7 @@ export default function SalesPage() {
     resetSearch();
   }
 
-  async function submitSale(): Promise<void> {
+  async function submitSale(prescription?: PrescriptionDraft): Promise<void> {
     if (saving) return;
     setError(null);
     setSale(null);
@@ -330,6 +351,12 @@ export default function SalesPage() {
       setError("Escribe el motivo del cambio de lote (hasta 200 caracteres).");
       return;
     }
+    if (needsPrescription && !prescription) {
+      // Controlled medicine: collect the prescription before confirming (the API refuses without it).
+      setRxError(null);
+      setRxOpen(true);
+      return;
+    }
     setSaving(true);
     try {
       const result = await confirmSale({
@@ -347,9 +374,13 @@ export default function SalesPage() {
           ...(line.batchId ? { batchId: line.batchId } : {})
         })),
         ...(hasOverride ? { overrideReason: overrideReason.trim() } : {}),
-        ...(quote ? { quoteId: quote.id } : {})
+        ...(quote ? { quoteId: quote.id } : {}),
+        ...(needsPrescription && prescription ? { prescription: prescriptionPayload(prescription) } : {})
       });
       setSale(result);
+      setRxOpen(false);
+      setRxError(null);
+      setRxDraft(emptyPrescription());
       if (quote) {
         setQuote(null);
         window.history.replaceState(null, "", "/sales");
@@ -370,6 +401,10 @@ export default function SalesPage() {
         setError("Un producto del carrito ya no tiene precio vigente. Quítalo o pide que le asignen un precio.");
       } else if (reason instanceof SalesApiError && reason.code === "QUOTE_NOT_OPEN") {
         setError("La proforma ya no está vigente (se convirtió, se anuló o venció). Quita la proforma del cobro o crea una nueva.");
+      } else if (reason instanceof SalesApiError && reason.code && prescriptionErrorCodes.has(reason.code)) {
+        // Keep the dialog open with what the cashier typed so they can correct the field.
+        setRxError(prescriptionServerMessage(reason));
+        setRxOpen(true);
       } else if (reason instanceof SalesApiError && reason.code && overrideErrorMessages[reason.code]) {
         setError(overrideErrorMessages[reason.code]!);
       } else {
@@ -380,9 +415,21 @@ export default function SalesPage() {
     }
   }
 
+  function submitPrescription(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const missing = firstMissingPrescriptionField(rxDraft);
+    if (missing) {
+      setRxError(`${prescriptionFieldLabels[missing]} es obligatorio.`);
+      return;
+    }
+    setRxError(null);
+    void submitSale(rxDraft);
+  }
+
   // Shortcuts call the latest closures through a ref so the listener is registered once.
+  rxOpenRef.current = rxOpen;
   actions.current = {
-    submit: () => void submitSale(),
+    submit: () => { if (!rxOpenRef.current) void submitSale(); },
     clearSearch: () => {
       if (!query && !results.length) return false;
       resetSearch();
@@ -403,6 +450,11 @@ export default function SalesPage() {
         event.preventDefault();
         actions.current.submit();
       } else if (event.key === "Escape") {
+        if (rxOpenRef.current) {
+          event.preventDefault();
+          setRxOpen(false);
+          return;
+        }
         if (actions.current.clearSearch()) event.preventDefault();
         focusSearch();
       }
@@ -432,7 +484,7 @@ export default function SalesPage() {
     {workspaceHeader}
     {error ? <p className="form-error cash-message" role="alert">{error}</p> : null}
     {quote ? <p className="pos-notice quote-banner" role="status">Cobrando la proforma <strong>{quote.number}</strong>{quote.customerName ? ` de ${quote.customerName}` : ""}. Puedes editar las líneas; el precio es siempre el vigente. <button className="quiet-button" type="button" onClick={() => { setQuote(null); setCart([]); setNotice(null); window.history.replaceState(null, "", "/sales"); }}>Descartar proforma</button></p> : null}
-    {sale ? <section className="panel cash-shifts-panel sale-confirmed" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>{sale.payments.map((payment) => `${salePaymentMethodLabels[payment.method]} ${payment.amountBob}${payment.reference ? ` (${payment.reference})` : ""}`).join(" · ")} · Cambio {sale.changeAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><p>Número de venta: <strong>{sale.saleNumber}</strong></p><div className="user-actions"><Link className="primary-button receipt-link" href={`/sales/${sale.id}`}>Ver / imprimir recibo</Link><button className="quiet-button pos-touch" type="button" onClick={() => { setSale(null); focusSearch(); }}>Siguiente cliente</button></div></section> : null}
+    {sale ? <section className="panel cash-shifts-panel sale-confirmed" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>{sale.payments.map((payment) => `${salePaymentMethodLabels[payment.method]} ${payment.amountBob}${payment.reference ? ` (${payment.reference})` : ""}`).join(" · ")} · Cambio {sale.changeAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><p>Número de venta: <strong>{sale.saleNumber}</strong></p>{sale.prescription ? <p>Receta archivada: <strong>{sale.prescription.folio}</strong></p> : null}<div className="user-actions"><Link className="primary-button receipt-link" href={`/sales/${sale.id}`}>Ver / imprimir recibo</Link><button className="quiet-button pos-touch" type="button" onClick={() => { setSale(null); focusSearch(); }}>Siguiente cliente</button></div></section> : null}
     <form className="cash-layout sales-layout" onSubmit={(event) => { event.preventDefault(); void submitSale(); }}>
       <section className="panel cash-shifts-panel">
         <div className="panel-heading"><div><p className="section-kicker">Venta del mostrador</p><h2>Buscar y agregar productos</h2></div><span className="panel-count">{cart.length.toString().padStart(2, "0")}</span></div>
@@ -450,7 +502,7 @@ export default function SalesPage() {
             const blocked = item.priceBob === null || item.availableQuantity < 1;
             return <li key={item.presentationId} role="option" aria-selected={index === highlight}>
               <button type="button" className={`pos-result${index === highlight ? " is-active" : ""}`} onMouseEnter={() => setHighlight(index)} onClick={() => addItem(item, cart)}>
-                <span className="pos-result-main"><strong>{item.productName}</strong><small>{item.presentationName}{item.genericName ? ` · ${item.genericName}` : ""}{item.laboratory ? ` · ${item.laboratory}` : ""}</small></span>
+                <span className="pos-result-main"><strong>{item.productName}{item.isControlled ? <em className="controlled-badge">Controlado</em> : null}</strong><small>{item.presentationName}{item.genericName ? ` · ${item.genericName}` : ""}{item.laboratory ? ` · ${item.laboratory}` : ""}</small></span>
                 <span className="pos-result-side"><strong>{item.priceBob === null ? "Sin precio" : `${item.priceBob} BOB`}</strong><small className={blocked ? "pos-low" : ""}>{item.availableQuantity < 1 ? "Sin stock" : `Stock: ${item.availableQuantity}`}</small></span>
               </button>
             </li>;
@@ -458,7 +510,7 @@ export default function SalesPage() {
         </div>
         {notice ? <p className="pos-notice" role="status">{notice}</p> : null}
         {cart.length ? <ul className="pos-cart" aria-label="Carrito">{cart.map((line) => <li className="pos-cart-line" key={line.presentationId}>
-          <div className="pos-cart-name"><strong>{line.label}</strong><small>{line.unitPriceBob} BOB c/u · disponibles: {line.available}</small>{line.batchLabel ? <small className="pos-lot-chosen">Lote elegido: {line.batchLabel}</small> : null}</div>
+          <div className="pos-cart-name"><strong>{line.label}{line.isControlled ? <em className="controlled-badge">Controlado</em> : null}</strong><small>{line.unitPriceBob} BOB c/u · disponibles: {line.available}</small>{line.batchLabel ? <small className="pos-lot-chosen">Lote elegido: {line.batchLabel}</small> : null}</div>
           <div className="pos-qty" role="group" aria-label={`Cantidad de ${line.label}`}>
             <button className="quiet-button pos-touch" type="button" aria-label="Quitar una unidad" disabled={line.quantity <= 1} onClick={() => applyCart(decrementLine(cart, line.presentationId))}>−</button>
             <input className="pos-qty-input" inputMode="numeric" aria-label="Cantidad" value={line.quantity === 0 ? "" : line.quantity} onChange={(event) => applyCart(setQuantity(cart, line.presentationId, parseQuantityInput(event.target.value)))} onBlur={() => { if (line.quantity === 0) applyCart(setQuantity(cart, line.presentationId, 1)); }} onFocus={(event) => event.target.select()} />
@@ -475,6 +527,7 @@ export default function SalesPage() {
             </li>)}</ul> : <small className="pos-hint">No hay lotes disponibles en este almacén.</small>) : null}
           </div> : null}
         </li>)}</ul> : <p className="pos-empty">El carrito está vacío. Escanea un producto o búscalo para empezar.</p>}
+        {needsPrescription ? <p className="pos-notice" role="status">El carrito tiene medicamentos controlados: al confirmar te pediremos los datos de la receta.</p> : null}
         {hasOverride ? <label className="inventory-filter pos-override-reason"><span>Motivo del cambio de lote (obligatorio)</span><input required maxLength={200} value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Ej.: el cliente pidió el lote de mayor vencimiento" /></label> : null}
         <p className="pos-shortcuts" aria-label="Atajos de teclado"><kbd>F2</kbd> Buscar · <kbd>↑</kbd><kbd>↓</kbd> + <kbd>Enter</kbd> Elegir · <kbd>F4</kbd> Cobro · <kbd>F9</kbd> Confirmar · <kbd>Esc</kbd> Limpiar</p>
       </section>
@@ -495,5 +548,26 @@ export default function SalesPage() {
         <button className="primary-button pos-confirm" disabled={saving || !cart.length} type="submit">{saving ? "Confirmando…" : "Confirmar venta (F9)"}</button>
       </aside>
     </form>
+    {rxOpen ? <div className="rx-backdrop" role="presentation">
+      <form className="rx-dialog panel" role="dialog" aria-modal="true" aria-labelledby="rx-title" onSubmit={submitPrescription} noValidate>
+        <p className="section-kicker">Medicamento controlado</p>
+        <h2 id="rx-title">Datos de la receta</h2>
+        <p className="field-hint">Es obligatorio registrar la receta para dispensar medicamentos controlados. Queda archivada junto con la venta.</p>
+        {rxError ? <p className="form-error" role="alert">{rxError}</p> : null}
+        <div className="rx-grid">
+          <label className="field"><span>Médico</span><input autoFocus required maxLength={160} value={rxDraft.doctorName} onChange={(event) => setRxDraft({ ...rxDraft, doctorName: event.target.value })} /></label>
+          <label className="field"><span>Matrícula</span><input required maxLength={40} value={rxDraft.doctorLicense} onChange={(event) => setRxDraft({ ...rxDraft, doctorLicense: event.target.value })} /></label>
+          <label className="field"><span>Paciente</span><input required maxLength={160} value={rxDraft.patientName} onChange={(event) => setRxDraft({ ...rxDraft, patientName: event.target.value })} /></label>
+          <label className="field"><span>CI / documento</span><input required maxLength={40} value={rxDraft.patientDocument} onChange={(event) => setRxDraft({ ...rxDraft, patientDocument: event.target.value })} /></label>
+          <label className="field"><span>Centro de salud emisor</span><input required maxLength={160} value={rxDraft.issuingCenter} onChange={(event) => setRxDraft({ ...rxDraft, issuingCenter: event.target.value })} /></label>
+          <label className="field"><span>Fecha de la receta</span><input required type="date" value={rxDraft.prescribedAt} onChange={(event) => setRxDraft({ ...rxDraft, prescribedAt: event.target.value })} /></label>
+        </div>
+        <label className="field"><span>Notas (opcional)</span><textarea rows={2} maxLength={500} value={rxDraft.notes} onChange={(event) => setRxDraft({ ...rxDraft, notes: event.target.value })} /></label>
+        <div className="user-actions">
+          <button className="primary-button" disabled={saving} type="submit">{saving ? "Confirmando…" : "Registrar receta y confirmar venta"}</button>
+          <button className="quiet-button" disabled={saving} type="button" onClick={() => setRxOpen(false)}>Cancelar</button>
+        </div>
+      </form>
+    </div> : null}
   </main>;
 }

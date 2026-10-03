@@ -35,7 +35,9 @@ export default defineConfig({
       "test/procurement-module4.spec.ts",
       "test/fiscal-invoices.spec.ts",
       "test/transfers.spec.ts",
-      "test/transfers-approval.spec.ts"
+      "test/transfers-approval.spec.ts",
+      "test/controlled-prescriptions.spec.ts",
+      "test/controlled-archive.spec.ts"
     ],
     fileParallelism: false
   }

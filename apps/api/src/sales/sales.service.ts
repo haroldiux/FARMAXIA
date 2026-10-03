@@ -3,6 +3,18 @@ import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import { DocumentSequenceService } from "../transversal/document-sequence.service.js";
 import {
+  assertAssistedPrescription,
+  containsControlledProduct,
+  insertPrescription,
+  normalizePrescription,
+  prescriptionRequired,
+  type ControlledPrescriptionInput,
+  type NormalizedPrescription,
+  type RecordedPrescription
+} from "../controlled/prescription.js";
+import { FeatureService } from "../subscriptions/feature.service.js";
+import { SubscriptionAccessError } from "../subscriptions/quota.service.js";
+import {
   SalesHistoryReader,
   type SaleDetail,
   type SalesAccess,
@@ -107,6 +119,11 @@ export interface ConfirmSaleInput {
   overrideReason?: string;
   /** Quote being converted; it becomes CONVERTED in the same transaction as the sale. */
   quoteId?: string;
+  /**
+   * Prescription data. Mandatory (PRESCRIPTION_REQUIRED) when any line is an effectively controlled
+   * product (F15/D57); ignored for sales without controlled products.
+   */
+  prescription?: ControlledPrescriptionInput;
 }
 
 export interface NormalizedSaleInput {
@@ -117,6 +134,7 @@ export interface NormalizedSaleInput {
   lines: ConfirmSaleLineInput[];
   overrideReason?: string;
   quoteId?: string;
+  prescription?: NormalizedPrescription;
 }
 
 export interface SaleAllocation {
@@ -166,6 +184,8 @@ export interface ConfirmedSale {
   changeAmountBob: string;
   payments: ConfirmedSalePayment[];
   items: ConfirmedSaleItem[];
+  /** Archived controlled-medicine prescription (id + folio R-<branch>-000001), null when none was required. */
+  prescription: RecordedPrescription | null;
 }
 
 const decimalPattern = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/;
@@ -256,6 +276,7 @@ export function normalizeSaleInput(input: ConfirmSaleInput): NormalizedSaleInput
     if (!uuidPattern.test(candidate)) throw new BadRequestException("Quote ID must be a valid UUID.");
     quoteId = candidate;
   }
+  const prescription = normalizePrescription(input.prescription);
   return {
     idempotencyKey: text(input.idempotencyKey, "Idempotency key"),
     cashShiftId: text(input.cashShiftId, "Cash shift ID", 64),
@@ -263,7 +284,8 @@ export function normalizeSaleInput(input: ConfirmSaleInput): NormalizedSaleInput
     payments,
     lines,
     ...(overrideReason === undefined ? {} : { overrideReason }),
-    ...(quoteId === undefined ? {} : { quoteId })
+    ...(quoteId === undefined ? {} : { quoteId }),
+    ...(prescription === undefined ? {} : { prescription })
   };
 }
 
@@ -322,6 +344,7 @@ export class SalesService {
   private readonly catalogLookup: SalesLookupReader;
   private readonly returns: SalesReturnsWriter;
   private readonly quotes: SalesQuotes;
+  private readonly features: FeatureService;
 
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {
     this.history = new SalesHistoryReader(database);
@@ -329,6 +352,7 @@ export class SalesService {
     this.returns = new SalesReturnsWriter(database);
     this.quotes = new SalesQuotes(database);
     this.fiscal = new FiscalService(database);
+    this.features = new FeatureService(database);
   }
 
   createQuote(scope: TenantScope, input: CreateQuoteInput): Promise<QuoteDetail> {
@@ -387,6 +411,7 @@ export class SalesService {
       });
     }
     const normalized = normalizeSaleInput(input);
+    await this.assertAssistedPrescription(scope, normalized);
     try {
       const result = await this.idempotency.execute(
         this.database,
@@ -406,6 +431,27 @@ export class SalesService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Plans with `controlled.assisted` get stricter checks (ID formats, validity window) on the
+   * prescription of a sale that really dispenses a controlled product. Runs before the idempotent
+   * execution; a tenant without an active subscription simply gets the manual rules.
+   */
+  private async assertAssistedPrescription(scope: TenantScope, input: NormalizedSaleInput): Promise<void> {
+    if (!input.prescription) return;
+    const presentationIds = input.lines.map((line) => line.presentationId);
+    const controlled = await this.database.withScope(scope, (client) =>
+      containsControlledProduct(client, scope, presentationIds)
+    );
+    if (!controlled) return;
+    let assisted = false;
+    try {
+      assisted = await this.features.isEnabled(scope, "controlled.assisted");
+    } catch (error) {
+      if (!(error instanceof SubscriptionAccessError)) throw error;
+    }
+    if (assisted) assertAssistedPrescription(input.prescription);
   }
 
   private async postSale(
@@ -445,6 +491,13 @@ export class SalesService {
     if (!warehouse.rows[0]) {
       throw new NotFoundException("The warehouse is not available for this branch.");
     }
+
+    const controlled = await containsControlledProduct(
+      client,
+      scope,
+      input.lines.map((line) => line.presentationId)
+    );
+    if (controlled && !input.prescription) throw prescriptionRequired();
 
     const saleNumber = await this.nextSaleNumber(client, scope);
     const sale = await client.query<SaleRow>(
@@ -632,6 +685,22 @@ export class SalesService {
         methods: payments.map((payment) => payment.method)
       }
     });
+    let recordedPrescription: RecordedPrescription | null = null;
+    if (controlled && input.prescription) {
+      recordedPrescription = await insertPrescription(client, scope, saleRow.id, input.prescription, this.sequences);
+      await this.audit.recordInTransaction(client, scope, {
+        action: "controlled.prescription_recorded",
+        entityType: "sale",
+        entityId: saleRow.id,
+        payload: {
+          prescriptionId: recordedPrescription.id,
+          folio: recordedPrescription.folio,
+          doctorLicense: input.prescription.doctorLicense,
+          patientDocument: input.prescription.patientDocument,
+          prescribedAt: input.prescription.prescribedAt
+        }
+      });
+    }
     await this.outbox.enqueueInTransaction(client, scope, {
       aggregateType: "sale",
       aggregateId: saleRow.id,
@@ -654,7 +723,8 @@ export class SalesService {
       paidAmountBob: evaluation.paidBob,
       changeAmountBob: evaluation.changeBob,
       payments,
-      items
+      items,
+      prescription: recordedPrescription
     };
   }
 

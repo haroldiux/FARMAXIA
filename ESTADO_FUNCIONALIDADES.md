@@ -1,7 +1,7 @@
 # FARMAXIA — Estado de funcionalidades
 
-**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 1 de octubre de 2026 (módulos 0 al 5 completados)
-**Rama revisada:** `Denil` (commit `240f272`, basado en `main` `38709c8`); módulos 0 al 3 subidos a `Denil` y módulo 4 sin commit
+**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 2 de octubre de 2026 (módulos 0 al 5, 7 y 8 completados; módulo 6 con base técnica)
+**Rama revisada:** `Denil` (commit `ff1be5c`); módulos 0 al 7 subidos a `Denil` y módulo 8 sin commit
 **Autor:** Denilson Godoy
 
 ## 1. Propósito de este documento
@@ -17,10 +17,10 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 **Estado real** (qué existe hoy), revisado directamente en el código:
 
-- Tablas de base de datos creadas por las migraciones (`apps/api/drizzle/0000` a `0025`).
+- Tablas de base de datos creadas por las migraciones (`apps/api/drizzle/0000` a `0029`).
 - Rutas de la API (`apps/api/src/*/*.controller.ts`).
 - Pantallas de la web (`apps/web/app`).
-- Pruebas automáticas: 211 de 211 pasan en 28 archivos (`pnpm --filter @farmaxia/api test`, 1 de octubre de 2026).
+- Pruebas automáticas: 260 de 260 pasan en 33 archivos (`pnpm --filter @farmaxia/api test`, 2 de octubre de 2026).
 
 **Leyenda:**
 
@@ -39,17 +39,17 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 2. Catálogo farmacéutico | 10 | 0 | 0 |
 | 3. Inventario, lotes y almacenes | 11 | 0 | 0 |
 | 4. Compras y proveedores | 9 | 0 | 0 |
-| 5. Punto de venta y caja | 14 | 0 | 2 |
+| 5. Punto de venta y caja | 15 | 0 | 1 |
 | 6. Facturación SIAT | 0 | 0 | 8 |
 | 7. Traspasos entre sucursales | 5 | 0 | 0 |
-| 8. Medicamentos controlados (AGEMED) | 0 | 0 | 4 |
+| 8. Medicamentos controlados (AGEMED) | 4 | 0 | 0 |
 | 9. Personal, turnos y comisiones | 0 | 0 | 3 |
 | 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
 | 11. Analítica | 1 | 0 | 5 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **72** | **1** | **30** |
+| **Total** | **77** | **1** | **25** |
 
-**Avance aproximado: ~65%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~75%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -139,7 +139,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 - ✅ Cambio de lote autorizado: quien tiene el permiso «Elegir lote distinto al FEFO» puede elegir otro lote disponible con un motivo obligatorio; queda en la auditoría y en el recibo (D47)
 - ✅ Movimientos de caja (ingresos y egresos de efectivo) en turnos abiertos, con motivo y categoría, inmutables y auditados; ajustan el efectivo esperado al cierre. Un egreso no puede superar el efectivo esperado (D49)
 - ✅ Historial de ventas (`/sales/history`) con filtros por fecha, turno, cajero y estado, y detalle de cada venta con lotes consumidos y pagos. El cajero ve solo sus ventas; Propietario, Regente y Encargado ven toda la sucursal (D45)
-- ❌ Exigir receta al vender medicamentos controlados (depende del módulo 8)
+- ✅ Exigir receta al vender medicamentos controlados: si el carrito tiene un producto controlado, el POS pide los datos de la receta antes de confirmar y la venta se rechaza sin ellos (`PRESCRIPTION_REQUIRED`), con factura o con recibo (D57)
 - ✅ Pantalla de mostrador táctil y atajos de teclado (F2 buscar, F4 pago, F9 confirmar, Esc limpiar)
 
 ### 6. Facturación SIAT (Servicio de Impuestos Nacionales)
@@ -167,10 +167,12 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 ### 8. Medicamentos controlados (AGEMED / regencia)
 
-- ❌ Registro de receta: médico, matrícula, paciente, documento y centro emisor
-- ❌ Archivo o retención de la receta
-- ❌ Movimientos y balances mensuales de controlados
-- ❌ Libro digital de psicotrópicos exportable para fiscalización
+- ✅ Registro de receta al vender: médico, matrícula, paciente, documento, centro emisor y fecha de la receta. En planes Profesional y Premium se valida además el formato de matrícula y documento, y que la receta no sea futura ni tenga más de 30 días (D60)
+- ✅ Archivo de recetas (`/controlled`): cada receta queda vinculada a su venta, inmutable y con folio `R-<sucursal>-000001`, con búsqueda por fechas, médico o paciente y detalle de lo dispensado por lote. La copia escaneada queda pendiente (D58)
+- ✅ Balance mensual de controlados (`/controlled/balance`, plan Premium): saldo inicial, entradas y salidas por tipo de movimiento (compras, ventas, devoluciones, traspasos, bajas, ajustes) y saldo final, comparado con el stock actual
+- ✅ Libro digital de controlados (`/controlled/book`, plan Premium): movimientos cronológicos foliados con saldo por producto, documento y receta asociada; imprimible desde el navegador y descargable en CSV con el permiso «Exportar libro de controlados» (D59)
+
+> **F15 (octubre 2026):** permisos nuevos `controlled.read` (Propietario, Regente, Encargado) y `controlled.book.export` (Propietario, Regente). El libro se calcula desde los movimientos de inventario, sin escribir stock nuevo. Pendiente: mostrar el folio de la receta en el recibo impreso (hoy aparece en el panel de venta confirmada) y confirmar con regencia el formato oficial SEDES/AGEMED (D57-D60).
 
 ### 9. Personal, turnos y comisiones
 
@@ -208,9 +210,9 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 |---|---|---|
 | 1 | Núcleo, multi-tenancy, suscripciones, autenticación y RBAC | ✅ Casi completo (falta resolver la empresa por subdominio) |
 | 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
-| 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja). Quedan crédito/convenio (módulo 10) y receta en controlados (módulo 8) |
-| 4 | Facturación SIAT | ❌ No iniciado |
-| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ completo (módulo 7, D53-D56); libro AGEMED, comisiones y matriz ABC pendientes |
+| 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja, receta en controlados). Queda crédito/convenio (módulo 10) |
+| 4 | Facturación SIAT | 🟡 Base técnica lista (F13: `FiscalProvider`, tabla `fiscal_invoices`, simulador); la emisión real espera D03 |
+| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ (módulo 7, D53-D56) y libro AGEMED ✅ (módulo 8, D57-D60); comisiones y matriz ABC pendientes |
 
 ## 6. Propuesta de orden para completar el sistema
 

@@ -2310,3 +2310,46 @@ export const transferItems = pgTable(
     check("transfer_items_received_qty_non_negative_check", sql`${table.receivedQty} >= 0`)
   ]
 );
+
+// F15 (T1): controlled medicines (module 8). One immutable prescription per sale that dispenses a
+// controlled product (D57); the app role only has SELECT/INSERT (migration 0029).
+export const controlledPrescriptions = pgTable(
+  "controlled_prescriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    folio: varchar("folio", { length: 40 }).notNull(),
+    doctorName: varchar("doctor_name", { length: 160 }).notNull(),
+    doctorLicense: varchar("doctor_license", { length: 40 }).notNull(),
+    patientName: varchar("patient_name", { length: 160 }).notNull(),
+    patientDocument: varchar("patient_document", { length: 40 }).notNull(),
+    issuingCenter: varchar("issuing_center", { length: 160 }).notNull(),
+    prescribedAt: date("prescribed_at").notNull(),
+    notes: varchar("notes", { length: 500 }),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "controlled_prescriptions_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "controlled_prescriptions_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    foreignKey({
+      name: "controlled_prescriptions_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    unique("controlled_prescriptions_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("controlled_prescriptions_tenant_branch_sale_unique").on(table.tenantId, table.branchId, table.saleId),
+    unique("controlled_prescriptions_tenant_branch_folio_unique").on(table.tenantId, table.branchId, table.folio),
+    index("controlled_prescriptions_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt)
+  ]
+);

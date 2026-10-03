@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { controlledProductPredicate } from "../controlled/prescription.js";
 import type { TenantDatabase, TenantScope } from "../database/tenant-database.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,6 +30,8 @@ export interface SalesLookupItem {
   availableQuantity: number;
   /** The barcode that matched exactly, otherwise null. */
   barcode: string | null;
+  /** Effectively controlled (product flag, category flag or CONTROLLED classification): the sale needs a prescription. */
+  isControlled: boolean;
 }
 
 export interface SalesBatchesQuery {
@@ -174,9 +177,11 @@ export class SalesLookupReader {
                 pr.base_unit_factor::int as "baseUnitFactor",
                 selected_price.amount::text as "priceBob",
                 coalesce(stock.available, 0)::text as "availableBase",
-                bc.barcode
+                bc.barcode,
+                ${controlledProductPredicate("p", "cat")} as "isControlled"
          from product_presentations pr
          join products p on p.tenant_id = pr.tenant_id and p.id = pr.product_id
+         left join product_categories cat on cat.tenant_id = p.tenant_id and cat.id = p.category_id
          left join product_barcodes bc
            on bc.tenant_id = pr.tenant_id and bc.presentation_id = pr.id and bc.barcode = $2
          ${currentPriceLateral("pr.id", "pr.tenant_id", "$4")}

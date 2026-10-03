@@ -40,6 +40,7 @@ export const moduleSections: Array<{ label: string; items: AppModule[] }> = [
     label: "Control",
     items: [
       { key: "report", label: "Reporte global", icon: "report", href: "/inventory/report", permission: "inventory.report.global", tone: "indigo", altTone: "sky", description: "Existencias de todas las sucursales" },
+      { key: "controlled", label: "Controlados", icon: "controlled", href: "/controlled", permission: "controlled.read", tone: "orange", altTone: "lilac", description: "Recetas, saldos y libro de medicamentos controlados" },
       { key: "audit", label: "Auditoría", icon: "audit", href: "/audit", permission: "audit.read", tone: "amber", altTone: "indigo", description: "Quién hizo qué y cuándo" }
     ]
   },

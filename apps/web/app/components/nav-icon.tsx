@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type NavIconName = "overview" | "catalog" | "inventory" | "report" | "procurement" | "transfer" | "cash" | "sales" | "audit" | "billing" | "tenants" | "plans" | "users" | "account" | "logout" | "menu" | "close" | "collapse" | "search" | "bell" | "chevron" | "sun" | "moon" | "trend" | "alert";
+export type NavIconName = "overview" | "catalog" | "inventory" | "report" | "procurement" | "transfer" | "cash" | "sales" | "audit" | "billing" | "tenants" | "plans" | "users" | "account" | "logout" | "menu" | "close" | "collapse" | "search" | "bell" | "chevron" | "sun" | "moon" | "trend" | "alert" | "controlled";
 
 // Trazos inline (24×24, currentColor) para no añadir una librería de iconos.
 const paths: Record<NavIconName, ReactNode> = {
@@ -28,6 +28,7 @@ const paths: Record<NavIconName, ReactNode> = {
   moon: <><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></>,
   trend: <><path d="m3 17 6-6 4 4 8-8" /><path d="M14 7h7v7" /></>,
   alert: <><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4M12 17h.01" /></>,
+  controlled: <><rect x="5" y="3" width="14" height="18" rx="2.5" /><path d="M9 8h6M9 12h6" /><path d="M9 16h3" /><path d="M15.5 15.5v3M14 17h3" /></>,
   collapse: <><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9 4v16" /><path d="m15 10-2 2 2 2" /></>
 };
 

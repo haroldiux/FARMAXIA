@@ -10,6 +10,8 @@ export const tenantPermissions = [
   { code: "inventory.report.global", description: "Read tenant-wide inventory reports", label: "Ver reporte global de inventario", module: "Inventario", sortOrder: 30 },
   { code: "transfers.manage", description: "Request, dispatch and receive branch-to-branch transfers", label: "Solicitar, despachar y recibir traspasos", module: "Traspasos", sortOrder: 36 },
   { code: "transfers.approve", description: "Approve branch-to-branch transfer requests before dispatch", label: "Aprobar traspasos antes del despacho", module: "Traspasos", sortOrder: 37 },
+  { code: "controlled.read", description: "Read the controlled-medicine prescription archive, balances and book", label: "Consultar medicamentos controlados", module: "Controlados", sortOrder: 38 },
+  { code: "controlled.book.export", description: "Export the controlled-medicine book", label: "Exportar libro de controlados", module: "Controlados", sortOrder: 39 },
   { code: "cash.manage", description: "Manage cash registers and shifts", label: "Operar caja y turnos", module: "Caja y ventas", sortOrder: 40 },
   { code: "cash.shift.approve", description: "Approve non-zero cash shift differences", label: "Aprobar diferencias de caja", module: "Caja y ventas", sortOrder: 50 },
   { code: "sales.confirm", description: "Confirm non-fiscal cash sales", label: "Registrar ventas", module: "Caja y ventas", sortOrder: 60 },
@@ -42,13 +44,13 @@ export const systemRoles: ReadonlyArray<{
     code: "regente",
     name: "Regente farmacéutico",
     description: "Catálogo, inventario, ventas y auditoría.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "transfers.manage", "transfers.approve", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "transfers.manage", "transfers.approve", "controlled.read", "controlled.book.export", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read"]
   },
   {
     code: "encargado",
     name: "Encargado de sucursal",
     description: "Operación completa de la sucursal, sin usuarios ni suscripción.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "transfers.manage", "transfers.approve", "cash.manage", "cash.shift.approve", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "transfers.manage", "transfers.approve", "controlled.read", "cash.manage", "cash.shift.approve", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read"]
   },
   { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm", "sales.read", "fiscal.read"] },
   { code: "almacenero", name: "Almacenero", description: "Inventario, compras y recepción.", permissions: ["inventory.manage", "transfers.manage"] }
