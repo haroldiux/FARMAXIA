@@ -45,6 +45,10 @@ export const moduleSections: Array<{ label: string; items: AppModule[] }> = [
     ]
   },
   {
+    label: "Personal",
+    items: [{ key: "staff", label: "Turnos y comisiones", icon: "staff", href: "/staff", tone: "green", altTone: "amber", description: "Turnos, guardias, comisiones y productividad" }]
+  },
+  {
     label: "Administración",
     items: [
       { key: "users", label: "Usuarios y roles", icon: "users", href: "/users", permission: "users.manage", tone: "lilac", altTone: "sky", description: "Equipo, permisos y sucursales" },

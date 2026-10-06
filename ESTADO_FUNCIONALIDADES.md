@@ -1,7 +1,7 @@
 # FARMAXIA — Estado de funcionalidades
 
-**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 2 de octubre de 2026 (módulos 0 al 5, 7 y 8 completados; módulo 6 con base técnica)
-**Rama revisada:** `Denil` (commit `ff1be5c`); módulos 0 al 7 subidos a `Denil` y módulo 8 sin commit
+**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 5 de octubre de 2026 (módulos 0 al 5 y 7 al 9 completados; módulo 6 con base técnica)
+**Rama revisada:** `Denil` (commit `d21e333`); módulos 0 al 8 subidos a `Denil` y módulo 9 sin commit
 **Autor:** Denilson Godoy
 
 ## 1. Propósito de este documento
@@ -43,13 +43,13 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 6. Facturación SIAT | 0 | 0 | 8 |
 | 7. Traspasos entre sucursales | 5 | 0 | 0 |
 | 8. Medicamentos controlados (AGEMED) | 4 | 0 | 0 |
-| 9. Personal, turnos y comisiones | 0 | 0 | 3 |
+| 9. Personal, turnos y comisiones | 3 | 0 | 0 |
 | 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
 | 11. Analítica | 1 | 0 | 5 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **77** | **1** | **25** |
+| **Total** | **80** | **1** | **22** |
 
-**Avance aproximado: ~75%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~78%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -176,9 +176,11 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 ### 9. Personal, turnos y comisiones
 
-- ❌ Guardias nocturnas y turnos de trabajo (distintos de los turnos de caja, que sí existen)
-- ❌ Comisiones por venta o por producto (multinivel en Premium)
-- ❌ Productividad por dispensador
+- ✅ Turnos de trabajo y guardias nocturnas (`/staff`, plan Profesional o superior): calendario semanal por sucursal sin solapes por persona, cancelación con motivo y marcado propio de entrada y salida desde 30 minutos antes del inicio (D61). Son distintos de los turnos de caja
+- ✅ Comisiones por venta (`/staff/commissions`, plan Profesional o superior): reglas por producto, categoría o general, calculadas sobre la venta neta (sin anuladas y descontando devoluciones). En Premium, escalas por volumen vendido en el período (multinivel, D62-D63). Cada persona ve sus propias comisiones
+- ✅ Productividad por dispensador (`/staff/productivity`, todos los planes): ventas, monto neto, unidades, ticket promedio, devoluciones y anulaciones; horas trabajadas y venta por hora cuando el plan incluye turnos (D64)
+
+> **F16 (octubre 2026):** permisos nuevos `staff.shifts.manage` (Propietario, Regente, Encargado), `staff.commissions.manage` (Propietario) y `staff.reports.read` (Propietario, Regente, Encargado) (D65). Las comisiones se calculan al consultar el reporte; todavía no hay liquidación ni registro de pago de comisiones.
 
 ### 10. Clientes, fidelización y convenios
 
@@ -212,7 +214,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
 | 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja, receta en controlados). Queda crédito/convenio (módulo 10) |
 | 4 | Facturación SIAT | 🟡 Base técnica lista (F13: `FiscalProvider`, tabla `fiscal_invoices`, simulador); la emisión real espera D03 |
-| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ (módulo 7, D53-D56) y libro AGEMED ✅ (módulo 8, D57-D60); comisiones y matriz ABC pendientes |
+| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ (módulo 7, D53-D56), libro AGEMED ✅ (módulo 8, D57-D60) y comisiones ✅ (módulo 9, D61-D65); matriz ABC pendiente |
 
 ## 6. Propuesta de orden para completar el sistema
 

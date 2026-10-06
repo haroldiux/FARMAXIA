@@ -37,7 +37,10 @@ export default defineConfig({
       "test/transfers.spec.ts",
       "test/transfers-approval.spec.ts",
       "test/controlled-prescriptions.spec.ts",
-      "test/controlled-archive.spec.ts"
+      "test/controlled-archive.spec.ts",
+      "test/staff-shifts.spec.ts",
+      "test/staff-commissions.spec.ts",
+      "test/staff-productivity.spec.ts"
     ],
     fileParallelism: false
   }

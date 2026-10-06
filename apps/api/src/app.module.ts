@@ -10,6 +10,7 @@ import { ProcurementModule } from "./procurement/procurement.module.js";
 import { SaasModule } from "./saas/saas.module.js";
 import { SalesModule } from "./sales/sales.module.js";
 import { ControlledModule } from "./controlled/controlled.module.js";
+import { StaffModule } from "./staff/staff.module.js";
 import { TransfersModule } from "./transfers/transfers.module.js";
 
 @Module({
@@ -24,7 +25,8 @@ import { TransfersModule } from "./transfers/transfers.module.js";
     SaasModule,
     SalesModule,
     TransfersModule,
-    ControlledModule
+    ControlledModule,
+    StaffModule
   ],
   controllers: [HealthController]
 })

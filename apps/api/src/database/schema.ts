@@ -2353,3 +2353,94 @@ export const controlledPrescriptions = pgTable(
     index("controlled_prescriptions_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt)
   ]
 );
+
+// F16 (T1): staff module (module 9). Branch roster of work shifts (not cash shifts), plus
+// tenant-wide commission rules and tiers (migration 0030, D61-D65).
+export const staffShifts = pgTable(
+  "staff_shifts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    notes: varchar("notes", { length: 300 }),
+    status: varchar("status", { length: 12 }).default("SCHEDULED").notNull(),
+    cancelReason: varchar("cancel_reason", { length: 200 }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+    checkedOutAt: timestamp("checked_out_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "staff_shifts_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "staff_shifts_user_membership_fk",
+      columns: [table.userId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    foreignKey({
+      name: "staff_shifts_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    unique("staff_shifts_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("staff_shifts_branch_start_idx").on(table.tenantId, table.branchId, table.startsAt),
+    index("staff_shifts_user_start_idx").on(table.tenantId, table.branchId, table.userId, table.startsAt),
+    check("staff_shifts_kind_check", sql`${table.kind} in ('REGULAR', 'NIGHT_DUTY')`),
+    check("staff_shifts_status_check", sql`${table.status} in ('SCHEDULED', 'CANCELED')`),
+    check("staff_shifts_window_check", sql`${table.endsAt} > ${table.startsAt}`),
+    check("staff_shifts_cancel_check", sql`(${table.status} = 'CANCELED') = (${table.cancelReason} is not null)`),
+    check(
+      "staff_shifts_attendance_check",
+      sql`${table.checkedOutAt} is null or (${table.checkedInAt} is not null and ${table.checkedOutAt} >= ${table.checkedInAt})`
+    )
+  ]
+);
+
+export const commissionRules = pgTable(
+  "commission_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    scope: varchar("scope", { length: 12 }).notNull(),
+    targetId: uuid("target_id"),
+    ratePercent: numeric("rate_percent", { precision: 5, scale: 2 }).notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "commission_rules_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    uniqueIndex("commission_rules_target_unique")
+      .on(table.tenantId, table.scope, table.targetId)
+      .where(sql`${table.targetId} is not null`),
+    uniqueIndex("commission_rules_default_unique").on(table.tenantId).where(sql`${table.scope} = 'DEFAULT'`),
+    check("commission_rules_scope_check", sql`${table.scope} in ('DEFAULT', 'CATEGORY', 'PRODUCT')`),
+    check("commission_rules_target_check", sql`(${table.scope} = 'DEFAULT') = (${table.targetId} is null)`),
+    check("commission_rules_rate_check", sql`${table.ratePercent} >= 0 and ${table.ratePercent} <= 100`)
+  ]
+);
+
+export const commissionTiers = pgTable(
+  "commission_tiers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    minNetSalesBob: numeric("min_net_sales_bob", { precision: 18, scale: 2 }).notNull(),
+    ratePercent: numeric("rate_percent", { precision: 5, scale: 2 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "commission_tiers_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    unique("commission_tiers_tenant_min_unique").on(table.tenantId, table.minNetSalesBob),
+    check("commission_tiers_min_check", sql`${table.minNetSalesBob} >= 0`),
+    check("commission_tiers_rate_check", sql`${table.ratePercent} >= 0 and ${table.ratePercent} <= 100`)
+  ]
+);

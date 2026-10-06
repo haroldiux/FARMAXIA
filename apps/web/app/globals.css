@@ -1549,3 +1549,18 @@ select.pos-touch, input.pos-touch { min-height: 44px; }
   .controlled-book-table th, .controlled-book-table td { padding: 4px 6px; }
   .controlled-book-table tr { break-inside: avoid; }
 }
+
+/* Personal: rol semanal de turnos */
+.staff-week-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.staff-roster { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.staff-roster-day { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.staff-roster-day.is-today { border-color: var(--blue); }
+.staff-roster-day > strong { color: var(--ink-soft); font-size: 12px; text-transform: capitalize; }
+.staff-roster-shift { display: flex; flex-direction: column; gap: 3px; padding: 8px; border-radius: var(--radius-sm); background: var(--blue-soft); color: var(--blue-ink); font-size: 13px; }
+.staff-roster-shift.is-night { background: var(--pastel-orange); color: var(--orange-ink); }
+.staff-roster-shift.is-canceled { opacity: .6; text-decoration: line-through; }
+.staff-roster-shift small { font-size: 11px; }
+.staff-cancel { display: flex; flex-direction: column; gap: 4px; }
+.staff-form { max-width: 560px; }
+.staff-rate-input { width: 90px; }
+.staff-actions { display: flex; flex-wrap: wrap; gap: 6px; }
