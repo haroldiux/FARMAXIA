@@ -260,8 +260,8 @@ describe("F17 CRM loyalty (T2, T3)", () => {
       expect((await rejection(loyalty.customerLoyalty(otherScope, customerId, {}))).error).toBeInstanceOf(NotFoundException);
       const seen = await database.withScope(otherScope, (client) => client.query("select * from loyalty_movements"));
       expect(seen.rowCount).toBe(0);
-      await expect(database.withScope(scope, (client) => client.query("update loyalty_movements set points = 999"))).rejects.toThrow(/permission denied/);
-      await expect(database.withScope(scope, (client) => client.query("delete from loyalty_movements"))).rejects.toThrow(/permission denied/);
+      await expect(database.withScope(scope, (client) => client.query("update loyalty_movements set points = 999"))).rejects.toMatchObject({ code: "42501" });
+      await expect(database.withScope(scope, (client) => client.query("delete from loyalty_movements"))).rejects.toMatchObject({ code: "42501" });
     });
 
     it("declares permissions and feature on the controller", () => {

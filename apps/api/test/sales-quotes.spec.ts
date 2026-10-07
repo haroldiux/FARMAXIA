@@ -419,7 +419,7 @@ describe("Module 5 T7 quotes (proformas)", () => {
           "select set_config('app.tenant_id', $1, true), set_config('app.branch_id', $2, true), set_config('app.user_id', $3, true)",
           [tenantId, branchId, cashierId]
         );
-        await expect(client.query("update sales_quote_items set quantity = 99 where quote_id = $1", [quote.id])).rejects.toThrow(/immutable|permission denied/);
+        await expect(client.query("update sales_quote_items set quantity = 99 where quote_id = $1", [quote.id])).rejects.toMatchObject({ code: "42501" });
         await client.query("rollback");
         await client.query("begin");
         await client.query(

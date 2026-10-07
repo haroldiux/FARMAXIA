@@ -467,8 +467,8 @@ describe("F17 CRM agreement statements (T6)", () => {
       for (const table of ["agreement_statements", "agreement_statement_payments", "agreement_charges"]) {
         expect((await database.withScope(otherScope, (client) => client.query(`select * from ${table}`))).rowCount).toBe(0);
       }
-      await expect(database.withScope(scopeA, (client) => client.query("update agreement_statement_payments set amount_bob = 1"))).rejects.toThrow(/permission denied/);
-      await expect(database.withScope(scopeA, (client) => client.query("delete from agreement_statements"))).rejects.toThrow(/permission denied/);
+      await expect(database.withScope(scopeA, (client) => client.query("update agreement_statement_payments set amount_bob = 1"))).rejects.toMatchObject({ code: "42501" });
+      await expect(database.withScope(scopeA, (client) => client.query("delete from agreement_statements"))).rejects.toMatchObject({ code: "42501" });
     });
 
     it("declares the billing permission and the plan feature on the controller", () => {

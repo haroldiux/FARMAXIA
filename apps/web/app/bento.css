@@ -545,3 +545,9 @@ html:has(.ax-shell), body:has(.ax-shell) { background: #ffffff; }
   .ax-shell .payable-buckets { grid-template-columns: minmax(0, 1fr); }
   .ax-shell .reorder-toolbar .inventory-summary { margin-left: 0; }
 }
+
+/* Sidebar: only the menu scrolls, so the plan card stays pinned at the bottom
+   even when the module list is taller than the screen. */
+.ax-sidebar { overflow: hidden; }
+.ax-brand-row, .ax-promo { flex-shrink: 0; }
+.ax-sidebar > .ax-nav { flex: 1 1 auto; min-height: 0; margin-bottom: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }

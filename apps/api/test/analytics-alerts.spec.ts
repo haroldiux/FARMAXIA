@@ -171,8 +171,8 @@ describe("F18 analytics T4: stockouts and shortage alerts", () => {
     });
 
     it("only reads sales: the platform role cannot write them", async () => {
-      await expect(platform.withTransaction((client) => client.query("update sales set status = 'VOIDED'"))).rejects.toThrow(/permission denied/i);
-      await expect(platform.withTransaction((client) => client.query("delete from sale_items"))).rejects.toThrow(/permission denied/i);
+      await expect(platform.withTransaction((client) => client.query("update sales set status = 'VOIDED'"))).rejects.toMatchObject({ code: "42501" });
+      await expect(platform.withTransaction((client) => client.query("delete from sale_items"))).rejects.toMatchObject({ code: "42501" });
     });
   });
 

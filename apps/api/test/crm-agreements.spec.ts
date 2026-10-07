@@ -555,7 +555,7 @@ describe("F17 CRM agreements (T4, T5)", () => {
     it("charges are tenant-isolated and nobody can delete them", async () => {
       const { agreement, customerId } = await enrolled();
       await sell(customerId, 4, [{ method: "AGREEMENT", amountBob: "40.0000", agreementId: agreement.id }, { method: "CASH", amountBob: "10.0000" }]);
-      await expect(database.withScope(scope, (client) => client.query("delete from agreement_charges"))).rejects.toThrow(/permission denied/);
+      await expect(database.withScope(scope, (client) => client.query("delete from agreement_charges"))).rejects.toMatchObject({ code: "42501" });
       const seen = await database.withScope(otherScope, (client) => client.query("select * from agreement_charges"));
       expect(seen.rowCount).toBe(0);
     });

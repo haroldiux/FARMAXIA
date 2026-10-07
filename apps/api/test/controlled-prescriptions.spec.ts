@@ -270,9 +270,9 @@ describe("F15 controlled prescriptions on sale confirmation", () => {
     await sales.confirm(scope, saleInput(controlledPresentationId, { prescription: prescription() }));
     await expect(
       database.withScope(scope, (client) => client.query("update controlled_prescriptions set doctor_name = 'X'"))
-    ).rejects.toThrow(/permission denied/);
+    ).rejects.toMatchObject({ code: "42501" });
     await expect(
       database.withScope(scope, (client) => client.query("delete from controlled_prescriptions"))
-    ).rejects.toThrow(/permission denied/);
+    ).rejects.toMatchObject({ code: "42501" });
   });
 });
