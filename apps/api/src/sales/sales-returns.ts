@@ -11,10 +11,19 @@ import {
 import { OutboxService } from "../transversal/outbox.service.js";
 import type { SalesAccess } from "./sales-history.js";
 import { fromUnits, toUnits } from "./sales-money.js";
+import {
+  planReturnLoyalty,
+  NO_RETURN_LOYALTY,
+  reverseLoyaltyOnVoid,
+  reverseSaleLoyalty,
+  type VoidLoyaltyResult
+} from "./sales-loyalty.js";
+import { applyReturnAgreement, planReturnAgreement, voidAgreementCharge } from "./sales-agreements.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const refundMethods = ["CASH", "CARD", "QR"] as const;
+const refundMethods = ["CASH", "CARD", "QR"] as const; // POINTS are never a refund method: they go back as points (D70)
 export type RefundMethod = (typeof refundMethods)[number];
+const CASH = "CASH";
 
 export interface VoidSaleInput {
   idempotencyKey: string;
@@ -29,6 +38,8 @@ export interface VoidedSale {
   voidedAt: string;
   /** Net cash (tendered minus change) removed from the expected cash of the shift. */
   cashReversedBob: string;
+  /** Only when the sale had a customer with points movements. */
+  loyalty?: VoidLoyaltyResult;
 }
 
 export interface ReturnLineInput {
@@ -54,7 +65,16 @@ export interface RegisteredReturn {
   saleStatus: "PARTIALLY_RETURNED" | "RETURNED";
   refundMethod: RefundMethod;
   refundReference: string | null;
+  /** Value of the returned lines (what the customer paid for them, in any method). */
   refundAmountBob: string;
+  /** Part of the refund paid out in the chosen method (refund minus the points share). */
+  refundMoneyBob: string;
+  /** Part of the refund that was paid with points and goes back as points. */
+  refundPointsBob: string;
+  /** Part of the refund that belonged to the agreement: it reduces the agreement charge and is not paid out. */
+  refundAgreementBob: string;
+  /** Only when the sale had a customer with points movements. */
+  loyalty?: { pointsReturned: number; earnedReversed: number; shortfall: number };
   restock: boolean;
   reason: string;
   lines: Array<{ saleItemId: string; quantity: number; unitPriceBob: string; lineTotalBob: string }>;
@@ -120,6 +140,8 @@ interface LockedSale {
   cashShiftId: string;
   warehouseId: string;
   changeAmountBob: string;
+  customerId: string | null;
+  totalAmountBob: string;
 }
 
 /** Write side for voiding a sale and registering returns. All effects are atomic and idempotent. */
@@ -197,7 +219,8 @@ export class SalesReturnsWriter {
   ): Promise<LockedSale> {
     const result = await client.query<LockedSale>(
       `select id, sale_number as "saleNumber", status, cash_shift_id as "cashShiftId",
-              warehouse_id as "warehouseId", change_amount_bob::text as "changeAmountBob"
+              warehouse_id as "warehouseId", change_amount_bob::text as "changeAmountBob",
+              customer_id as "customerId", total_amount_bob::text as "totalAmountBob"
        from sales
        where tenant_id = $1 and branch_id = $2 and id = $3
          and ($4::boolean or created_by_user_id = $5)
@@ -236,7 +259,7 @@ export class SalesReturnsWriter {
 
     const cash = await client.query<{ net: string }>(
       `select (coalesce(sum(amount_bob), 0) - $4::numeric)::text as net
-       from sale_payments where tenant_id = $1 and branch_id = $2 and sale_id = $3 and method = 'CASH'`,
+       from sale_payments where tenant_id = $1 and branch_id = $2 and sale_id = $3 and method = '${CASH}'`,
       [scope.tenantId, scope.branchId, saleId, sale.changeAmountBob]
     );
     const cashReversedBob = fromUnits(toUnits(cash.rows[0]?.net ?? "0"));
@@ -267,11 +290,14 @@ export class SalesReturnsWriter {
       await this.restoreStock(client, scope, sale.warehouseId, row.batchId, row.quantityBase, "SALE_VOID", "SALE_VOID", saleId);
     }
 
+    await voidAgreementCharge(client, scope, saleId);
     await client.query(
       `update sale_payments set reversed_at = now()
-       where tenant_id = $1 and branch_id = $2 and sale_id = $3 and method in ('CARD', 'QR')`,
+       where tenant_id = $1 and branch_id = $2 and sale_id = $3 and method <> '${CASH}'`,
       [scope.tenantId, scope.branchId, saleId]
     );
+    // F17: points redeemed go back to the customer and the earned ones are reversed (never below zero).
+    const loyalty = await reverseLoyaltyOnVoid(client, scope, { id: saleId, number: sale.saleNumber, customerId: sale.customerId });
     const updated = await client.query<{ voidedAt: Date }>(
       `update sales set status = 'VOIDED', voided_at = now(), voided_by_user_id = $4, void_reason = $5
        where tenant_id = $1 and branch_id = $2 and id = $3
@@ -290,7 +316,8 @@ export class SalesReturnsWriter {
         reason,
         cashShiftId: sale.cashShiftId,
         cashReversedBob,
-        restoredBatches: allocations.rows.length
+        restoredBatches: allocations.rows.length,
+        ...(loyalty ? { loyalty } : {})
       }
     });
     await this.outbox.enqueueInTransaction(client, scope, {
@@ -305,7 +332,8 @@ export class SalesReturnsWriter {
       status: "VOIDED",
       reason,
       voidedAt: voidedAt.toISOString(),
-      cashReversedBob
+      cashReversedBob,
+      ...(loyalty ? { loyalty } : {})
     };
   }
 
@@ -386,6 +414,26 @@ export class SalesReturnsWriter {
     if (refundUnits <= 0n) {
       throw new BadRequestException("The refund amount must be greater than zero.");
     }
+    // D70: the share of the refund that was paid with points goes back as points; the rest is refunded in `refundMethod`.
+    const refundedBefore = await client.query<{ total: string }>(
+      `select coalesce(sum(refund_amount_bob), 0)::text as total from sale_returns where tenant_id = $1 and branch_id = $2 and sale_id = $3`,
+      [scope.tenantId, scope.branchId, saleId]
+    );
+    const loyaltyPlan = sale.customerId
+      ? await planReturnLoyalty(client, scope.tenantId, { id: saleId, customerId: sale.customerId }, toUnits(refundedBefore.rows[0]!.total) + refundUnits, toUnits(sale.totalAmountBob))
+      : NO_RETURN_LOYALTY;
+    // The agreement share reduces the agreement charge (409 if already billed) instead of being refunded.
+    const agreementPlan = await planReturnAgreement(
+      client,
+      scope,
+      saleId,
+      toUnits(refundedBefore.rows[0]!.total) + refundUnits,
+      toUnits(sale.totalAmountBob)
+    );
+    const moneyUnits = refundUnits - loyaltyPlan.pointsValueUnits - agreementPlan.reductionUnits;
+    const refundMoneyBob = fromUnits(moneyUnits);
+    const refundPointsBob = fromUnits(loyaltyPlan.pointsValueUnits);
+    const refundAgreementBob = fromUnits(agreementPlan.reductionUnits);
 
     const returnNumber = await this.nextReturnNumber(client, scope);
 
@@ -419,7 +467,7 @@ export class SalesReturnsWriter {
          set expected_amount_bob = expected_amount_bob - $4::numeric
          where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3
            and status = 'OPEN' and expected_amount_bob - $4::numeric >= 0`,
-        [scope.tenantId, scope.branchId, cashShiftId, refundAmountBob]
+        [scope.tenantId, scope.branchId, cashShiftId, refundMoneyBob]
       );
       if (drawer.rowCount !== 1) {
         throw new ConflictException({
@@ -427,27 +475,29 @@ export class SalesReturnsWriter {
           message: "The cash refund cannot exceed the expected cash of the shift."
         });
       }
-      const movement = await client.query<{ id: string }>(
-        `insert into cash_movements (tenant_id, branch_id, cash_shift_id, type, amount_bob, reason, category, created_by_user_id)
-         values ($1, $2, $3, 'OUT', $4::numeric, $5, 'OTHER', $6)
-         returning id`,
-        [
-          scope.tenantId,
-          scope.branchId,
-          cashShiftId,
-          refundAmountBob,
-          `Devolución ${returnNumber} (venta ${sale.saleNumber})`,
-          scope.userId
-        ]
-      );
-      cashMovementId = movement.rows[0]?.id ?? null;
+      if (moneyUnits > 0n) {
+        const movement = await client.query<{ id: string }>(
+          `insert into cash_movements (tenant_id, branch_id, cash_shift_id, type, amount_bob, reason, category, created_by_user_id)
+           values ($1, $2, $3, 'OUT', $4::numeric, $5, 'OTHER', $6)
+           returning id`,
+          [
+            scope.tenantId,
+            scope.branchId,
+            cashShiftId,
+            refundMoneyBob,
+            `Devolución ${returnNumber} (venta ${sale.saleNumber})`,
+            scope.userId
+          ]
+        );
+        cashMovementId = movement.rows[0]?.id ?? null;
+      }
     }
 
     const header = await client.query<{ id: string; createdAt: Date }>(
       `insert into sale_returns
          (tenant_id, branch_id, sale_id, return_number, refund_method, refund_reference, refund_amount_bob,
-          reason, restock, cash_shift_id, cash_movement_id, created_by_user_id)
-       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12)
+          reason, restock, cash_shift_id, cash_movement_id, created_by_user_id, points_returned, points_refund_bob, agreement_refund_bob)
+       values ($1, $2, $3, $4, $5, $6, $7::numeric, $8, $9, $10, $11, $12, $13, $14::numeric, $15::numeric)
        returning id, created_at as "createdAt"`,
       [
         scope.tenantId,
@@ -461,7 +511,10 @@ export class SalesReturnsWriter {
         input.restock,
         cashShiftId,
         cashMovementId,
-        scope.userId
+        scope.userId,
+        loyaltyPlan.pointsReturned,
+        refundPointsBob,
+        refundAgreementBob
       ]
     );
     const returnRow = header.rows[0];
@@ -505,6 +558,16 @@ export class SalesReturnsWriter {
       [scope.tenantId, scope.branchId, saleId, saleStatus]
     );
 
+    await applyReturnAgreement(client, scope, agreementPlan);
+    const loyalty = loyaltyPlan.applies
+      ? await reverseSaleLoyalty(
+          client,
+          scope,
+          { id: saleId, number: sale.saleNumber, customerId: sale.customerId },
+          { reasonPrefix: `Devolucion ${returnNumber} (venta ${sale.saleNumber})`, saleReturnId: returnRow.id },
+          { give: loyaltyPlan.pointsReturned, take: loyaltyPlan.earnedToReverse }
+        )
+      : null;
     await this.audit.recordInTransaction(client, scope, {
       action: "sales.sale_returned",
       entityType: "sale_return",
@@ -516,9 +579,12 @@ export class SalesReturnsWriter {
         reason: input.reason,
         refundMethod: input.refundMethod,
         refundAmountBob,
+        refundMoneyBob,
+        refundAgreementBob,
         restock: input.restock,
         cashShiftId,
-        saleStatus
+        saleStatus,
+        ...(loyalty ? { pointsReturned: loyalty.redeemedReturned, earnedReversed: loyalty.earnedReversed, shortfall: loyalty.shortfall } : {})
       }
     });
     await this.outbox.enqueueInTransaction(client, scope, {
@@ -536,6 +602,12 @@ export class SalesReturnsWriter {
       refundMethod: input.refundMethod,
       refundReference: input.refundReference,
       refundAmountBob,
+      refundMoneyBob,
+      refundPointsBob,
+      refundAgreementBob,
+      ...(loyalty
+        ? { loyalty: { pointsReturned: loyalty.redeemedReturned, earnedReversed: loyalty.earnedReversed, shortfall: loyalty.shortfall } }
+        : {}),
       restock: input.restock,
       reason: input.reason,
       lines: priced.map((entry) => ({

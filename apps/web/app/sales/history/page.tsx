@@ -7,7 +7,7 @@ import { currentSession, type AuthSession } from "../../lib/session";
 import {
   listSales,
   listSalesShifts,
-  salePaymentMethodLabels,
+  saleTenderLabels,
   saleStatusLabels,
   type SaleList,
   type SaleStatus,
@@ -134,7 +134,7 @@ export default function SalesHistoryPage() {
                     <td><strong>{item.number}</strong></td>
                     <td>{formatDateTime(item.createdAt)}</td>
                     <td>{item.cashierName ?? "—"}</td>
-                    <td>{item.paymentMethods.map((method) => salePaymentMethodLabels[method]).join(" + ")}</td>
+                    <td>{item.paymentMethods.map((method) => saleTenderLabels[method]).join(" + ")}</td>
                     <td><span className={`order-status sale-${item.status.toLowerCase()}`}>{saleStatusLabels[item.status]}</span></td>
                     <td className="sales-amount">{money(item.totalBob)}{Number(item.refundedBob) > 0 ? <small className="sales-refunded"> − {money(item.refundedBob)} devuelto</small> : null}</td>
                     <td><Link className="row-action" href={`/sales/${item.id}`}>Ver detalle</Link></td>

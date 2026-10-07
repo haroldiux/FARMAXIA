@@ -19,6 +19,10 @@ export const tenantPermissions = [
   { code: "fiscal.read", description: "Read the fiscal invoice status of a sale", label: "Consultar comprobante fiscal", module: "Caja y ventas", sortOrder: 66 },
   { code: "sales.void", description: "Void sales and register returns", label: "Anular ventas y registrar devoluciones", module: "Caja y ventas", sortOrder: 67 },
   { code: "sales.fefo.override", description: "Choose a lot different from FEFO when selling", label: "Elegir lote distinto al FEFO", module: "Caja y ventas", sortOrder: 68 },
+  { code: "customers.manage", description: "Register and edit customers, read their history and points", label: "Administrar clientes", module: "Clientes", sortOrder: 75 },
+  { code: "loyalty.manage", description: "Configure loyalty points and adjust balances manually", label: "Administrar puntos de fidelidad", module: "Clientes", sortOrder: 76 },
+  { code: "agreements.manage", description: "Manage agreements, their members and credit limits", label: "Administrar convenios", module: "Clientes", sortOrder: 77 },
+  { code: "agreements.billing", description: "Issue agreement monthly statements and register their payments", label: "Facturar convenios", module: "Clientes", sortOrder: 78 },
   { code: "staff.shifts.manage", description: "Manage the branch work-shift roster", label: "Administrar turnos del personal", module: "Personal", sortOrder: 72 },
   { code: "staff.commissions.manage", description: "Manage sales commission rules and tiers", label: "Administrar comisiones de ventas", module: "Personal", sortOrder: 73 },
   { code: "staff.reports.read", description: "Read staff commission and productivity reports", label: "Ver reportes de personal", module: "Personal", sortOrder: 74 },
@@ -47,14 +51,14 @@ export const systemRoles: ReadonlyArray<{
     code: "regente",
     name: "Regente farmacéutico",
     description: "Catálogo, inventario, ventas y auditoría.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "transfers.manage", "transfers.approve", "controlled.read", "controlled.book.export", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read", "staff.shifts.manage", "staff.reports.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "inventory.report.global", "transfers.manage", "transfers.approve", "controlled.read", "controlled.book.export", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read", "staff.shifts.manage", "staff.reports.read", "customers.manage"]
   },
   {
     code: "encargado",
     name: "Encargado de sucursal",
     description: "Operación completa de la sucursal, sin usuarios ni suscripción.",
-    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "transfers.manage", "transfers.approve", "controlled.read", "cash.manage", "cash.shift.approve", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read", "staff.shifts.manage", "staff.reports.read"]
+    permissions: ["catalog.manage", "inventory.manage", "inventory.count.approve", "payables.manage", "inventory.report.global", "transfers.manage", "transfers.approve", "controlled.read", "cash.manage", "cash.shift.approve", "sales.confirm", "sales.read", "fiscal.read", "sales.void", "sales.fefo.override", "audit.read", "staff.shifts.manage", "staff.reports.read", "customers.manage", "agreements.manage"]
   },
-  { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm", "sales.read", "fiscal.read"] },
+  { code: "cajero", name: "Cajero", description: "Caja y ventas.", permissions: ["cash.manage", "sales.confirm", "sales.read", "fiscal.read", "customers.manage"] },
   { code: "almacenero", name: "Almacenero", description: "Inventario, compras y recepción.", permissions: ["inventory.manage", "transfers.manage"] }
 ];

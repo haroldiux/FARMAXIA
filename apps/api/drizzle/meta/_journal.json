@@ -218,6 +218,20 @@
       "when": 1791700000000,
       "tag": "0030_staff",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791800000000,
+      "tag": "0031_crm_customers_loyalty",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791900000000,
+      "tag": "0032_crm_agreements",
+      "breakpoints": true
     }
   ]
 }

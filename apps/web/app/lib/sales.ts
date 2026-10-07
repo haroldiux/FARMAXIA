@@ -17,11 +17,31 @@ export const salePaymentMethodLabels: Record<SalePaymentMethod, string> = {
   QR: "QR"
 };
 
+/** Everything a sale can be paid with; refunds still use only the three money methods above. */
+export type SaleTender = SalePaymentMethod | "POINTS" | "AGREEMENT";
+
+export const saleTenderLabels: Record<SaleTender, string> = {
+  ...salePaymentMethodLabels,
+  POINTS: "Puntos",
+  AGREEMENT: "Convenio"
+};
+
 export interface SalePaymentInput {
-  method: SalePaymentMethod;
+  method: SaleTender;
   amountBob: string;
-  /** Required for CARD and QR, not allowed for CASH. */
+  /** Required for CARD and QR, not allowed for CASH, POINTS or AGREEMENT. */
   reference?: string;
+  /** Required by (and only allowed on) an AGREEMENT payment. */
+  agreementId?: string;
+}
+
+/** Customer, points and agreement info a sale carries when it has a customer (F17). */
+export interface SaleCustomerInfo {
+  customer: { id: string; fullName: string; docType: string | null; docNumber: string | null } | null;
+  /** Points earned/redeemed and the customer's balance afterwards; null without customer or when loyalty does not apply. */
+  loyalty: { earned: number; redeemed: number; balance: number } | null;
+  /** Agreement that covered part of the sale and the amount it paid. */
+  agreement: { id: string; name: string; coverageAmountBob: string } | null;
 }
 
 export interface ConfirmSaleInput {
@@ -30,6 +50,8 @@ export interface ConfirmSaleInput {
   warehouseId: string;
   payments: SalePaymentInput[];
   lines: SaleLineInput[];
+  /** Optional customer; required by POINTS and AGREEMENT payments. */
+  customerId?: string;
   /** Required (at most 200 characters) when any line sets `batchId`. */
   overrideReason?: string;
   /** Quote being converted; the API marks it CONVERTED in the same transaction as the sale. */
@@ -57,7 +79,7 @@ export interface ConfirmedSaleItem {
   allocations: SaleAllocation[];
 }
 
-export interface ConfirmedSale {
+export interface ConfirmedSale extends SaleCustomerInfo {
   id: string;
   saleNumber: string;
   cashShiftId: string;
@@ -66,7 +88,7 @@ export interface ConfirmedSale {
   totalBob: string;
   paidAmountBob: string;
   changeAmountBob: string;
-  payments: Array<{ method: SalePaymentMethod; amountBob: string; reference: string | null }>;
+  payments: Array<{ method: SaleTender; amountBob: string; reference: string | null }>;
   items: ConfirmedSaleItem[];
   /** Archived prescription (id + folio) when the sale dispensed a controlled medicine. */
   prescription: { id: string; folio: string } | null;
@@ -127,14 +149,31 @@ export class SalesApiError extends Error {
   }
 }
 
+/** The API answers the CRM payment/void rules in English; the POS shows them in Spanish. */
+function crmErrorMessage(code: string | undefined, body: { remainingBob?: string; maxCoverageBob?: string }): string | undefined {
+  switch (code) {
+    case "INSUFFICIENT_POINTS": return "El cliente no tiene puntos suficientes para ese canje.";
+    case "LOYALTY_DISABLED": return "El programa de puntos está desactivado en esta farmacia.";
+    case "CUSTOMER_INACTIVE": return "El cliente está inactivo. Elige otro o reactívalo en Clientes.";
+    case "CUSTOMER_NOT_FOUND": return "El cliente ya no existe. Quítalo de la venta o elige otro.";
+    case "AGREEMENT_NOT_FOUND": return "El convenio ya no existe.";
+    case "AGREEMENT_INACTIVE": return "El convenio está inactivo.";
+    case "NOT_AGREEMENT_MEMBER": return "El cliente no es un afiliado activo de ese convenio.";
+    case "AGREEMENT_COVERAGE_EXCEEDED": return `El monto del convenio supera lo que cubre de esta venta${body.maxCoverageBob ? ` (máximo Bs ${Number(body.maxCoverageBob).toFixed(2)})` : ""}.`;
+    case "AGREEMENT_LIMIT_EXCEEDED": return `El monto supera el crédito mensual disponible del afiliado${body.remainingBob ? ` (Bs ${Number(body.remainingBob).toFixed(2)})` : ""}.`;
+    case "AGREEMENT_CHARGE_BILLED": return "El cargo del convenio de esta venta ya está en un estado de cuenta emitido: no se puede anular ni devolver.";
+    default: return undefined;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await authenticatedFetch(path, init);
   if (!response.ok) {
     let message = "No pudimos completar la venta.";
-    let body: { message?: string; code?: string; presentationId?: string; currentPriceBob?: string; field?: string } = {};
+    let body: { message?: string; code?: string; presentationId?: string; currentPriceBob?: string; field?: string; remainingBob?: string; maxCoverageBob?: string } = {};
     try {
       body = (await response.json()) as typeof body;
-      message = body.message ?? message;
+      message = crmErrorMessage(body.code, body) ?? body.message ?? message;
     } catch {
       // Keep the stable fallback for non-JSON responses.
     }
@@ -222,7 +261,7 @@ export interface SaleListItem {
   totalBob: string;
   paidAmountBob: string;
   changeAmountBob: string;
-  paymentMethods: SalePaymentMethod[];
+  paymentMethods: SaleTender[];
   /** Total refunded through returns. */
   refundedBob: string;
 }
@@ -244,7 +283,7 @@ export interface SaleListFilters {
   offset?: number;
 }
 
-export interface SaleDetail {
+export interface SaleDetail extends SaleCustomerInfo {
   id: string;
   number: string;
   status: SaleStatus;
@@ -272,7 +311,7 @@ export interface SaleDetail {
     fefoOverrideReason: string | null;
     allocations: Array<{ lotCode: string; expiresOn: string; quantityBase: number; fefoOverride: boolean }>;
   }>;
-  payments: Array<{ method: SalePaymentMethod; amountBob: string; reference: string | null; reversed: boolean }>;
+  payments: Array<{ method: SaleTender; amountBob: string; reference: string | null; reversed: boolean }>;
 }
 
 export interface SaleReturn {
@@ -283,6 +322,11 @@ export interface SaleReturn {
   refundMethod: SalePaymentMethod;
   refundReference: string | null;
   refundAmountBob: string;
+  /** Part of the refund paid with points that went back as points, and the points given back. */
+  refundPointsBob?: string;
+  pointsReturned?: number;
+  /** Part of the refund that belonged to the agreement: it reduced the agreement charge. */
+  refundAgreementBob?: string;
   restock: boolean;
   createdByName: string | null;
   items: Array<{ saleItemId: string; productName: string; presentationName: string; quantity: number; unitPriceBob: string; lineTotalBob: string }>;

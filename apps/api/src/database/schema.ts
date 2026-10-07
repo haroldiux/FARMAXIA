@@ -1640,9 +1640,15 @@ export const sales = pgTable(
     voidedAt: timestamp("voided_at", { withTimezone: true }),
     voidedByUserId: uuid("voided_by_user_id"),
     voidReason: varchar("void_reason", { length: 200 }),
+    customerId: uuid("customer_id"),
     createdAt
   },
   (table) => [
+    foreignKey({
+      name: "sales_tenant_customer_fk",
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id]
+    }),
     foreignKey({
       name: "sales_tenant_branch_fk",
       columns: [table.tenantId, table.branchId],
@@ -1743,10 +1749,10 @@ export const salePayments = pgTable(
       foreignColumns: [sales.tenantId, sales.branchId, sales.id]
     }),
     unique("sale_payments_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
-    check("sale_payments_method_check", sql`${table.method} in ('CASH', 'CARD', 'QR')`),
+    check("sale_payments_method_check", sql`${table.method} in ('CASH', 'CARD', 'QR', 'POINTS', 'AGREEMENT')`),
     check(
       "sale_payments_reference_check",
-      sql`(${table.method} = 'CASH' and ${table.reference} is null) or (${table.method} in ('CARD', 'QR') and ${table.reference} is not null and length(btrim(${table.reference})) > 0)`
+      sql`(${table.method} in ('CASH', 'POINTS', 'AGREEMENT') and ${table.reference} is null) or (${table.method} in ('CARD', 'QR') and ${table.reference} is not null and length(btrim(${table.reference})) > 0)`
     ),
     check("sale_payments_amount_nonnegative_check", sql`${table.amountBob} >= 0`)
   ]
@@ -1797,6 +1803,9 @@ export const saleReturns = pgTable(
     cashShiftId: uuid("cash_shift_id"),
     cashMovementId: uuid("cash_movement_id"),
     createdByUserId: uuid("created_by_user_id").notNull(),
+    pointsReturned: integer("points_returned").notNull().default(0),
+    pointsRefundBob: numeric("points_refund_bob", { precision: 18, scale: 4 }).notNull().default("0"),
+    agreementRefundBob: numeric("agreement_refund_bob", { precision: 18, scale: 4 }).notNull().default("0"),
     createdAt
   },
   (table) => [
@@ -2442,5 +2451,236 @@ export const commissionTiers = pgTable(
     unique("commission_tiers_tenant_min_unique").on(table.tenantId, table.minNetSalesBob),
     check("commission_tiers_min_check", sql`${table.minNetSalesBob} >= 0`),
     check("commission_tiers_rate_check", sql`${table.ratePercent} >= 0 and ${table.ratePercent} <= 100`)
+  ]
+);
+
+// F17 (Part A): CRM customers and loyalty (migration 0031). Customers are tenant-wide.
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    fullName: varchar("full_name", { length: 160 }).notNull(),
+    docType: varchar("doc_type", { length: 10 }),
+    docNumber: varchar("doc_number", { length: 30 }),
+    complement: varchar("complement", { length: 3 }),
+    phone: varchar("phone", { length: 30 }),
+    email: varchar("email", { length: 160 }),
+    notes: varchar("notes", { length: 500 }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "customers_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    unique("customers_tenant_id_unique").on(table.tenantId, table.id),
+    uniqueIndex("customers_document_unique")
+      .on(table.tenantId, table.docType, table.docNumber)
+      .where(sql`${table.docNumber} is not null`),
+    index("customers_name_idx").on(table.tenantId, table.fullName),
+    check("customers_name_check", sql`length(btrim(${table.fullName})) > 0`),
+    check("customers_doc_type_check", sql`${table.docType} in ('CI', 'NIT', 'PASSPORT', 'OTHER')`),
+    check("customers_doc_pair_check", sql`(${table.docType} is null) = (${table.docNumber} is null)`),
+    check("customers_complement_check", sql`${table.complement} is null or ${table.docType} = 'CI'`)
+  ]
+);
+
+export const loyaltySettings = pgTable(
+  "loyalty_settings",
+  {
+    tenantId: uuid("tenant_id").primaryKey(),
+    enabled: boolean("enabled").notNull().default(true),
+    bobPerPoint: numeric("bob_per_point", { precision: 18, scale: 4 }).notNull().default("10"),
+    pointValueBob: numeric("point_value_bob", { precision: 18, scale: 4 }).notNull().default("0.10"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "loyalty_settings_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    check("loyalty_settings_bob_per_point_check", sql`${table.bobPerPoint} > 0`),
+    check("loyalty_settings_point_value_check", sql`${table.pointValueBob} > 0`)
+  ]
+);
+
+export const loyaltyMovements = pgTable(
+  "loyalty_movements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    saleId: uuid("sale_id"),
+    saleReturnId: uuid("sale_return_id"),
+    kind: varchar("kind", { length: 10 }).notNull(),
+    points: integer("points").notNull(),
+    reason: varchar("reason", { length: 300 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "loyalty_movements_tenant_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "loyalty_movements_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+    foreignKey({
+      name: "loyalty_movements_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    foreignKey({
+      name: "loyalty_movements_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    index("loyalty_movements_customer_idx").on(table.tenantId, table.customerId, table.createdAt),
+    check("loyalty_movements_kind_check", sql`${table.kind} in ('EARN', 'REDEEM', 'REVERSAL', 'ADJUST')`),
+    check(
+      "loyalty_movements_points_check",
+      sql`${table.points} <> 0 and ((${table.kind} = 'EARN' and ${table.points} > 0) or (${table.kind} = 'REDEEM' and ${table.points} < 0) or ${table.kind} in ('REVERSAL', 'ADJUST'))`
+    ),
+    check(
+      "loyalty_movements_source_check",
+      sql`(${table.kind} = 'ADJUST' and ${table.saleId} is null and ${table.saleReturnId} is null) or (${table.kind} <> 'ADJUST' and ${table.saleId} is not null)`
+    ),
+    check("loyalty_movements_reason_check", sql`length(btrim(${table.reason})) > 0`)
+  ]
+);
+
+// F17 (Part B): CRM agreements (migration 0032). Agreements, members and statements are tenant-wide;
+// charges are written by the selling branch and read tenant-wide for the monthly statement.
+export const agreements = pgTable(
+  "agreements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    kind: varchar("kind", { length: 10 }).notNull(),
+    payerName: varchar("payer_name", { length: 160 }).notNull(),
+    payerTaxId: varchar("payer_tax_id", { length: 30 }),
+    coveragePercent: numeric("coverage_percent", { precision: 5, scale: 2 }).notNull(),
+    monthlyLimitBob: numeric("monthly_limit_bob", { precision: 18, scale: 4 }).notNull(),
+    notes: varchar("notes", { length: 500 }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreements_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    unique("agreements_tenant_id_unique").on(table.tenantId, table.id),
+    unique("agreements_tenant_name_unique").on(table.tenantId, table.name),
+    check("agreements_name_check", sql`length(btrim(${table.name})) > 0 and length(btrim(${table.payerName})) > 0`),
+    check("agreements_kind_check", sql`${table.kind} in ('INSURER', 'COMPANY', 'UNION')`),
+    check("agreements_coverage_check", sql`${table.coveragePercent} > 0 and ${table.coveragePercent} <= 100`),
+    check("agreements_limit_check", sql`${table.monthlyLimitBob} > 0`)
+  ]
+);
+
+export const agreementMembers = pgTable(
+  "agreement_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    agreementId: uuid("agreement_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    memberCode: varchar("member_code", { length: 40 }).notNull(),
+    monthlyLimitBob: numeric("monthly_limit_bob", { precision: 18, scale: 4 }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreement_members_agreement_fk", columns: [table.tenantId, table.agreementId], foreignColumns: [agreements.tenantId, agreements.id] }),
+    foreignKey({ name: "agreement_members_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+    unique("agreement_members_tenant_id_unique").on(table.tenantId, table.id),
+    unique("agreement_members_customer_unique").on(table.tenantId, table.agreementId, table.customerId),
+    unique("agreement_members_code_unique").on(table.tenantId, table.agreementId, table.memberCode),
+    index("agreement_members_customer_idx").on(table.tenantId, table.customerId),
+    check("agreement_members_code_check", sql`length(btrim(${table.memberCode})) > 0`),
+    check("agreement_members_limit_check", sql`${table.monthlyLimitBob} is null or ${table.monthlyLimitBob} > 0`)
+  ]
+);
+
+export const agreementStatements = pgTable(
+  "agreement_statements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    agreementId: uuid("agreement_id").notNull(),
+    period: varchar("period", { length: 7 }).notNull(),
+    statementNumber: varchar("statement_number", { length: 40 }).notNull(),
+    branchId: uuid("branch_id").notNull(),
+    totalBob: numeric("total_bob", { precision: 18, scale: 4 }).notNull(),
+    paidBob: numeric("paid_bob", { precision: 18, scale: 4 }).notNull().default("0"),
+    status: varchar("status", { length: 10 }).notNull().default("ISSUED"),
+    issuedByUserId: uuid("issued_by_user_id").notNull(),
+    issuedByName: varchar("issued_by_name", { length: 160 }).notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreement_statements_agreement_fk", columns: [table.tenantId, table.agreementId], foreignColumns: [agreements.tenantId, agreements.id] }),
+    foreignKey({ name: "agreement_statements_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "agreement_statements_issuer_fk", columns: [table.issuedByUserId], foreignColumns: [users.id] }),
+    unique("agreement_statements_tenant_id_unique").on(table.tenantId, table.id),
+    unique("agreement_statements_period_unique").on(table.tenantId, table.agreementId, table.period),
+    unique("agreement_statements_number_unique").on(table.tenantId, table.statementNumber),
+    check("agreement_statements_status_check", sql`${table.status} in ('ISSUED', 'PARTIAL', 'PAID')`),
+    check("agreement_statements_total_check", sql`${table.totalBob} > 0 and ${table.paidBob} >= 0 and ${table.paidBob} <= ${table.totalBob}`)
+  ]
+);
+
+export const agreementStatementPayments = pgTable(
+  "agreement_statement_payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    statementId: uuid("statement_id").notNull(),
+    amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    method: varchar("method", { length: 10 }).notNull(),
+    reference: varchar("reference", { length: 120 }),
+    paidOn: date("paid_on").notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdByName: varchar("created_by_name", { length: 160 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "agreement_statement_payments_statement_fk", columns: [table.tenantId, table.statementId], foreignColumns: [agreementStatements.tenantId, agreementStatements.id] }),
+    foreignKey({ name: "agreement_statement_payments_creator_fk", columns: [table.createdByUserId], foreignColumns: [users.id] }),
+    unique("agreement_statement_payments_key_unique").on(table.tenantId, table.idempotencyKey),
+    index("agreement_statement_payments_statement_idx").on(table.tenantId, table.statementId),
+    check("agreement_statement_payments_amount_check", sql`${table.amountBob} > 0`),
+    check("agreement_statement_payments_method_check", sql`${table.method} in ('TRANSFER', 'CHECK', 'CASH', 'QR', 'OTHER')`)
+  ]
+);
+
+export const agreementCharges = pgTable(
+  "agreement_charges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    agreementId: uuid("agreement_id").notNull(),
+    memberId: uuid("member_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    saleNumber: varchar("sale_number", { length: 40 }).notNull(),
+    branchCode: varchar("branch_code", { length: 30 }).notNull(),
+    amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reducedAmountBob: numeric("reduced_amount_bob", { precision: 18, scale: 4 }).notNull().default("0"),
+    status: varchar("status", { length: 10 }).notNull().default("OPEN"),
+    statementId: uuid("statement_id"),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreement_charges_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "agreement_charges_agreement_fk", columns: [table.tenantId, table.agreementId], foreignColumns: [agreements.tenantId, agreements.id] }),
+    foreignKey({ name: "agreement_charges_member_fk", columns: [table.tenantId, table.memberId], foreignColumns: [agreementMembers.tenantId, agreementMembers.id] }),
+    foreignKey({ name: "agreement_charges_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+    foreignKey({ name: "agreement_charges_sale_fk", columns: [table.tenantId, table.branchId, table.saleId], foreignColumns: [sales.tenantId, sales.branchId, sales.id] }),
+    foreignKey({ name: "agreement_charges_statement_fk", columns: [table.tenantId, table.statementId], foreignColumns: [agreementStatements.tenantId, agreementStatements.id] }),
+    unique("agreement_charges_sale_unique").on(table.tenantId, table.branchId, table.saleId),
+    index("agreement_charges_member_idx").on(table.tenantId, table.memberId, table.createdAt),
+    check("agreement_charges_status_check", sql`${table.status} in ('OPEN', 'BILLED', 'VOIDED')`),
+    check("agreement_charges_amount_check", sql`${table.amountBob} > 0 and ${table.reducedAmountBob} >= 0 and ${table.reducedAmountBob} <= ${table.amountBob}`),
+    check("agreement_charges_statement_check", sql`(${table.status} = 'BILLED') = (${table.statementId} is not null)`)
   ]
 );

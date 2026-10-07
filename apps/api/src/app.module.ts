@@ -9,6 +9,7 @@ import { InventoryModule } from "./inventory/inventory.module.js";
 import { ProcurementModule } from "./procurement/procurement.module.js";
 import { SaasModule } from "./saas/saas.module.js";
 import { SalesModule } from "./sales/sales.module.js";
+import { CustomersModule } from "./customers/customers.module.js";
 import { ControlledModule } from "./controlled/controlled.module.js";
 import { StaffModule } from "./staff/staff.module.js";
 import { TransfersModule } from "./transfers/transfers.module.js";
@@ -26,7 +27,8 @@ import { TransfersModule } from "./transfers/transfers.module.js";
     SalesModule,
     TransfersModule,
     ControlledModule,
-    StaffModule
+    StaffModule,
+    CustomersModule
   ],
   controllers: [HealthController]
 })

@@ -39,17 +39,17 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 2. Catálogo farmacéutico | 10 | 0 | 0 |
 | 3. Inventario, lotes y almacenes | 11 | 0 | 0 |
 | 4. Compras y proveedores | 9 | 0 | 0 |
-| 5. Punto de venta y caja | 15 | 0 | 1 |
+| 5. Punto de venta y caja | 16 | 0 | 0 |
 | 6. Facturación SIAT | 0 | 0 | 8 |
 | 7. Traspasos entre sucursales | 5 | 0 | 0 |
 | 8. Medicamentos controlados (AGEMED) | 4 | 0 | 0 |
 | 9. Personal, turnos y comisiones | 3 | 0 | 0 |
-| 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
+| 10. Clientes, fidelización y convenios | 5 | 0 | 0 |
 | 11. Analítica | 1 | 0 | 5 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **80** | **1** | **22** |
+| **Total** | **86** | **1** | **16** |
 
-**Avance aproximado: ~78%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~83%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -131,7 +131,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 - ✅ Aprobación de diferencias por un supervisor
 - ✅ Venta (no fiscal) que descuenta stock por FEFO; el precio lo fija siempre el servidor según la lista de precios vigente y se rechaza la venta si no hay precio
 - ✅ Pagos con efectivo, tarjeta y QR, combinables en una misma venta, con cálculo de vuelto. Tarjeta y QR se registran con número de referencia, sin pasarela (D43)
-- ❌ Pagos a crédito y por convenio (dependen de clientes y convenios, módulo 10)
+- ✅ Pagos por convenio (crédito mensual del afiliado) y con puntos de fidelidad, combinables con efectivo, tarjeta y QR; no mueven la caja (módulo 10, D68-D69)
 - ✅ Búsqueda rápida (nombre, genérico, principio activo, laboratorio o código de barras) con precio y stock disponible, y lector de código de barras que agrega el producto al carrito
 - ✅ Recibo no fiscal imprimible en papel térmico de 58 / 80 mm desde el navegador, con número de venta `V-<sucursal>-000001` (D44)
 - ✅ Proformas (`/sales/quotes`): numeradas `P-<sucursal>-000001`, válidas 7 días (1 a 30), imprimibles, sin apartar stock ni mover caja; se convierten en venta con el precio vigente (D48)
@@ -184,11 +184,13 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 ### 10. Clientes, fidelización y convenios
 
-- ❌ Directorio de clientes e historial de compras
-- ❌ Puntos de fidelidad
-- ❌ Convenios con aseguradoras, empresas y sindicatos
-- ❌ Crédito por empleado y copagos
-- ❌ Facturación centralizada de convenios
+- ✅ Directorio de clientes (`/customers`, todos los planes): alta y edición con documento único por tipo (CI, NIT, pasaporte, otro), búsqueda, cliente opcional en el POS e historial de compras de la sucursal activa, neto de devoluciones (D66)
+- ✅ Puntos de fidelidad (plan Profesional o superior): se ganan con lo pagado en efectivo, tarjeta o QR y se canjean como medio de pago `POINTS`; saldo, movimientos, ajuste manual con motivo y configuración en `/customers/loyalty`. Anulaciones y devoluciones revierten los puntos en proporción (D67, D68, D70)
+- ✅ Convenios con aseguradoras, empresas y sindicatos (`/customers/agreements`, plan Premium): pagador, NIT, porcentaje de cobertura, límite mensual y afiliados con código y límite propio
+- ✅ Crédito por afiliado y copagos: el convenio cubre hasta su porcentaje de la venta y el saldo mensual del afiliado; el resto lo paga el paciente con otros medios. Anular o devolver reduce el cobro del convenio (D69, D70)
+- ✅ Facturación centralizada de convenios (`/customers/statements`, plan Premium): estado de cuenta mensual por convenio con los cobros de todas las sucursales, pagos parciales sin pasarse del saldo, imprimible y en CSV. No es factura fiscal hasta SIAT (D71)
+
+> **F17 (octubre 2026):** permisos nuevos `customers.manage` (Propietario, Regente, Encargado, Cajero), `loyalty.manage` (Propietario), `agreements.manage` (Propietario, Encargado) y `agreements.billing` (Propietario) (D71). El recibo muestra cliente, puntos y convenio. Pendiente: crear clientes rápido desde el POS y confirmar el tratamiento tributario de puntos y convenios con SIAT (D03, D68).
 
 ### 11. Analítica
 
@@ -212,7 +214,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 |---|---|---|
 | 1 | Núcleo, multi-tenancy, suscripciones, autenticación y RBAC | ✅ Casi completo (falta resolver la empresa por subdominio) |
 | 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
-| 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja, receta en controlados). Queda crédito/convenio (módulo 10) |
+| 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja, receta en controlados). Pagos con puntos y por convenio ✅ (módulo 10) |
 | 4 | Facturación SIAT | 🟡 Base técnica lista (F13: `FiscalProvider`, tabla `fiscal_invoices`, simulador); la emisión real espera D03 |
 | 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ (módulo 7, D53-D56), libro AGEMED ✅ (módulo 8, D57-D60) y comisiones ✅ (módulo 9, D61-D65); matriz ABC pendiente |
 

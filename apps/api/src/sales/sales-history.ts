@@ -1,6 +1,9 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import type { CustomerRef } from "../customers/loyalty-ledger.js";
 import type { TenantDatabase, TenantScope } from "../database/tenant-database.js";
+import { loadSaleLoyalty, type SaleLoyalty } from "./sales-loyalty.js";
+import { loadSaleAgreement, type SaleAgreement } from "./sales-agreements.js";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -70,6 +73,12 @@ export interface SaleDetail {
   branch: { id: string; code: string; name: string };
   pharmacy: { name: string; legalName: string; taxId: string };
   warehouse: { id: string; name: string };
+  /** Customer linked to the sale (F17), null for anonymous sales. */
+  customer: CustomerRef | null;
+  /** Points earned/redeemed by the sale and the customer's current balance; null without customer. */
+  loyalty: SaleLoyalty | null;
+  /** Agreement that covered part of the sale and the amount it paid (F17 Part B); null without an AGREEMENT payment. */
+  agreement: SaleAgreement | null;
   /** Set when the sale was voided. */
   void: { at: string; byUserId: string; byName: string | null; reason: string } | null;
   returns: Array<{
@@ -80,6 +89,11 @@ export interface SaleDetail {
     refundMethod: string;
     refundReference: string | null;
     refundAmountBob: string;
+    /** Part of the refund that was paid with points and went back as points (D70). */
+    refundPointsBob: string;
+    pointsReturned: number;
+    /** Part of the refund that belonged to the agreement: it reduced the agreement charge instead of being refunded. */
+    refundAgreementBob: string;
     restock: boolean;
     createdByName: string | null;
     items: Array<{ saleItemId: string; productName: string; presentationName: string; quantity: number; unitPriceBob: string; lineTotalBob: string }>;
@@ -256,8 +270,12 @@ export class SalesHistoryReader {
         [scope.tenantId, scope.branchId, saleId]
       );
       const returns = await this.loadReturns(client, scope, saleId);
+      const loyalty = header.customer ? await loadSaleLoyalty(client, scope.tenantId, saleId, header.customer.id) : null;
+      const agreement = await loadSaleAgreement(client, scope.tenantId, scope.branchId, saleId);
       return {
         ...header,
+        loyalty,
+        agreement,
         returns,
         items: items.rows.map((item) => ({
           ...item,
@@ -283,7 +301,7 @@ export class SalesHistoryReader {
     scope: TenantScope,
     saleId: string,
     access: SalesAccess
-  ): Promise<Omit<SaleDetail, "items" | "payments" | "returns"> | undefined> {
+  ): Promise<Omit<SaleDetail, "items" | "payments" | "returns" | "loyalty" | "agreement"> | undefined> {
     const result = await client.query<{
       id: string;
       number: string;
@@ -308,6 +326,10 @@ export class SalesHistoryReader {
       voidedByUserId: string | null;
       voidedByName: string | null;
       voidReason: string | null;
+      customerId: string | null;
+      customerName: string | null;
+      customerDocType: string | null;
+      customerDocNumber: string | null;
     }>(
       `select s.id, s.sale_number as number, s.status, s.created_at as "createdAt",
               s.total_amount_bob::text as "totalBob", s.paid_amount_bob::text as "paidAmountBob",
@@ -318,7 +340,8 @@ export class SalesHistoryReader {
               t.name as "pharmacyName", le.legal_name as "legalName", le.tax_id as "taxId",
               w.id as "warehouseId", w.name as "warehouseName",
               s.voided_at as "voidedAt", s.voided_by_user_id as "voidedByUserId",
-              vu.display_name as "voidedByName", s.void_reason as "voidReason"
+              vu.display_name as "voidedByName", s.void_reason as "voidReason",
+              c.id as "customerId", c.full_name as "customerName", c.doc_type as "customerDocType", c.doc_number as "customerDocNumber"
        from sales s
        join branches br on br.tenant_id = s.tenant_id and br.id = s.branch_id
        join legal_entities le on le.tenant_id = br.tenant_id and le.id = br.legal_entity_id
@@ -328,6 +351,7 @@ export class SalesHistoryReader {
        join warehouses w on w.tenant_id = s.tenant_id and w.id = s.warehouse_id
        left join users u on u.id = s.created_by_user_id
        left join users vu on vu.id = s.voided_by_user_id
+       left join customers c on c.tenant_id = s.tenant_id and c.id = s.customer_id
        where s.tenant_id = $1 and s.branch_id = $2 and s.id = $3
          and ($4::boolean or s.created_by_user_id = $5)`,
       [scope.tenantId, scope.branchId, saleId, access.viewAll, scope.userId]
@@ -347,6 +371,9 @@ export class SalesHistoryReader {
       branch: { id: row.branchId, code: row.branchCode, name: row.branchName },
       pharmacy: { name: row.pharmacyName, legalName: row.legalName, taxId: row.taxId },
       warehouse: { id: row.warehouseId, name: row.warehouseName },
+      customer: row.customerId
+        ? { id: row.customerId, fullName: row.customerName ?? "", docType: row.customerDocType, docNumber: row.customerDocNumber }
+        : null,
       void:
         row.voidedAt && row.voidedByUserId
           ? { at: row.voidedAt.toISOString(), byUserId: row.voidedByUserId, byName: row.voidedByName, reason: row.voidReason ?? "" }
@@ -363,12 +390,16 @@ export class SalesHistoryReader {
       refundMethod: string;
       refundReference: string | null;
       refundAmountBob: string;
+      refundPointsBob: string;
+      pointsReturned: number;
+      refundAgreementBob: string;
       restock: boolean;
       createdByName: string | null;
     }>(
       `select r.id, r.return_number as number, r.created_at as "createdAt", r.reason,
               r.refund_method as "refundMethod", r.refund_reference as "refundReference",
-              r.refund_amount_bob::text as "refundAmountBob", r.restock, u.display_name as "createdByName"
+              r.refund_amount_bob::text as "refundAmountBob", r.points_refund_bob::text as "refundPointsBob",
+              r.agreement_refund_bob::text as "refundAgreementBob", r.points_returned as "pointsReturned", r.restock, u.display_name as "createdByName"
        from sale_returns r left join users u on u.id = r.created_by_user_id
        where r.tenant_id = $1 and r.branch_id = $2 and r.sale_id = $3
        order by r.created_at, r.id`,

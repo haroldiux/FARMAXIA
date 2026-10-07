@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShellSession } from "../components/app-shell";
+import { PosCustomerPicker, type PosCustomer } from "../components/pos-customer";
 import { SalesNav } from "../components/sales-nav";
 import {
   addToCart,
@@ -29,11 +31,12 @@ import {
   prescriptionPayload,
   type PrescriptionDraft
 } from "../lib/controlled";
+import { money as formatMoney, planAllows } from "../lib/customers";
 import { currentSession, type AuthSession } from "../lib/session";
 import {
   confirmSale,
   getQuote,
-  salePaymentMethodLabels,
+  saleTenderLabels,
   listSalesShifts,
   listSalesBatches,
   listSalesWarehouses,
@@ -41,16 +44,26 @@ import {
   SalesApiError,
   type ConfirmedSale,
   type QuoteDetail,
-  type SalePaymentMethod,
+  type SaleTender,
   type SalesBatchOption,
   type SalesLookupItem,
   type SalesShift,
   type SalesWarehouse
 } from "../lib/sales";
 
-type DraftPayment = { method: SalePaymentMethod; amountBob: string; reference: string };
+/** `points` is the whole-points input of a POINTS payment; `agreementId` the agreement of an AGREEMENT payment. */
+type DraftPayment = { method: SaleTender; amountBob: string; reference: string; points: string; agreementId: string };
 
-const emptyPayment = (): DraftPayment => ({ method: "CASH", amountBob: "", reference: "" });
+const emptyPayment = (): DraftPayment => ({ method: "CASH", amountBob: "", reference: "", points: "", agreementId: "" });
+const requiresReference = (method: SaleTender): boolean => method === "CARD" || method === "QR";
+const isCreditLike = (method: SaleTender): boolean => method === "POINTS" || method === "AGREEMENT";
+
+/** Same rule as the API: round(total x coverage %, 2), in 4-decimal units. */
+function agreementCapUnits(totalUnits: bigint, coveragePercent: string): bigint {
+  return ((totalUnits * toUnits(coveragePercent) + 50_000_000n) / 100_000_000n) * 100n;
+}
+
+const minUnits = (...values: bigint[]): bigint => values.reduce((least, value) => (value < least ? value : least));
 const SEARCH_DEBOUNCE_MS = 250;
 
 function shiftLabel(shift: SalesShift): string {
@@ -81,7 +94,9 @@ function itemLabel(item: SalesLookupItem): string {
 }
 
 export default function SalesPage() {
+  const shell = useShellSession();
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [customer, setCustomer] = useState<PosCustomer | null>(null);
   const [shifts, setShifts] = useState<SalesShift[]>([]);
   const [warehouses, setWarehouses] = useState<SalesWarehouse[]>([]);
   const [shiftId, setShiftId] = useState("");
@@ -146,6 +161,17 @@ export default function SalesPage() {
     .reduce((sum, payment) => sum + toUnits(payment.amountBob), 0n);
   const remainingUnits = estimatedUnits > paidUnits ? estimatedUnits - paidUnits : 0n;
   const changeUnits = paidUnits > estimatedUnits ? paidUnits - estimatedUnits : 0n;
+  const crmFeatures = shell?.subscription?.features;
+  // Without the plan snapshot nothing CRM is offered; the API enforces the plan in any case.
+  const customersPlan = crmFeatures !== undefined && planAllows(crmFeatures, "crm.customers");
+  const loyaltyPlan = crmFeatures !== undefined && planAllows(crmFeatures, "crm.loyalty");
+  const agreementsPlan = crmFeatures !== undefined && planAllows(crmFeatures, "crm.agreements");
+  const pointValueUnits = customer?.points ? toUnits(customer.points.settings.pointValueBob) : 0n;
+  const tenderOptions: SaleTender[] = [
+    "CASH", "CARD", "QR",
+    ...(customer?.points && customer.points.balance > 0 ? ["POINTS" as const] : []),
+    ...(customer?.agreements.length ? ["AGREEMENT" as const] : [])
+  ];
   const searchReady = !loading && session !== null && missingRequirements.length === 0;
 
   // "Convertir en venta" opens /sales?quoteId=...: preload the cart with the quote lines at today's prices and stock.
@@ -292,6 +318,31 @@ export default function SalesPage() {
     setPayments((current) => current.map((payment, paymentIndex) => paymentIndex === index ? { ...payment, ...patch } : payment));
   }
 
+  function changeMethod(index: number, method: SaleTender): void {
+    const onlyAgreement = customer?.agreements.length === 1 ? customer.agreements[0]!.agreementId : "";
+    updatePayment(index, { method, reference: "", points: "", agreementId: method === "AGREEMENT" ? onlyAgreement : "", ...(isCreditLike(method) ? { amountBob: "" } : {}) });
+  }
+
+  /** A different (or no) customer invalidates any POINTS/AGREEMENT payment typed for the previous one. */
+  function changeCustomer(next: PosCustomer | null): void {
+    setCustomer(next);
+    setPayments((current) => current.map((payment) => isCreditLike(payment.method) ? emptyPayment() : payment));
+  }
+
+  function setPoints(index: number, text: string): void {
+    const digits = text.replace(/\D/g, "").slice(0, 9);
+    const points = digits ? BigInt(digits) : 0n;
+    updatePayment(index, { points: digits, amountBob: points > 0n && pointValueUnits > 0n ? fromUnits(points * pointValueUnits) : "" });
+  }
+
+  /** What is still due once the other payments are counted (this payment replaces its own amount). */
+  function dueWithoutPayment(index: number): bigint {
+    const own = payments[index];
+    const ownUnits = own && isDecimal(own.amountBob) ? toUnits(own.amountBob) : 0n;
+    const others = paidUnits - ownUnits;
+    return estimatedUnits > others ? estimatedUnits - others : 0n;
+  }
+
   async function toggleLotPicker(line: CartLine): Promise<void> {
     if (lotPicker?.presentationId === line.presentationId) {
       setLotPicker(null);
@@ -335,8 +386,16 @@ export default function SalesPage() {
       setError("Selecciona un turno abierto, un almacén, productos con stock y montos decimales válidos.");
       return;
     }
-    if (payments.some((payment) => payment.method !== "CASH" && !payment.reference.trim())) {
+    if (payments.some((payment) => requiresReference(payment.method) && !payment.reference.trim())) {
       setError("Los pagos con tarjeta o QR requieren una referencia.");
+      return;
+    }
+    if (payments.some((payment) => isCreditLike(payment.method)) && !customer) {
+      setError("Elige un cliente para pagar con puntos o con convenio.");
+      return;
+    }
+    if (payments.some((payment) => payment.method === "AGREEMENT" && !payment.agreementId)) {
+      setError("Elige el convenio que cubre ese pago.");
       return;
     }
     if (remainingUnits > 0n) {
@@ -344,7 +403,7 @@ export default function SalesPage() {
       return;
     }
     if (cardQrUnits > estimatedUnits) {
-      setError("Los pagos con tarjeta o QR no pueden superar el monto por cobrar.");
+      setError("Los pagos con tarjeta, QR, puntos o convenio no pueden superar el monto por cobrar.");
       return;
     }
     if (hasOverride && (!overrideReason.trim() || overrideReason.trim().length > 200)) {
@@ -365,8 +424,10 @@ export default function SalesPage() {
         payments: payments.map((payment) => ({
           method: payment.method,
           amountBob: payment.amountBob.trim(),
-          ...(payment.method === "CASH" ? {} : { reference: payment.reference.trim() })
+          ...(requiresReference(payment.method) ? { reference: payment.reference.trim() } : {}),
+          ...(payment.method === "AGREEMENT" ? { agreementId: payment.agreementId } : {})
         })),
+        ...(customer ? { customerId: customer.customer.id } : {}),
         lines: cart.map((line) => ({
           presentationId: line.presentationId,
           quantity: line.quantity,
@@ -390,6 +451,7 @@ export default function SalesPage() {
       setLotPicker(null);
       setNotice(null);
       setPayments([emptyPayment()]);
+      setCustomer(null);
       resetSearch();
       focusSearch();
     } catch (reason) {
@@ -484,7 +546,7 @@ export default function SalesPage() {
     {workspaceHeader}
     {error ? <p className="form-error cash-message" role="alert">{error}</p> : null}
     {quote ? <p className="pos-notice quote-banner" role="status">Cobrando la proforma <strong>{quote.number}</strong>{quote.customerName ? ` de ${quote.customerName}` : ""}. Puedes editar las líneas; el precio es siempre el vigente. <button className="quiet-button" type="button" onClick={() => { setQuote(null); setCart([]); setNotice(null); window.history.replaceState(null, "", "/sales"); }}>Descartar proforma</button></p> : null}
-    {sale ? <section className="panel cash-shifts-panel sale-confirmed" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>{sale.payments.map((payment) => `${salePaymentMethodLabels[payment.method]} ${payment.amountBob}${payment.reference ? ` (${payment.reference})` : ""}`).join(" · ")} · Cambio {sale.changeAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><p>Número de venta: <strong>{sale.saleNumber}</strong></p>{sale.prescription ? <p>Receta archivada: <strong>{sale.prescription.folio}</strong></p> : null}<div className="user-actions"><Link className="primary-button receipt-link" href={`/sales/${sale.id}`}>Ver / imprimir recibo</Link><button className="quiet-button pos-touch" type="button" onClick={() => { setSale(null); focusSearch(); }}>Siguiente cliente</button></div></section> : null}
+    {sale ? <section className="panel cash-shifts-panel sale-confirmed" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>{sale.payments.map((payment) => `${saleTenderLabels[payment.method]} ${payment.amountBob}${payment.reference ? ` (${payment.reference})` : ""}`).join(" · ")} · Cambio {sale.changeAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><p>Número de venta: <strong>{sale.saleNumber}</strong></p>{sale.customer ? <p>Cliente: <strong>{sale.customer.fullName}</strong>{sale.loyalty ? ` · ganó ${sale.loyalty.earned} pts${sale.loyalty.redeemed ? `, canjeó ${sale.loyalty.redeemed}` : ""} · saldo ${sale.loyalty.balance} pts` : ""}{sale.agreement ? ` · convenio ${sale.agreement.name} cubrió ${formatMoney(sale.agreement.coverageAmountBob)}` : ""}</p> : null}{sale.prescription ? <p>Receta archivada: <strong>{sale.prescription.folio}</strong></p> : null}<div className="user-actions"><Link className="primary-button receipt-link" href={`/sales/${sale.id}`}>Ver / imprimir recibo</Link><button className="quiet-button pos-touch" type="button" onClick={() => { setSale(null); focusSearch(); }}>Siguiente cliente</button></div></section> : null}
     <form className="cash-layout sales-layout" onSubmit={(event) => { event.preventDefault(); void submitSale(); }}>
       <section className="panel cash-shifts-panel">
         <div className="panel-heading"><div><p className="section-kicker">Venta del mostrador</p><h2>Buscar y agregar productos</h2></div><span className="panel-count">{cart.length.toString().padStart(2, "0")}</span></div>
@@ -534,15 +596,26 @@ export default function SalesPage() {
       <aside className="panel cash-form-panel sales-summary">
         <div className="panel-heading"><div><p className="section-kicker">Cobro</p><h2>Confirmación</h2></div></div>
         <div className="sales-estimate"><span>Total</span><strong>{fromUnits(estimatedUnits)} BOB</strong><small>Según los precios vigentes de la sucursal. El total final lo calcula el servidor.</small></div>
-        {payments.map((payment, index) => <div className="cash-shift-card" key={index}>
-          <label className="inventory-filter"><span>Método de pago</span><select className="pos-touch" value={payment.method} onChange={(event) => updatePayment(index, { method: event.target.value as SalePaymentMethod, reference: "" })}>{(Object.keys(salePaymentMethodLabels) as SalePaymentMethod[]).map((method) => <option key={method} value={method}>{salePaymentMethodLabels[method]}</option>)}</select></label>
-          <label className="inventory-filter"><span>Monto BOB</span><input ref={index === 0 ? paymentRef : undefined} className="pos-touch" required inputMode="decimal" value={payment.amountBob} onChange={(event) => updatePayment(index, { amountBob: event.target.value })} /></label>
-          {payment.method === "CASH" ? null : <label className="inventory-filter"><span>Referencia ({salePaymentMethodLabels[payment.method]})</span><input className="pos-touch" required maxLength={64} value={payment.reference} onChange={(event) => updatePayment(index, { reference: event.target.value })} /></label>}
-          <div className="pos-payment-actions">
-            <button className="quiet-button pos-touch" type="button" disabled={remainingUnits <= 0n} onClick={() => updatePayment(index, { amountBob: fromUnits((isDecimal(payment.amountBob) ? toUnits(payment.amountBob) : 0n) + remainingUnits) })}>Monto exacto</button>
-            {payments.length > 1 ? <button className="quiet-button pos-touch" type="button" onClick={() => setPayments((current) => current.filter((_, paymentIndex) => paymentIndex !== index))}>Quitar pago</button> : null}
-          </div>
-        </div>)}
+        {customersPlan ? <PosCustomerPicker agreementsPlan={agreementsPlan} disabled={saving} loyaltyPlan={loyaltyPlan} onChange={changeCustomer} value={customer} /> : null}
+        {payments.map((payment, index) => {
+          const agreement = payment.method === "AGREEMENT" ? customer?.agreements.find((item) => item.agreementId === payment.agreementId) : undefined;
+          const due = dueWithoutPayment(index);
+          const agreementMax = agreement ? minUnits(agreementCapUnits(estimatedUnits, agreement.coveragePercent), toUnits(agreement.remainingBob), due) : 0n;
+          const pointsMax = customer?.points && pointValueUnits > 0n ? minUnits(BigInt(customer.points.balance), due / pointValueUnits) : 0n;
+          return <div className="cash-shift-card" key={index}>
+            <label className="inventory-filter"><span>Método de pago</span><select className="pos-touch" value={payment.method} onChange={(event) => changeMethod(index, event.target.value as SaleTender)}>{(tenderOptions.includes(payment.method) ? tenderOptions : [...tenderOptions, payment.method]).map((method) => <option key={method} value={method}>{saleTenderLabels[method]}</option>)}</select></label>
+            {payment.method === "AGREEMENT" ? <label className="inventory-filter"><span>Convenio</span><select className="pos-touch" required value={payment.agreementId} onChange={(event) => updatePayment(index, { agreementId: event.target.value })}><option value="">Selecciona un convenio</option>{customer?.agreements.map((item) => <option key={item.agreementId} value={item.agreementId}>{item.name} · cubre {Number(item.coveragePercent)}% · crédito {formatMoney(item.remainingBob)}</option>)}</select></label> : null}
+            {payment.method === "POINTS" ? <label className="inventory-filter"><span>Puntos a canjear</span><input className="pos-touch" required inputMode="numeric" value={payment.points} onChange={(event) => setPoints(index, event.target.value)} /><small className="pos-hint">Saldo: {customer?.points?.balance ?? 0} pts · 1 pt = {formatMoney(customer?.points?.settings.pointValueBob ?? 0)}</small></label> : null}
+            <label className="inventory-filter"><span>Monto BOB</span><input ref={index === 0 ? paymentRef : undefined} className="pos-touch" required inputMode="decimal" readOnly={payment.method === "POINTS"} value={payment.amountBob} onChange={(event) => updatePayment(index, { amountBob: event.target.value })} />{agreement ? <small className="pos-hint">Máximo que cubre esta venta: {formatMoney(fromUnits(agreementMax))} (cubre {Number(agreement.coveragePercent)}%, crédito del mes {formatMoney(agreement.remainingBob)}). El resto lo paga el cliente.</small> : null}</label>
+            {requiresReference(payment.method) ? <label className="inventory-filter"><span>Referencia ({saleTenderLabels[payment.method]})</span><input className="pos-touch" required maxLength={64} value={payment.reference} onChange={(event) => updatePayment(index, { reference: event.target.value })} /></label> : null}
+            <div className="pos-payment-actions">
+              {payment.method === "POINTS" ? <button className="quiet-button pos-touch" type="button" disabled={pointsMax <= 0n} onClick={() => setPoints(index, pointsMax.toString())}>Usar máximo</button>
+                : payment.method === "AGREEMENT" ? <button className="quiet-button pos-touch" type="button" disabled={!agreement || agreementMax <= 0n} onClick={() => updatePayment(index, { amountBob: fromUnits(agreementMax) })}>Usar máximo</button>
+                : <button className="quiet-button pos-touch" type="button" disabled={remainingUnits <= 0n} onClick={() => updatePayment(index, { amountBob: fromUnits((isDecimal(payment.amountBob) ? toUnits(payment.amountBob) : 0n) + remainingUnits) })}>Monto exacto</button>}
+              {payments.length > 1 ? <button className="quiet-button pos-touch" type="button" onClick={() => setPayments((current) => current.filter((_, paymentIndex) => paymentIndex !== index))}>Quitar pago</button> : null}
+            </div>
+          </div>;
+        })}
         <button className="quiet-button pos-touch" type="button" onClick={() => setPayments((current) => [...current, emptyPayment()])}>Agregar pago</button>
         <div className="sales-estimate" aria-live="polite"><span>Pagado</span><strong>{fromUnits(paidUnits)} BOB</strong><small>Falta: {fromUnits(remainingUnits)} BOB · Cambio: {fromUnits(changeUnits)} BOB</small></div>
         <button className="primary-button pos-confirm" disabled={saving || !cart.length} type="submit">{saving ? "Confirmando…" : "Confirmar venta (F9)"}</button>

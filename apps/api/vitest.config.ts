@@ -40,7 +40,11 @@ export default defineConfig({
       "test/controlled-archive.spec.ts",
       "test/staff-shifts.spec.ts",
       "test/staff-commissions.spec.ts",
-      "test/staff-productivity.spec.ts"
+      "test/staff-productivity.spec.ts",
+      "test/crm-customers.spec.ts",
+      "test/crm-loyalty.spec.ts",
+      "test/crm-agreements.spec.ts",
+      "test/crm-agreement-statements.spec.ts"
     ],
     fileParallelism: false
   }

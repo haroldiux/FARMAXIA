@@ -23,6 +23,19 @@ import {
 } from "./sales-history.js";
 
 import { fromUnits, toUnits } from "./sales-money.js";
+import { assertPaymentMethod, isCreditLike, isCashMethod, requiresReference, type SalePaymentMethod } from "./payment-methods.js";
+import {
+  prepareSaleLoyalty,
+  settleSaleLoyalty,
+  type SaleLoyalty
+} from "./sales-loyalty.js";
+import {
+  chargeSaleAgreement,
+  prepareSaleAgreement,
+  type SaleAgreement
+} from "./sales-agreements.js";
+import type { CustomerRef } from "../customers/loyalty-ledger.js";
+import { featureEnabled, requireFeature } from "../staff/staff.common.js";
 import {
   SalesReturnsWriter,
   type RegisteredReturn,
@@ -68,21 +81,22 @@ import {
   type IdempotentExecutionResult
 } from "../transversal/idempotency.service.js";
 
-export type SalePaymentMethod = "CASH" | "CARD" | "QR";
-
-const paymentMethods: readonly SalePaymentMethod[] = ["CASH", "CARD", "QR"];
+export type { SalePaymentMethod } from "./payment-methods.js";
 
 export interface SalePaymentInput {
   method: SalePaymentMethod | string;
   amountBob: string;
-  /** Required for CARD and QR (manual voucher/transaction reference); forbidden for CASH. */
+  /** Required for CARD and QR (manual voucher/transaction reference); forbidden for CASH, POINTS and AGREEMENT. */
   reference?: string;
+  /** Required by (and only allowed on) an AGREEMENT payment: the agreement that covers part of the sale. */
+  agreementId?: string;
 }
 
 export interface NormalizedSalePayment {
   method: SalePaymentMethod;
   amountBob: string;
   reference?: string;
+  agreementId?: string;
 }
 
 export interface ConfirmSaleLineInput {
@@ -120,6 +134,11 @@ export interface ConfirmSaleInput {
   /** Quote being converted; it becomes CONVERTED in the same transaction as the sale. */
   quoteId?: string;
   /**
+   * Optional customer (F17): must exist, be active and belong to the pharmacy. Required by a POINTS payment;
+   * with the crm.loyalty feature the sale earns points.
+   */
+  customerId?: string;
+  /**
    * Prescription data. Mandatory (PRESCRIPTION_REQUIRED) when any line is an effectively controlled
    * product (F15/D57); ignored for sales without controlled products.
    */
@@ -134,6 +153,7 @@ export interface NormalizedSaleInput {
   lines: ConfirmSaleLineInput[];
   overrideReason?: string;
   quoteId?: string;
+  customerId?: string;
   prescription?: NormalizedPrescription;
 }
 
@@ -186,6 +206,12 @@ export interface ConfirmedSale {
   items: ConfirmedSaleItem[];
   /** Archived controlled-medicine prescription (id + folio R-<branch>-000001), null when none was required. */
   prescription: RecordedPrescription | null;
+  /** The customer linked to the sale, null for anonymous sales. */
+  customer: CustomerRef | null;
+  /** Points earned/redeemed and the balance afterwards; null without customer or when loyalty does not apply. */
+  loyalty: SaleLoyalty | null;
+  /** The agreement that covered part of the sale (F17 Part B), null without an AGREEMENT payment. */
+  agreement: SaleAgreement | null;
 }
 
 const decimalPattern = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/;
@@ -222,23 +248,28 @@ function batchIdValue(value: string): string {
 }
 
 function normalizePayment(payment: SalePaymentInput): NormalizedSalePayment {
-  const method = text(payment?.method, "Payment method", 16).toUpperCase();
-  if (!paymentMethods.includes(method as SalePaymentMethod)) {
-    throw new BadRequestException("Payment method must be CASH, CARD or QR.");
-  }
+  const method = assertPaymentMethod(text(payment?.method, "Payment method", 16).toUpperCase());
   const amountBob = decimal(payment.amountBob, "Payment amount");
   if (toUnits(amountBob) <= 0n) {
     throw new BadRequestException("Payment amount must be greater than zero.");
   }
   const reference = payment.reference?.trim();
-  if (method === "CASH") {
-    if (reference) throw new BadRequestException("A CASH payment must not have a reference.");
-    return { method: "CASH", amountBob };
+  const rawAgreementId = typeof payment.agreementId === "string" ? payment.agreementId.trim() : payment.agreementId;
+  if (method === "AGREEMENT") {
+    if (typeof rawAgreementId !== "string" || !uuidPattern.test(rawAgreementId)) {
+      throw new BadRequestException({ code: "INVALID_INPUT", message: "An AGREEMENT payment requires a valid agreementId." });
+    }
+  } else if (rawAgreementId !== undefined && rawAgreementId !== null) {
+    throw new BadRequestException({ code: "INVALID_INPUT", message: `A ${method} payment must not have an agreementId.` });
+  }
+  if (!requiresReference(method)) {
+    if (reference) throw new BadRequestException(`A ${method} payment must not have a reference.`);
+    return method === "AGREEMENT" ? { method, amountBob, agreementId: rawAgreementId as string } : { method, amountBob };
   }
   if (!reference || reference.length > 64) {
     throw new BadRequestException(`A ${method} payment requires a reference of at most 64 characters.`);
   }
-  return { method: method as "CARD" | "QR", amountBob, reference };
+  return { method, amountBob, reference };
 }
 
 export function normalizeSaleInput(input: ConfirmSaleInput): NormalizedSaleInput {
@@ -276,6 +307,19 @@ export function normalizeSaleInput(input: ConfirmSaleInput): NormalizedSaleInput
     if (!uuidPattern.test(candidate)) throw new BadRequestException("Quote ID must be a valid UUID.");
     quoteId = candidate;
   }
+  let customerId: string | undefined;
+  if (input.customerId !== undefined && input.customerId !== null) {
+    const candidate = typeof input.customerId === "string" ? input.customerId.trim() : "";
+    if (!uuidPattern.test(candidate)) throw new BadRequestException("Customer ID must be a valid UUID.");
+    customerId = candidate;
+  }
+  const creditLike = payments.filter((payment) => isCreditLike(payment.method));
+  if (creditLike.length > 0 && customerId === undefined) {
+    throw new BadRequestException({ code: "INVALID_INPUT", message: "A POINTS or AGREEMENT payment requires a customer." });
+  }
+  if (new Set(creditLike.map((payment) => payment.method)).size !== creditLike.length) {
+    throw new BadRequestException({ code: "INVALID_INPUT", message: "Each credit-like payment method may appear only once." });
+  }
   const prescription = normalizePrescription(input.prescription);
   return {
     idempotencyKey: text(input.idempotencyKey, "Idempotency key"),
@@ -285,6 +329,7 @@ export function normalizeSaleInput(input: ConfirmSaleInput): NormalizedSaleInput
     lines,
     ...(overrideReason === undefined ? {} : { overrideReason }),
     ...(quoteId === undefined ? {} : { quoteId }),
+    ...(customerId === undefined ? {} : { customerId }),
     ...(prescription === undefined ? {} : { prescription })
   };
 }
@@ -298,7 +343,7 @@ export interface PaymentEvaluation {
 
 /**
  * Validates tendered payments against the exact sale total. Payments must cover the total;
- * only CASH may exceed it (the excess is the change); CARD/QR can never exceed what is due.
+ * only CASH may exceed it (the excess is the change); every other method (CARD, QR, POINTS...) can never exceed what is due.
  */
 export function evaluatePayments(totalBob: string, payments: readonly NormalizedSalePayment[]): PaymentEvaluation {
   const total = toUnits(totalBob);
@@ -306,7 +351,7 @@ export function evaluatePayments(totalBob: string, payments: readonly Normalized
   let nonCash = 0n;
   for (const payment of payments) {
     const amount = toUnits(payment.amountBob);
-    if (payment.method === "CASH") cash += amount;
+    if (isCashMethod(payment.method)) cash += amount;
     else nonCash += amount;
   }
   const paid = cash + nonCash;
@@ -314,7 +359,7 @@ export function evaluatePayments(totalBob: string, payments: readonly Normalized
     throw new BadRequestException("Payments must cover the sale total.");
   }
   if (nonCash > total) {
-    throw new BadRequestException("Card or QR payments cannot exceed the amount due.");
+    throw new BadRequestException("Card or QR payments (and points) cannot exceed the amount due.");
   }
   const change = paid - total;
   return { paidBob: fromUnits(paid), changeBob: fromUnits(change), cashNetBob: fromUnits(cash - change) };
@@ -412,6 +457,7 @@ export class SalesService {
     }
     const normalized = normalizeSaleInput(input);
     await this.assertAssistedPrescription(scope, normalized);
+    const loyaltyPlan = await this.resolveCrmPlan(scope, normalized);
     try {
       const result = await this.idempotency.execute(
         this.database,
@@ -421,7 +467,7 @@ export class SalesService {
         normalized,
         async (client) => ({
           statusCode: 201,
-          body: await this.postSale(client, scope, normalized)
+          body: await this.postSale(client, scope, normalized, loyaltyPlan)
         } satisfies IdempotentExecutionResult<ConfirmedSale>)
       );
       return (result.body ?? result.data) as ConfirmedSale;
@@ -454,10 +500,24 @@ export class SalesService {
     if (assisted) assertAssistedPrescription(input.prescription);
   }
 
+  /**
+   * F17: a sale with a customer needs crm.customers (403 otherwise); loyalty only applies when the plan has
+   * crm.loyalty. Sales without customer skip these checks entirely.
+   */
+  private async resolveCrmPlan(scope: TenantScope, input: NormalizedSaleInput): Promise<boolean> {
+    if (input.customerId === undefined) return false;
+    await requireFeature(this.features, scope, "crm.customers");
+    if (input.payments.some((payment) => payment.method === "AGREEMENT")) {
+      await requireFeature(this.features, scope, "crm.agreements");
+    }
+    return featureEnabled(this.features, scope, "crm.loyalty");
+  }
+
   private async postSale(
     client: PoolClient,
     scope: TenantScope,
-    input: NormalizedSaleInput
+    input: NormalizedSaleInput,
+    loyaltyPlan: boolean
   ): Promise<ConfirmedSale> {
     const shift = await client.query<{ id: string }>(
       `select control.cash_shift_id as id
@@ -499,13 +559,17 @@ export class SalesService {
     );
     if (controlled && !input.prescription) throw prescriptionRequired();
 
+    const loyaltyContext = await prepareSaleLoyalty(client, scope, input.customerId, input.payments, loyaltyPlan);
+    // F17 Part B: agreement and member are validated (member row locked) before any stock moves.
+    const agreementContext = await prepareSaleAgreement(client, scope, input.customerId, input.payments);
+
     const saleNumber = await this.nextSaleNumber(client, scope);
     const sale = await client.query<SaleRow>(
       `insert into sales
-         (tenant_id, branch_id, cash_shift_id, warehouse_id, status, total_amount_bob, paid_amount_bob, created_by_user_id, sale_number)
-       values ($1, $2, $3, $4, 'CONFIRMED', 0, 0, $5, $6)
+         (tenant_id, branch_id, cash_shift_id, warehouse_id, status, total_amount_bob, paid_amount_bob, created_by_user_id, sale_number, customer_id)
+       values ($1, $2, $3, $4, 'CONFIRMED', 0, 0, $5, $6, $7)
        returning id, total_amount_bob::text as "totalBob", paid_amount_bob::text as "paidAmountBob"`,
-      [scope.tenantId, scope.branchId, input.cashShiftId, input.warehouseId, scope.userId, saleNumber]
+      [scope.tenantId, scope.branchId, input.cashShiftId, input.warehouseId, scope.userId, saleNumber, input.customerId ?? null]
     );
     const saleRow = sale.rows[0];
     if (!saleRow) throw new Error("Sale was not created.");
@@ -653,6 +717,9 @@ export class SalesService {
        where tenant_id = $1 and branch_id = $2 and id = $3`,
       [scope.tenantId, scope.branchId, saleRow.id, total, evaluation.paidBob, evaluation.changeBob]
     );
+    const agreement = agreementContext
+      ? await chargeSaleAgreement(client, scope, agreementContext, { id: saleRow.id, number: saleNumber }, total)
+      : null;
     const payments: ConfirmedSalePayment[] = [];
     for (const payment of input.payments) {
       await client.query(
@@ -673,6 +740,9 @@ export class SalesService {
        where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3 and status = 'OPEN'`,
       [scope.tenantId, scope.branchId, input.cashShiftId, evaluation.cashNetBob]
     );
+    const loyalty = loyaltyContext
+      ? await settleSaleLoyalty(client, scope, loyaltyContext, { id: saleRow.id, number: saleNumber }, input.payments, evaluation.changeBob)
+      : null;
     await this.audit.recordInTransaction(client, scope, {
       action: "sales.cash_sale_confirmed",
       entityType: "sale",
@@ -682,7 +752,9 @@ export class SalesService {
         warehouseId: input.warehouseId,
         totalBob: total,
         changeBob: evaluation.changeBob,
-        methods: payments.map((payment) => payment.method)
+        methods: payments.map((payment) => payment.method),
+        ...(loyaltyContext ? { customerId: loyaltyContext.customer.id, loyalty } : {}),
+        ...(agreement ? { agreement } : {})
       }
     });
     let recordedPrescription: RecordedPrescription | null = null;
@@ -724,7 +796,10 @@ export class SalesService {
       changeAmountBob: evaluation.changeBob,
       payments,
       items,
-      prescription: recordedPrescription
+      prescription: recordedPrescription,
+      customer: loyaltyContext?.customer ?? null,
+      loyalty,
+      agreement
     };
   }
 

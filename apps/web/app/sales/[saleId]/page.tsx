@@ -7,7 +7,8 @@ import { SaleActions } from "../../components/sale-actions";
 import { SalesNav } from "../../components/sales-nav";
 import { getFiscalInvoice, type FiscalInvoiceStatus } from "../../lib/fiscal";
 import { currentSession } from "../../lib/session";
-import { getSale, salePaymentMethodLabels, saleStatusLabels, type SaleDetail } from "../../lib/sales";
+import { docLabel } from "../../lib/customers";
+import { getSale, salePaymentMethodLabels, saleStatusLabels, saleTenderLabels, type SaleDetail } from "../../lib/sales";
 
 /** F13 scaffold: SIAT is not connected yet (D03 pending), so only PENDING_PROVIDER is expected today. */
 const fiscalStatusLabels: Record<FiscalInvoiceStatus, string> = {
@@ -107,6 +108,13 @@ export default function SaleDetailPage() {
         <p className="section-kicker">Venta {sale.number}</p>
         <h2>{money(sale.totalBob)} Bs · {saleStatusLabels[sale.status]}</h2>
         <p>{formatDateTime(sale.createdAt)} · Cajero {sale.cashier.name ?? "—"} · Caja {sale.shift.registerCode} · Almacén {sale.warehouse.name}</p>
+        {sale.customer ? (
+          <p className="field-hint">
+            Cliente: {sale.customer.fullName} ({docLabel(sale.customer.docType, sale.customer.docNumber)})
+            {sale.loyalty ? ` · puntos: ganó ${sale.loyalty.earned}, canjeó ${sale.loyalty.redeemed}, saldo actual ${sale.loyalty.balance}` : ""}
+            {sale.agreement ? ` · convenio ${sale.agreement.name}: cubrió Bs ${money(sale.agreement.coverageAmountBob)}` : ""}
+          </p>
+        ) : null}
         {sale.items.map((item, index) => (
           <p className="field-hint" key={index}>
             {item.productName} · {item.presentationName}{item.returnedQuantity > 0 ? ` (devueltas ${item.returnedQuantity} de ${item.quantity})` : ""} — Lotes: {item.allocations.map((allocation) => `${allocation.lotCode} (vence ${formatMonth(allocation.expiresOn)}, ${allocation.quantityBase} u.)`).join(", ")}{item.fefoOverride ? ` — Lote elegido manualmente${item.fefoOverrideReason ? `: ${item.fefoOverrideReason}` : ""}` : ""}
@@ -117,7 +125,7 @@ export default function SaleDetailPage() {
           <ul className="sale-return-history">
             {sale.returns.map((entry) => (
               <li key={entry.id}>
-                {entry.number} · {formatDateTime(entry.createdAt)} · Reembolso {money(entry.refundAmountBob)} Bs ({salePaymentMethodLabels[entry.refundMethod]}{entry.refundReference ? ` ${entry.refundReference}` : ""}) · {entry.restock ? "Vuelve al stock" : "Sin reponer stock"} · {entry.reason}
+                {entry.number} · {formatDateTime(entry.createdAt)} · Reembolso {money(entry.refundAmountBob)} Bs ({salePaymentMethodLabels[entry.refundMethod]}{entry.refundReference ? ` ${entry.refundReference}` : ""}) · {entry.restock ? "Vuelve al stock" : "Sin reponer stock"}{entry.pointsReturned ? ` · ${entry.pointsReturned} pts devueltos` : ""}{entry.refundAgreementBob && Number(entry.refundAgreementBob) > 0 ? ` · Bs ${money(entry.refundAgreementBob)} restados del convenio` : ""} · {entry.reason}
                 {" — "}{entry.items.map((line) => `${line.quantity} × ${line.productName}`).join(", ")}
               </li>
             ))}
@@ -146,6 +154,7 @@ export default function SaleDetailPage() {
           <div><dt>Venta</dt><dd>{sale.number}</dd></div>
           <div><dt>Fecha</dt><dd>{formatDateTime(sale.createdAt)}</dd></div>
           <div><dt>Cajero</dt><dd>{sale.cashier.name ?? "—"}</dd></div>
+          {sale.customer ? <div><dt>Cliente</dt><dd>{sale.customer.fullName}{sale.customer.docNumber ? ` · ${docLabel(sale.customer.docType, sale.customer.docNumber)}` : ""}</dd></div> : null}
         </dl>
         <table className="receipt-lines">
           <thead><tr><th>Descripción</th><th>Cant.</th><th>P.Unit</th><th>Importe</th></tr></thead>
@@ -163,7 +172,7 @@ export default function SaleDetailPage() {
         <div className="receipt-totals">
           <div className="receipt-total"><span>TOTAL Bs</span><strong>{money(sale.totalBob)}</strong></div>
           {sale.payments.map((payment, index) => (
-            <div key={index}><span>{salePaymentMethodLabels[payment.method]}{payment.reference ? ` (${payment.reference})` : ""}</span><span>{money(payment.amountBob)}</span></div>
+            <div key={index}><span>{saleTenderLabels[payment.method]}{payment.method === "AGREEMENT" && sale.agreement ? ` ${sale.agreement.name}` : ""}{payment.reference ? ` (${payment.reference})` : ""}</span><span>{money(payment.amountBob)}</span></div>
           ))}
           <div><span>Recibido</span><span>{money(sale.paidAmountBob)}</span></div>
           <div><span>Cambio</span><span>{money(sale.changeAmountBob)}</span></div>
@@ -171,6 +180,11 @@ export default function SaleDetailPage() {
             <div key={entry.id}><span>Devuelto {entry.number}</span><span>− {money(entry.refundAmountBob)}</span></div>
           ))}
         </div>
+        {sale.customer && sale.loyalty ? (
+          <p className="receipt-notice">
+            Puntos: ganó {sale.loyalty.earned}{sale.loyalty.redeemed ? ` · canjeó ${sale.loyalty.redeemed}` : ""} · saldo {sale.loyalty.balance}
+          </p>
+        ) : null}
         <footer className="receipt-foot">
           <span>Documento no fiscal — no válido como factura</span>
           <span>¡Gracias por su compra!</span>
