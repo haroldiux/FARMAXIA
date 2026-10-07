@@ -158,7 +158,7 @@ describe("Usuarios, roles y seguridad", () => {
       const roles = await identity.listRoles(pharmacy.scope);
       expect(roles.map((role) => role.code).sort()).toEqual(["almacenero", "cajero", "encargado", "owner", "regente"]);
       expect(roles.find((role) => role.code === "cajero")?.permissions).toEqual(["cash.manage", "customers.manage", "fiscal.read", "sales.confirm", "sales.read"]);
-      expect(await identity.listPermissions(pharmacy.scope)).toHaveLength(27);
+      expect(await identity.listPermissions(pharmacy.scope)).toHaveLength(28);
 
       const cashier = await roleId(pharmacy, "cajero");
       await expect(identity.updateRole(pharmacy.scope, cashier, { name: "Otro" })).rejects.toMatchObject({ status: 409 });

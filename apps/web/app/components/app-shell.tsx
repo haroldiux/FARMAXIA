@@ -12,7 +12,7 @@ import { setTheme, useTheme } from "../lib/theme";
 import { NavIcon } from "./nav-icon";
 
 /** Rutas del sistema interno de la farmacia: todas llevan el marco con sidebar y barra superior. */
-const tenantRoutes = ["/dashboard", "/catalog", "/inventory", "/procurement", "/transfers", "/controlled", "/staff", "/cash", "/sales", "/customers", "/analytics", "/audit", "/users", "/billing", "/account"];
+const tenantRoutes = ["/dashboard", "/catalog", "/inventory", "/procurement", "/transfers", "/controlled", "/staff", "/cash", "/sales", "/customers", "/analytics", "/audit", "/users", "/integrations", "/billing", "/account"];
 
 function isTenantRoute(pathname: string): boolean {
   return tenantRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));

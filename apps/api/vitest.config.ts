@@ -47,7 +47,11 @@ export default defineConfig({
       "test/crm-agreement-statements.spec.ts",
       "test/analytics.spec.ts",
       "test/analytics-alerts.spec.ts",
-      "test/analytics-dashboard.spec.ts"
+      "test/analytics-dashboard.spec.ts",
+      "test/integrations-api-keys.spec.ts",
+      "test/public-api.spec.ts",
+      "test/integrations-webhooks.spec.ts",
+      "test/webhook-dispatcher.spec.ts"
     ],
     fileParallelism: false
   }

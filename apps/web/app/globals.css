@@ -1590,3 +1590,17 @@ select.pos-touch, input.pos-touch { min-height: 44px; }
 .analytics-chart-actual { fill: none; stroke: var(--ax-indigo, var(--blue)); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .analytics-chart-forecast { fill: none; stroke: var(--ax-green, var(--green-ink)); stroke-width: 3; stroke-dasharray: 6 5; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 640px) { .analytics-bar-row { grid-template-columns: 1fr; gap: 4px; } }
+
+/* F19 Integraciones: claves de API, webhooks y guía de uso */
+.integrations-secret { margin: 16px 0; }
+.integrations-secret code, .integrations-reference code, .integrations-url { overflow-wrap: anywhere; }
+.order-card.is-inactive { opacity: .7; }
+.integrations-url { font-family: var(--font-mono); font-size: 13px; }
+.integrations-deliveries { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.integrations-deliveries td small { display: block; color: var(--muted); font-size: 12px; }
+.integrations-error-text { max-width: 280px; color: var(--danger) !important; overflow-wrap: anywhere; }
+.integrations-reference { display: grid; gap: 10px; margin: 14px 0; }
+.integrations-reference dt { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+.integrations-reference dd { margin: 2px 0 0; color: var(--ink-soft); font-size: 13px; }
+.integrations-code { overflow-x: auto; margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-sunken); font-family: var(--font-mono); font-size: 12px; line-height: 1.55; }
+.integrations-usage { align-items: start; }

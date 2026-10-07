@@ -1,6 +1,6 @@
 # FARMAXIA — Estado de funcionalidades
 
-**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 5 de octubre de 2026 (módulos 0 al 5 y 7 al 9 completados; módulo 6 con base técnica)
+**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 6 de octubre de 2026 (módulos 0 al 5 y 7 al 11 completados; módulo 6 con base técnica; módulo 12 sin e-commerce/delivery, pendiente de decisión)
 **Rama revisada:** `Denil` (commit `d21e333`); módulos 0 al 8 subidos a `Denil` y módulo 9 sin commit
 **Autor:** Denilson Godoy
 
@@ -46,10 +46,10 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 9. Personal, turnos y comisiones | 3 | 0 | 0 |
 | 10. Clientes, fidelización y convenios | 5 | 0 | 0 |
 | 11. Analítica | 6 | 0 | 0 |
-| 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **91** | **1** | **11** |
+| 12. API e integraciones | 3 | 0 | 1 |
+| **Total** | **94** | **0** | **9** |
 
-**Avance aproximado: ~88%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~91%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -205,10 +205,12 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 ### 12. API pública e integraciones
 
-- 🟡 Cola interna de eventos (outbox), base para webhooks
-- ❌ API pública para terceros
-- ❌ Integración con e-commerce y apps de delivery
-- ❌ Webhooks en tiempo real y stock omnicanal
+- ✅ Cola interna de eventos (outbox) con despachador: cada evento (ventas, anulaciones, devoluciones, proformas, caja, traspasos) se entrega a los webhooks suscritos sin cambiar el estado de la cola (D80)
+- ✅ API pública para terceros (`api/public/v1`, plan Premium): claves de API por sucursal, de solo lectura, mostradas una sola vez y guardadas como hash; catálogo, precio vigente y stock disponible de la sucursal; límite de 120 consultas por minuto (D77, D78)
+- ❌ Integración con e-commerce y apps de delivery: decisión abierta (pedidos externos que crean ventas o reservan stock, proveedores y contratos; D81, D82)
+- ✅ Webhooks en tiempo real y stock omnicanal: endpoints HTTPS con eventos elegidos, firma HMAC-SHA256, reintentos hasta 8 veces e historial de entregas; el mismo stock de la sucursal se publica por la API para cualquier canal (D79)
+
+> **F19 (octubre 2026):** permiso nuevo `integrations.manage` (solo Propietario) y pantalla `/integrations` (Integraciones, en Administración) para claves de API, webhooks e historial de entregas. Migración `0035_public_api`. La API pública es solo lectura: escribir datos desde afuera queda como decisión abierta (D83).
 
 ## 5. Avance según el roadmap de la especificación maestra
 
@@ -241,6 +243,8 @@ Tomadas de `REGISTRO_DECISIONES.md`:
 | D08 | Método de costeo (promedio ponderado o última compra) | Costeo en compras y márgenes en analítica |
 | D09 | Reglas de reserva de stock en proformas y ventas | Proformas en el POS |
 | D22 | Importación de catálogo y stock inicial | Puesta en marcha con datos reales |
+| D81, D82 | Pedidos externos (e-commerce, delivery) y proveedores | Integración con e-commerce y apps de delivery |
+| D83 | Escritura desde la API pública | API pública de escritura |
 
 ## 8. Preguntas para validar
 

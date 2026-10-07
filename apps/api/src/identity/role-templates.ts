@@ -28,6 +28,7 @@ export const tenantPermissions = [
   { code: "staff.reports.read", description: "Read staff commission and productivity reports", label: "Ver reportes de personal", module: "Personal", sortOrder: 74 },
   { code: "analytics.read", description: "Read analytics reports: ABC, rotation, profitability, stockouts and dashboard", label: "Ver analítica del negocio", module: "Analítica", sortOrder: 79 },
   { code: "audit.read", description: "Read the tenant audit log within the plan retention", label: "Ver bitácora de auditoría", module: "Administración", sortOrder: 70 },
+  { code: "integrations.manage", description: "Manage API keys, webhooks and integrations", label: "Administrar integraciones y API", module: "Administración", sortOrder: 85 },
   { code: "billing.manage", description: "View the subscription, invoices and submit payments", label: "Ver suscripción y pagar", module: "Administración", sortOrder: 80 },
   { code: "users.manage", description: "Manage users, roles and branch access", label: "Administrar usuarios y roles", module: "Administración", sortOrder: 90 }
 ] as const;

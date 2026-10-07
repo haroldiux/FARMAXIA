@@ -205,3 +205,7 @@
 [2026-10-07T02:34:00.259Z] [CodeGraph MCP] Auto-synced 1 file(s) in 1095ms
 [2026-10-07T02:34:13.639Z] [CodeGraph MCP] Auto-synced 1 file(s) in 1055ms
 [2026-10-07T02:34:22.633Z] [CodeGraph MCP] Auto-synced 2 file(s) in 1378ms
+[2026-10-07T03:03:55.892Z] [CodeGraph daemon] Listening on \\.\pipe\codegraph-922ba8313a2c491e (pid 16408, v1.6.1). Idle timeout 300000ms.
+[2026-10-07T03:04:13.226Z] [CodeGraph MCP] File watcher active for C:\Users\pachi\Farmacia\FARMAXIA — graph will auto-sync on changes
+[2026-10-07T03:04:13.233Z] [CodeGraph MCP] Query pool: up to 3 worker thread(s) for concurrent reads.
+[2026-10-07T03:08:56.850Z] [CodeGraph daemon] Shutting down (idle timeout; clients=0).

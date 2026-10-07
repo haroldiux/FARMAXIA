@@ -12,6 +12,7 @@ import { SalesModule } from "./sales/sales.module.js";
 import { CustomersModule } from "./customers/customers.module.js";
 import { ControlledModule } from "./controlled/controlled.module.js";
 import { AnalyticsModule } from "./analytics/analytics.module.js";
+import { IntegrationsModule } from "./integrations/integrations.module.js";
 import { StaffModule } from "./staff/staff.module.js";
 import { TransfersModule } from "./transfers/transfers.module.js";
 
@@ -30,7 +31,8 @@ import { TransfersModule } from "./transfers/transfers.module.js";
     ControlledModule,
     StaffModule,
     CustomersModule,
-    AnalyticsModule
+    AnalyticsModule,
+    IntegrationsModule
   ],
   controllers: [HealthController]
 })

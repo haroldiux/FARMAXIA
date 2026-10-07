@@ -2721,3 +2721,82 @@ export const agreementCharges = pgTable(
     check("agreement_charges_statement_check", sql`(${table.status} = 'BILLED') = (${table.statementId} is not null)`)
   ]
 );
+
+// Migration 0035 (F19 Module 12): public API keys, webhook endpoints and deliveries.
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    name: varchar("name", { length: 100 }).notNull(),
+    keyPrefix: varchar("key_prefix", { length: 16 }).notNull(),
+    keyHash: varchar("key_hash", { length: 64 }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedByUserId: uuid("revoked_by_user_id"),
+    createdAt
+  },
+  (table) => [
+    uniqueIndex("api_keys_key_hash_unique").on(table.keyHash),
+    index("api_keys_tenant_branch_idx").on(table.tenantId, table.branchId, table.createdAt),
+    foreignKey({ name: "api_keys_tenant_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "api_keys_created_by_fk", columns: [table.createdByUserId], foreignColumns: [users.id] }),
+    foreignKey({ name: "api_keys_revoked_by_fk", columns: [table.revokedByUserId], foreignColumns: [users.id] })
+  ]
+);
+
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    url: varchar("url", { length: 500 }).notNull(),
+    description: varchar("description", { length: 200 }),
+    secret: varchar("secret", { length: 128 }).notNull(),
+    eventTypes: text("event_types").array().notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    unique("webhook_endpoints_tenant_id_unique").on(table.tenantId, table.id),
+    index("webhook_endpoints_tenant_idx").on(table.tenantId, table.isActive),
+    foreignKey({ name: "webhook_endpoints_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    foreignKey({ name: "webhook_endpoints_created_by_fk", columns: [table.createdByUserId], foreignColumns: [users.id] })
+  ]
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    endpointId: uuid("endpoint_id").notNull(),
+    outboxEventId: uuid("outbox_event_id").notNull(),
+    eventType: varchar("event_type", { length: 100 }).notNull(),
+    status: varchar("status", { length: 16 }).default("PENDING").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastStatusCode: integer("last_status_code"),
+    lastError: varchar("last_error", { length: 500 }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    createdAt
+  },
+  (table) => [
+    check("webhook_deliveries_status_check", sql`${table.status} in ('PENDING', 'SUCCEEDED', 'FAILED')`),
+    check("webhook_deliveries_attempts_check", sql`${table.attempts} >= 0`),
+    uniqueIndex("webhook_deliveries_endpoint_event_unique").on(table.endpointId, table.outboxEventId),
+    index("webhook_deliveries_due_idx").on(table.status, table.nextAttemptAt),
+    index("webhook_deliveries_tenant_idx").on(table.tenantId, table.createdAt),
+    foreignKey({
+      name: "webhook_deliveries_endpoint_fk",
+      columns: [table.tenantId, table.endpointId],
+      foreignColumns: [webhookEndpoints.tenantId, webhookEndpoints.id]
+    }),
+    foreignKey({ name: "webhook_deliveries_outbox_event_fk", columns: [table.outboxEventId], foreignColumns: [outboxEvents.id] })
+  ]
+);

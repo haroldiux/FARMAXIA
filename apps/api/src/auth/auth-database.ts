@@ -6,6 +6,8 @@ export interface AuthDatabaseContext {
   userId?: string;
   loginEmail?: string;
   refreshTokenHash?: string;
+  /** SHA-256 hex hash of a public API key (F19): lets farmaxia_auth read only that key row. */
+  apiKeyHash?: string;
 }
 
 @Injectable()
@@ -40,6 +42,12 @@ export class AuthDatabase {
       if (context.refreshTokenHash) {
         await client.query("select set_config('app.refresh_token_hash', $1, true)", [
           context.refreshTokenHash
+        ]);
+      }
+
+      if (context.apiKeyHash) {
+        await client.query("select set_config('app.api_key_hash', $1, true)", [
+          context.apiKeyHash
         ]);
       }
 

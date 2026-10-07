@@ -79,6 +79,24 @@ export function currentPriceLateral(presentationRef: string, tenantRef: string, 
          ) selected_price on true`;
 }
 
+/**
+ * Sellable stock of a presentation in a whole branch: AVAILABLE, unexpired lots minus reservations in the
+ * branch's active, dispatch-enabled warehouses (same rule as the analytics availability helper).
+ * Exposes `branch_stock.available` (null when there is none); `branchParam` is a SQL parameter holding the branch id.
+ */
+export function branchAvailableStockLateral(presentationRef: string, tenantRef: string, branchParam: string): string {
+  return `left join lateral (
+           select sum(ib.quantity_base - ib.reserved_base) as available
+           from inventory_balances ib
+           join inventory_batches b on b.tenant_id = ib.tenant_id and b.id = ib.batch_id
+           join warehouses w on w.tenant_id = ib.tenant_id and w.id = ib.warehouse_id
+           where ib.tenant_id = ${tenantRef} and b.presentation_id = ${presentationRef}
+             and w.branch_id = ${branchParam} and w.is_active and w.is_dispatch_enabled
+             and b.status = 'AVAILABLE' and b.expires_on >= current_date
+             and ib.quantity_base > ib.reserved_base
+         ) branch_stock on true`;
+}
+
 /** Current BOB price of a presentation for the branch, as exact decimal text, or null when none applies. */
 export async function resolveCurrentPrice(
   client: PoolClient,

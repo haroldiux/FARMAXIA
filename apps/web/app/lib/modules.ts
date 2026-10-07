@@ -57,6 +57,7 @@ export const moduleSections: Array<{ label: string; items: AppModule[] }> = [
     label: "Administración",
     items: [
       { key: "users", label: "Usuarios y roles", icon: "users", href: "/users", permission: "users.manage", tone: "lilac", altTone: "sky", description: "Equipo, permisos y sucursales" },
+      { key: "integrations", label: "Integraciones", icon: "integrations", href: "/integrations", permission: "integrations.manage", tone: "sky", altTone: "indigo", description: "Claves de API, webhooks y registro de entregas" },
       { key: "billing", label: "Suscripción", icon: "billing", href: "/billing", permission: "billing.manage", tone: "indigo", altTone: "green", description: "Plan, límites y pagos" },
       { key: "account", label: "Mi cuenta", icon: "account", href: "/account", tone: "blue", altTone: "lilac", description: "Perfil, contraseña y 2FA" }
     ]
