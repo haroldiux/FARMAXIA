@@ -46,6 +46,10 @@ export const moduleSections: Array<{ label: string; items: AppModule[] }> = [
     ]
   },
   {
+    label: "Analítica",
+    items: [{ key: "analytics", label: "Analítica", icon: "trend", href: "/analytics", permission: "analytics.read", tone: "indigo", altTone: "green", description: "Panel ejecutivo, ABC, rotación, rentabilidad y quiebres de stock" }]
+  },
+  {
     label: "Personal",
     items: [{ key: "staff", label: "Turnos y comisiones", icon: "staff", href: "/staff", tone: "green", altTone: "amber", description: "Turnos, guardias, comisiones y productividad" }]
   },

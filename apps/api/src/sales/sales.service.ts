@@ -642,8 +642,10 @@ export class SalesService {
       const item = await client.query<{ id: string; lineTotalBob: string }>(
         `insert into sale_items
            (tenant_id, branch_id, sale_id, presentation_id, quantity, quantity_base, unit_price_bob, line_total_bob,
-            fefo_override, fefo_override_reason)
-         values ($1, $2, $3, $4, $5::bigint, $6, $7::numeric, ($5::bigint * $7::numeric), $8, $9)
+            fefo_override, fefo_override_reason, unit_cost_base_bob)
+         values ($1, $2, $3, $4, $5::bigint, $6, $7::numeric, ($5::bigint * $7::numeric), $8, $9,
+                 -- F18 (D72): average cost per base unit at confirm time; null when the presentation has no recorded cost.
+                 (select cost.average_unit_cost from presentation_costs cost where cost.tenant_id = $1 and cost.presentation_id = $4))
          returning id, line_total_bob::text as "lineTotalBob"`,
         [scope.tenantId, scope.branchId, saleRow.id, line.presentationId, line.quantity, quantityBase, unitPriceBob, fefoOverride, overrideReason]
       );

@@ -232,6 +232,20 @@
       "when": 1791900000000,
       "tag": "0032_crm_agreements",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792000000000,
+      "tag": "0033_analytics",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792100000000,
+      "tag": "0034_analytics_alerts",
+      "breakpoints": true
     }
   ]
 }

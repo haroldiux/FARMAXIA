@@ -126,6 +126,37 @@ describe("F11 cash sale confirmation against the database", () => {
     expect(Number(control.rows[0]!.expected)).toBe(137.5);
   });
 
+  it("snapshots the presentation average cost per base unit on each sale line (null when it has no cost)", async () => {
+    await ownerPool.query(
+      "insert into presentation_costs (tenant_id, presentation_id, average_unit_cost, last_unit_cost) values ($1, $2, 0.625, 0.625)",
+      [tenantId, presentationId]
+    );
+    await sales.confirm(scope, {
+      idempotencyKey: "sale-db-cost-snapshot",
+      cashShiftId: shiftId,
+      warehouseId,
+      paymentMethod: "CASH",
+      paidAmountBob: "25.0000",
+      lines: [{ presentationId, quantity: 2, unitPriceBob: "12.5000" }]
+    });
+    // A later cost change must not rewrite the snapshot of the already confirmed sale.
+    await ownerPool.query("update presentation_costs set average_unit_cost = 9 where tenant_id = $1 and presentation_id = $2", [tenantId, presentationId]);
+    const withCost = await ownerPool.query<{ cost: string }>("select unit_cost_base_bob::text as cost from sale_items where tenant_id = $1", [tenantId]);
+    expect(withCost.rows.map((row) => Number(row.cost))).toEqual([0.625]);
+
+    await ownerPool.query("delete from presentation_costs where tenant_id = $1", [tenantId]);
+    await sales.confirm(scope, {
+      idempotencyKey: "sale-db-no-cost",
+      cashShiftId: shiftId,
+      warehouseId,
+      paymentMethod: "CASH",
+      paidAmountBob: "12.5000",
+      lines: [{ presentationId, quantity: 1, unitPriceBob: "12.5000" }]
+    });
+    const all = await ownerPool.query<{ cost: string | null }>("select unit_cost_base_bob::text as cost from sale_items where tenant_id = $1 order by created_at", [tenantId]);
+    expect(all.rows.map((row) => (row.cost === null ? null : Number(row.cost)))).toEqual([0.625, null]);
+  });
+
   it("summarizes today, the month, the charts and the recent sales of the branch", async () => {
     const empty = await sales.summary(scope, { viewAll: true });
     expect(empty.today).toEqual({ totalBob: "0", count: 0 });

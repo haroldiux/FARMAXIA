@@ -275,8 +275,4 @@ export function formatBob(value: string | number): string {
   return `Bs ${Number(value).toFixed(2)}`;
 }
 
-/** Whether the plan snapshot shows the feature enabled; unknown snapshot means "do not hide" (the API still enforces it). */
-export function planAllows(features: Array<{ code: string; enabled: boolean }> | undefined, code: string): boolean {
-  if (!features) return true;
-  return features.some((feature) => feature.code === code && feature.enabled);
-}
+export { planAllows } from "./plan";

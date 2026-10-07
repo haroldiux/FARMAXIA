@@ -44,7 +44,10 @@ export default defineConfig({
       "test/crm-customers.spec.ts",
       "test/crm-loyalty.spec.ts",
       "test/crm-agreements.spec.ts",
-      "test/crm-agreement-statements.spec.ts"
+      "test/crm-agreement-statements.spec.ts",
+      "test/analytics.spec.ts",
+      "test/analytics-alerts.spec.ts",
+      "test/analytics-dashboard.spec.ts"
     ],
     fileParallelism: false
   }

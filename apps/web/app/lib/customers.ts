@@ -401,11 +401,7 @@ export function docLabel(docType: string | null, docNumber: string | null): stri
   return `${label ? `${label} ` : ""}${docNumber}`;
 }
 
-/** Whether the plan snapshot shows the feature enabled; an unknown snapshot does not hide anything (the API still enforces it). */
-export function planAllows(features: Array<{ code: string; enabled: boolean }> | undefined, code: string): boolean {
-  if (!features) return true;
-  return features.some((feature) => feature.code === code && feature.enabled);
-}
+export { planAllows } from "./plan";
 
 export function currentMonth(now: Date = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

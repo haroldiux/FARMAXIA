@@ -45,11 +45,11 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 8. Medicamentos controlados (AGEMED) | 4 | 0 | 0 |
 | 9. Personal, turnos y comisiones | 3 | 0 | 0 |
 | 10. Clientes, fidelización y convenios | 5 | 0 | 0 |
-| 11. Analítica | 1 | 0 | 5 |
+| 11. Analítica | 6 | 0 | 0 |
 | 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **86** | **1** | **16** |
+| **Total** | **91** | **1** | **11** |
 
-**Avance aproximado: ~83%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~88%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -195,11 +195,13 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 ### 11. Analítica
 
 - ✅ Reporte global de existencias
-- ❌ Matriz ABC de rotación
-- ❌ Rotación y días de inventario
-- ❌ Quiebres de stock y alertas de desabastecimiento
-- ❌ Margen y rentabilidad por producto, laboratorio y sucursal
-- ❌ Tablero ejecutivo y analítica predictiva
+- ✅ Matriz ABC de rotación (`/analytics/abc`, plan Premium): clasificación por venta neta del período (A 80 %, B 95 %, C resto), con unidades y participación (D73)
+- ✅ Rotación y días de inventario (`/analytics/rotation`, plan Profesional o superior): promedio diario vendido, disponible, días de inventario, rotación sobre el costo y productos sin movimiento (D74)
+- ✅ Quiebres de stock y alertas de desabastecimiento (`/analytics/stockouts`, plan Profesional o superior): agotados y cobertura baja (menos de 7 días) con cantidad sugerida; alertas automáticas cada hora por sucursal que se cierran solas al reponer y se pueden marcar como revisadas (D74)
+- ✅ Margen y rentabilidad por producto, laboratorio y sucursal (`/analytics/profitability`, plan Profesional o superior): venta neta, costo, margen y CSV. Cada venta guarda ahora su costo; las anteriores se calculan con el costo promedio actual y se marcan «estimado» (D72)
+- ✅ Tablero ejecutivo (`/analytics`, todos los planes; margen desde Profesional) y analítica predictiva (plan Premium): pronóstico semanal de demanda con promedio y tendencia de 8 semanas y fecha estimada de agotamiento (D75)
+
+> **F18 (octubre 2026):** permiso nuevo `analytics.read` (Propietario, Regente, Encargado) (D76). Los reportes juntan todas las sucursales asignadas al usuario, con filtro por sucursal. El margen depende del método de costeo (D08, D40), todavía provisional.
 
 ### 12. API pública e integraciones
 
@@ -216,7 +218,7 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
 | 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja, receta en controlados). Pagos con puntos y por convenio ✅ (módulo 10) |
 | 4 | Facturación SIAT | 🟡 Base técnica lista (F13: `FiscalProvider`, tabla `fiscal_invoices`, simulador); la emisión real espera D03 |
-| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ (módulo 7, D53-D56), libro AGEMED ✅ (módulo 8, D57-D60) y comisiones ✅ (módulo 9, D61-D65); matriz ABC pendiente |
+| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ (módulo 7, D53-D56), libro AGEMED ✅ (módulo 8, D57-D60) comisiones ✅ (módulo 9, D61-D65) y matriz ABC ✅ (módulo 11, D73) |
 
 ## 6. Propuesta de orden para completar el sistema
 

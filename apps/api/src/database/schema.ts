@@ -1691,6 +1691,40 @@ export const sales = pgTable(
   ]
 );
 
+export const stockAlerts = pgTable(
+  "stock_alerts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    daysOfStock: numeric("days_of_stock", { precision: 10, scale: 1 }),
+    availableBase: bigint("available_base", { mode: "number" }).notNull(),
+    createdAt,
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    acknowledgedByUserId: uuid("acknowledged_by_user_id"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true })
+  },
+  (table) => [
+    check("stock_alerts_kind_check", sql`${table.kind} in ('OUT_OF_STOCK', 'LOW_COVERAGE')`),
+    uniqueIndex("stock_alerts_one_open")
+      .on(table.tenantId, table.branchId, table.presentationId, table.kind)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    index("stock_alerts_branch_open_idx").on(table.tenantId, table.branchId, table.resolvedAt, table.createdAt),
+    foreignKey({
+      name: "stock_alerts_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "stock_alerts_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    })
+  ]
+);
+
 export const saleItems = pgTable(
   "sale_items",
   {
@@ -1705,6 +1739,8 @@ export const saleItems = pgTable(
     lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
     fefoOverride: boolean("fefo_override").notNull().default(false),
     fefoOverrideReason: varchar("fefo_override_reason", { length: 200 }),
+    /** F18: average cost per base unit snapshotted at confirm (null for historical sales or presentations without cost). */
+    unitCostBaseBob: numeric("unit_cost_base_bob", { precision: 18, scale: 6 }),
     createdAt
   },
   (table) => [
@@ -1721,6 +1757,7 @@ export const saleItems = pgTable(
     unique("sale_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
     index("sale_items_sale_idx").on(table.tenantId, table.branchId, table.saleId),
     check("sale_items_quantity_positive_check", sql`${table.quantity} > 0 and ${table.quantityBase} > 0`),
+    check("sale_items_unit_cost_nonnegative_check", sql`${table.unitCostBaseBob} is null or ${table.unitCostBaseBob} >= 0`),
     check("sale_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`),
     check(
       "sale_items_fefo_override_check",
