@@ -19,6 +19,7 @@ export default defineConfig({
       "test/inventory.spec.ts",
       "test/inventory-report.spec.ts",
       "test/cash.spec.ts",
+      "test/cash-registers.spec.ts",
       "test/cash-movements.spec.ts",
       "test/sales.spec.ts",
       "test/permissions.guard.spec.ts",

@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   NotFoundException
@@ -13,10 +15,27 @@ import {
   computePayloadHash,
   IdempotencyKeyReusedError
 } from "../transversal/idempotency.service.js";
+import {
+  consumeQuota,
+  QuotaExceededError,
+  releaseQuota,
+  SubscriptionAccessError
+} from "../subscriptions/quota.service.js";
 
 export interface CashRegisterSummary {
   id: string;
   code: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface CreateCashRegisterInput {
+  code: string;
+}
+
+export interface UpdateCashRegisterInput {
+  code?: string;
+  isActive?: boolean;
 }
 
 export interface EligibleCashUser {
@@ -263,8 +282,18 @@ export class CashService {
 
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async listRegisters(scope: TenantScope): Promise<CashRegisterListResult> {
+  async listRegisters(scope: TenantScope, includeInactive = false): Promise<CashRegisterListResult> {
     return this.database.withScope(scope, async (client) => {
+      if (includeInactive) {
+        const result = await client.query<CashRegisterSummary>(
+          `select id, code, is_active as "isActive", created_at as "createdAt"
+           from cash_registers
+           where tenant_id = $1 and branch_id = $2
+           order by code asc, id asc`,
+          [scope.tenantId, scope.branchId]
+        );
+        return { items: result.rows };
+      }
       const result = await client.query<CashRegisterSummary>(
         `select id, code
          from cash_registers
@@ -273,6 +302,174 @@ export class CashService {
         [scope.tenantId, scope.branchId]
       );
       return { items: result.rows };
+    });
+  }
+
+  async createRegister(scope: TenantScope, input: CreateCashRegisterInput): Promise<CashRegisterSummary> {
+    const code = input.code?.trim().toUpperCase();
+    if (!code || code.length > 32 || !/^[A-Z0-9_\-\.]+$/.test(code)) {
+      throw new BadRequestException("El código de la caja debe tener entre 1 y 32 caracteres alfanuméricos.");
+    }
+
+    return this.database.withScope(scope, async (client) => {
+      try {
+        await consumeQuota(client, scope.tenantId, "cash_registers", 1);
+      } catch (error) {
+        if (error instanceof QuotaExceededError) {
+          throw new HttpException(
+            { statusCode: 409, code: "PLAN_QUOTA_EXCEEDED", message: "Tu plan no permite registrar más cajas activas. Sube de plan o desactiva alguna existente." },
+            HttpStatus.CONFLICT
+          );
+        }
+        if (error instanceof SubscriptionAccessError) {
+          throw new HttpException(
+            { statusCode: 402, code: "SUBSCRIPTION_INACTIVE", message: "La suscripción de la farmacia no está activa." },
+            HttpStatus.PAYMENT_REQUIRED
+          );
+        }
+        throw error;
+      }
+
+      const existing = await client.query<{ id: string }>(
+        `select id from cash_registers where tenant_id = $1 and branch_id = $2 and code = $3`,
+        [scope.tenantId, scope.branchId, code]
+      );
+      if (existing.rowCount && existing.rowCount > 0) {
+        throw new ConflictException({
+          code: "CASH_REGISTER_CODE_EXISTS",
+          message: `Ya existe una caja con el código ${code} en esta sucursal.`
+        });
+      }
+
+      const result = await client.query<CashRegisterSummary>(
+        `insert into cash_registers (tenant_id, branch_id, code, is_active)
+         values ($1, $2, $3, true)
+         returning id, code, is_active as "isActive", created_at as "createdAt"`,
+        [scope.tenantId, scope.branchId, code]
+      );
+      const created = result.rows[0]!;
+
+      await this.audit.recordInTransaction(client, scope, {
+        action: "cash.register_created",
+        entityType: "cash_register",
+        entityId: created.id,
+        payload: { code: created.code, branchId: scope.branchId }
+      });
+
+      await this.outbox.enqueueInTransaction(client, scope, {
+        aggregateType: "cash_register",
+        aggregateId: created.id,
+        eventType: "cash.register.created",
+        payload: { id: created.id, code: created.code, branchId: scope.branchId }
+      });
+
+      return created;
+    });
+  }
+
+  async updateRegister(scope: TenantScope, registerId: string, input: UpdateCashRegisterInput): Promise<CashRegisterSummary> {
+    return this.database.withScope(scope, async (client) => {
+      const currentResult = await client.query<CashRegisterSummary>(
+        `select id, code, is_active as "isActive", created_at as "createdAt"
+         from cash_registers
+         where tenant_id = $1 and branch_id = $2 and id = $3`,
+        [scope.tenantId, scope.branchId, registerId]
+      );
+      if (currentResult.rowCount === 0) {
+        throw new NotFoundException("Caja no encontrada en esta sucursal.");
+      }
+      const current = currentResult.rows[0]!;
+
+      let newCode = current.code;
+      if (input.code !== undefined) {
+        const trimmed = input.code.trim().toUpperCase();
+        if (!trimmed || trimmed.length > 32 || !/^[A-Z0-9_\-\.]+$/.test(trimmed)) {
+          throw new BadRequestException("El código de la caja debe tener entre 1 y 32 caracteres alfanuméricos.");
+        }
+        if (trimmed !== current.code) {
+          const existing = await client.query<{ id: string }>(
+            `select id from cash_registers where tenant_id = $1 and branch_id = $2 and code = $3 and id <> $4`,
+            [scope.tenantId, scope.branchId, trimmed, registerId]
+          );
+          if (existing.rowCount && existing.rowCount > 0) {
+            throw new ConflictException({
+              code: "CASH_REGISTER_CODE_EXISTS",
+              message: `Ya existe una caja con el código ${trimmed} en esta sucursal.`
+            });
+          }
+          newCode = trimmed;
+        }
+      }
+
+      let newActive = current.isActive;
+      if (input.isActive !== undefined && input.isActive !== current.isActive) {
+        if (!input.isActive) {
+          const openShifts = await client.query<{ id: string }>(
+            `select csc.id
+             from cash_shift_controls csc
+             join cash_shifts cs on cs.id = csc.cash_shift_id
+             where cs.tenant_id = $1 and cs.branch_id = $2 and cs.cash_register_id = $3
+               and csc.status in ('OPEN', 'PENDING_APPROVAL')
+             limit 1`,
+            [scope.tenantId, scope.branchId, registerId]
+          );
+          if (openShifts.rowCount && openShifts.rowCount > 0) {
+            throw new ConflictException({
+              code: "CASH_REGISTER_IN_USE",
+              message: "No puedes desactivar una caja que tiene un turno abierto o pendiente de aprobación."
+            });
+          }
+          await releaseQuota(client, scope.tenantId, "cash_registers", 1);
+          newActive = false;
+        } else {
+          try {
+            await consumeQuota(client, scope.tenantId, "cash_registers", 1);
+          } catch (error) {
+            if (error instanceof QuotaExceededError) {
+              throw new HttpException(
+                { statusCode: 409, code: "PLAN_QUOTA_EXCEEDED", message: "Tu plan no permite más cajas activas. Sube de plan o desactiva alguna existente." },
+                HttpStatus.CONFLICT
+              );
+            }
+            if (error instanceof SubscriptionAccessError) {
+              throw new HttpException(
+                { statusCode: 402, code: "SUBSCRIPTION_INACTIVE", message: "La suscripción de la farmacia no está activa." },
+                HttpStatus.PAYMENT_REQUIRED
+              );
+            }
+            throw error;
+          }
+          newActive = true;
+        }
+      }
+
+      const updatedResult = await client.query<CashRegisterSummary>(
+        `update cash_registers
+         set code = $4, is_active = $5
+         where tenant_id = $1 and branch_id = $2 and id = $3
+         returning id, code, is_active as "isActive", created_at as "createdAt"`,
+        [scope.tenantId, scope.branchId, registerId, newCode, newActive]
+      );
+      const updated = updatedResult.rows[0]!;
+
+      await this.audit.recordInTransaction(client, scope, {
+        action: "cash.register_updated",
+        entityType: "cash_register",
+        entityId: updated.id,
+        payload: {
+          previous: { code: current.code, isActive: current.isActive },
+          next: { code: updated.code, isActive: updated.isActive }
+        }
+      });
+
+      await this.outbox.enqueueInTransaction(client, scope, {
+        aggregateType: "cash_register",
+        aggregateId: updated.id,
+        eventType: "cash.register.updated",
+        payload: { id: updated.id, code: updated.code, isActive: updated.isActive, branchId: scope.branchId }
+      });
+
+      return updated;
     });
   }
 

@@ -6,11 +6,13 @@ import {
   cashShiftIdempotencyKey,
   approveCashShift,
   countCashShift,
+  createCashRegister,
   createCashShift,
   listCashRegisters,
   listCashShifts,
   listEligibleCashUsers,
   openCashShift,
+  updateCashRegister,
   type CashRegister,
   type CashShift,
   type EligibleCashUser
@@ -31,6 +33,8 @@ export default function CashPage() {
   const [users, setUsers] = useState<EligibleCashUser[]>([]);
   const [shifts, setShifts] = useState<CashShift[]>([]);
   const [cashRegisterId, setCashRegisterId] = useState("");
+  const [newRegisterCode, setNewRegisterCode] = useState("");
+  const [registerBusy, setRegisterBusy] = useState<string | null>(null);
   const [scheduledStartAt, setScheduledStartAt] = useState("");
   const [scheduledEndAt, setScheduledEndAt] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -44,14 +48,15 @@ export default function CashPage() {
 
   async function refresh(): Promise<void> {
     const [registerResult, userResult, shiftResult] = await Promise.all([
-      listCashRegisters(),
+      listCashRegisters(true),
       listEligibleCashUsers(),
       listCashShifts()
     ]);
     setRegisters(registerResult.items);
     setUsers(userResult.items);
     setShifts(shiftResult.items);
-    setCashRegisterId((value) => value || registerResult.items[0]?.id || "");
+    const active = registerResult.items.filter((r) => r.isActive);
+    setCashRegisterId((value) => (active.some((r) => r.id === value) ? value : active[0]?.id || ""));
   }
 
   useEffect(() => {
@@ -185,6 +190,43 @@ export default function CashPage() {
     }
   }
 
+  async function handleCreateRegister(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const code = newRegisterCode.trim().toUpperCase();
+    if (!code) {
+      setError("Indica el código de la nueva caja (ej. CAJA-02).");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setRegisterBusy("create");
+    try {
+      await createCashRegister({ code });
+      setNewRegisterCode("");
+      await refresh();
+      setNotice(`Caja ${code} registrada exitosamente.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos registrar la caja.");
+    } finally {
+      setRegisterBusy(null);
+    }
+  }
+
+  async function handleToggleRegister(register: CashRegister): Promise<void> {
+    setError(null);
+    setNotice(null);
+    setRegisterBusy(register.id);
+    const nextState = !register.isActive;
+    try {
+      await updateCashRegister(register.id, { isActive: nextState });
+      await refresh();
+      setNotice(nextState ? `Caja ${register.code} activada.` : `Caja ${register.code} desactivada.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No pudimos actualizar la caja.");
+    } finally {
+      setRegisterBusy(null);
+    }
+  }
 
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando turnos de caja…</main>;
@@ -195,6 +237,8 @@ export default function CashPage() {
   if (!session.permissions.includes("cash.manage")) {
     return <main className="center-state inventory-denied"><div><strong>Acceso restringido</strong><p>Tu sesión no tiene permiso para administrar turnos de caja.</p><Link href="/dashboard">Volver al resumen</Link></div></main>;
   }
+
+  const activeRegisters = registers.filter((r) => r.isActive);
 
   return (
     <main className="cash-page">
@@ -237,19 +281,113 @@ export default function CashPage() {
           </article>)}</div> : <div className="procurement-empty"><span className="empty-symbol">◇</span><h3>Aún no hay turnos.</h3><p>Programa el primero cuando tengas una caja activa y personal asignable.</p></div>}
         </article>
 
-        <aside className="panel cash-form-panel">
-          <div className="panel-heading"><div><p className="section-kicker">Configuración</p><h2>Nuevo turno</h2></div><span className="sparkle">✦</span></div>
-          <form className="cash-form" onSubmit={submit}>
-            <label className="field"><span>Caja</span><select required value={cashRegisterId} onChange={(event) => setCashRegisterId(event.target.value)}><option value="">Selecciona una caja</option>{registers.map((register) => <option key={register.id} value={register.id}>{register.code}</option>)}</select></label>
-            <div className="cash-time-grid">
-              <label className="field"><span>Inicio</span><input required type="datetime-local" value={scheduledStartAt} onChange={(event) => setScheduledStartAt(event.target.value)} /></label>
-              <label className="field"><span>Fin</span><input required type="datetime-local" value={scheduledEndAt} onChange={(event) => setScheduledEndAt(event.target.value)} /></label>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <aside className="panel cash-form-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">Sucursal</p>
+                <h2>Cajas registradoras</h2>
+              </div>
+              <span className="panel-count">{registers.length.toString().padStart(2, "0")}</span>
             </div>
-            <fieldset className="cash-user-fieldset"><legend>Personas asignadas</legend>{users.length ? <div className="cash-user-list">{users.map((user) => <label key={user.id}><input checked={selectedUserIds.includes(user.id)} onChange={() => toggleUser(user.id)} type="checkbox" /><span>{user.displayName}</span></label>)}</div> : <p>No hay usuarios activos en esta sucursal.</p>}</fieldset>
-            <button className="primary-button" disabled={saving || !registers.length || !users.length} type="submit">{saving ? "Programando…" : "Programar turno"}<span>↗</span></button>
-            <p className="form-note">Los horarios son fechas absolutas. Dos turnos de la misma caja pueden ser adyacentes, pero nunca superponerse.</p>
-          </form>
-        </aside>
+            <form className="cash-form" onSubmit={handleCreateRegister} style={{ marginTop: "14px" }}>
+              <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+                <label className="field" style={{ flex: 1 }}>
+                  <span>Código de caja</span>
+                  <input
+                    type="text"
+                    placeholder="Ej. CAJA-02"
+                    value={newRegisterCode}
+                    onChange={(event) => setNewRegisterCode(event.target.value)}
+                    disabled={registerBusy === "create"}
+                  />
+                </label>
+                <button
+                  className="secondary-button"
+                  type="submit"
+                  disabled={registerBusy === "create" || !newRegisterCode.trim()}
+                  style={{ minHeight: "42px", whiteSpace: "nowrap" }}
+                >
+                  {registerBusy === "create" ? "Guardando…" : "Agregar"}
+                </button>
+              </div>
+            </form>
+            <div style={{ display: "grid", gap: "8px", marginTop: "14px" }}>
+              {registers.map((reg) => (
+                <div
+                  key={reg.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--surface-sunken)",
+                    border: "1px solid var(--line)"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <strong>{reg.code}</strong>
+                    <span
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: "var(--radius-pill)",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        background: reg.isActive ? "var(--pastel-green)" : "var(--pastel-gray)",
+                        color: reg.isActive ? "var(--green-ink)" : "var(--muted)"
+                      }}
+                    >
+                      {reg.isActive ? "Activa" : "Inactiva"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="quiet-button"
+                    style={{ fontSize: "12px", padding: "4px 8px" }}
+                    disabled={registerBusy === reg.id}
+                    onClick={() => void handleToggleRegister(reg)}
+                  >
+                    {registerBusy === reg.id
+                      ? "Guardando…"
+                      : reg.isActive
+                        ? "Desactivar"
+                        : "Activar"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          <aside className="panel cash-form-panel">
+            <div className="panel-heading"><div><p className="section-kicker">Configuración</p><h2>Nuevo turno</h2></div><span className="sparkle">✦</span></div>
+            <form className="cash-form" onSubmit={submit}>
+              <label className="field">
+                <span>Caja</span>
+                <select
+                  required
+                  value={cashRegisterId}
+                  onChange={(event) => setCashRegisterId(event.target.value)}
+                >
+                  <option value="">Selecciona una caja activa</option>
+                  {activeRegisters.map((register) => (
+                    <option key={register.id} value={register.id}>
+                      {register.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="cash-time-grid">
+                <label className="field"><span>Inicio</span><input required type="datetime-local" value={scheduledStartAt} onChange={(event) => setScheduledStartAt(event.target.value)} /></label>
+                <label className="field"><span>Fin</span><input required type="datetime-local" value={scheduledEndAt} onChange={(event) => setScheduledEndAt(event.target.value)} /></label>
+              </div>
+              <fieldset className="cash-user-fieldset"><legend>Personas asignadas</legend>{users.length ? <div className="cash-user-list">{users.map((user) => <label key={user.id}><input checked={selectedUserIds.includes(user.id)} onChange={() => toggleUser(user.id)} type="checkbox" /><span>{user.displayName}</span></label>)}</div> : <p>No hay usuarios activos en esta sucursal.</p>}</fieldset>
+              <button className="primary-button" disabled={saving || !activeRegisters.length || !users.length} type="submit">{saving ? "Programando…" : "Programar turno"}<span>↗</span></button>
+              <p className="form-note">Los horarios son fechas absolutas. Dos turnos de la misma caja pueden ser adyacentes, pero nunca superponerse.</p>
+            </form>
+          </aside>
+        </div>
       </section>
     </main>
   );

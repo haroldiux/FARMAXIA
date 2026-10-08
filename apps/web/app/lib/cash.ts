@@ -3,6 +3,8 @@ import { authenticatedFetch } from "./session";
 export interface CashRegister {
   id: string;
   code: string;
+  isActive: boolean;
+  createdAt?: string;
 }
 
 export interface EligibleCashUser {
@@ -119,6 +121,12 @@ async function parseError(response: Response): Promise<Error> {
     const nested = (body as { response?: { code?: string } }).response?.code;
     if (body.code === "CASH_SHIFT_OVERLAP") {
       message = "La caja ya tiene un turno dentro de ese horario.";
+    } else if (body.code === "PLAN_QUOTA_EXCEEDED") {
+      message = (body.message as string) || "El plan no permite más cajas activas. Sube de plan o desactiva alguna existente.";
+    } else if (body.code === "CASH_REGISTER_CODE_EXISTS") {
+      message = (body.message as string) || "Ya existe una caja con ese código en esta sucursal.";
+    } else if (body.code === "CASH_REGISTER_IN_USE") {
+      message = (body.message as string) || "No puedes desactivar una caja que tiene un turno abierto o pendiente de aprobación.";
     } else if (body.code === "CASH_MOVEMENT_EXCEEDS_EXPECTED" || nested === "CASH_MOVEMENT_EXCEEDS_EXPECTED") {
       message = "El egreso no puede superar el efectivo esperado del turno.";
     } else if (Array.isArray(body.message)) {
@@ -130,7 +138,7 @@ async function parseError(response: Response): Promise<Error> {
     // Keep a stable message when the API has no JSON response.
   }
   if (response.status === 403) {
-    message = "Tu sesión no tiene permiso para administrar turnos de caja.";
+    message = "Tu sesión no tiene permiso para administrar turnos o cajas.";
   }
   return new Error(message);
 }
@@ -143,8 +151,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function listCashRegisters(): Promise<{ items: CashRegister[] }> {
-  return request("/api/v1/cash/registers");
+export function listCashRegisters(all = false): Promise<{ items: CashRegister[] }> {
+  return request(`/api/v1/cash/registers${all ? "?all=true" : ""}`);
+}
+
+export function createCashRegister(input: { code: string }): Promise<CashRegister> {
+  return request("/api/v1/cash/registers", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export function updateCashRegister(
+  registerId: string,
+  input: { code?: string; isActive?: boolean }
+): Promise<CashRegister> {
+  return request(`/api/v1/cash/registers/${registerId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input)
+  });
 }
 
 export function listEligibleCashUsers(): Promise<{ items: EligibleCashUser[] }> {

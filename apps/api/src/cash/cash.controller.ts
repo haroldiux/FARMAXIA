@@ -1,10 +1,13 @@
 import { RequireFeature } from "../saas/subscription.guard.js";
-import { Body, Controller, Get, Inject, Param, Post, Req, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
 import { RequireAnyPermission, RequirePermissions } from "../auth/auth.decorators.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import {
   CashService,
   type CashRegisterListResult,
+  type CashRegisterSummary,
+  type CreateCashRegisterInput,
+  type UpdateCashRegisterInput,
   type CashShiftListResult,
   type CashShiftSummary,
   type CreateCashShiftInput,
@@ -32,8 +35,30 @@ export class CashController {
   constructor(@Inject(CashService) private readonly cash: CashService) {}
 
   @Get("registers")
-  listRegisters(@Req() request: AuthenticatedRequest): Promise<CashRegisterListResult> {
-    return this.cash.listRegisters(scopeFrom(request));
+  listRegisters(
+    @Req() request: AuthenticatedRequest,
+    @Query("all") all?: string
+  ): Promise<CashRegisterListResult> {
+    return this.cash.listRegisters(scopeFrom(request), all === "true" || all === "1");
+  }
+
+  @Post("registers")
+  @RequirePermissions("cash.manage", "cash.shift.approve")
+  createRegister(
+    @Req() request: AuthenticatedRequest,
+    @Body() input: CreateCashRegisterInput
+  ): Promise<CashRegisterSummary> {
+    return this.cash.createRegister(scopeFrom(request), input);
+  }
+
+  @Patch("registers/:registerId")
+  @RequirePermissions("cash.manage", "cash.shift.approve")
+  updateRegister(
+    @Req() request: AuthenticatedRequest,
+    @Param("registerId") registerId: string,
+    @Body() input: UpdateCashRegisterInput
+  ): Promise<CashRegisterSummary> {
+    return this.cash.updateRegister(scopeFrom(request), registerId, input);
   }
 
   @Get("eligible-users")
