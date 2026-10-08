@@ -16,7 +16,12 @@ import { RequirePermissions } from "../auth/auth.decorators.js";
 import { AuthModule } from "../auth/auth.module.js";
 import type { AuthenticatedRequest } from "../auth/authentication.guard.js";
 import { IdentityDatabase } from "./identity-database.js";
-import { IdentityService, type CreateUserInput, type RoleInput, type UpdateUserInput } from "./identity.service.js";
+import {
+  IdentityService,
+  type CreateUserInput,
+  type RoleInput,
+  type UpdateUserInput
+} from "./identity.service.js";
 
 function scopeFrom(request: AuthenticatedRequest) {
   if (!request.auth) {
@@ -56,11 +61,6 @@ export class IdentityController {
   @Post("users/:userId/2fa/reset")
   async resetTwoFactor(@Req() request: AuthenticatedRequest, @Param("userId") userId: string): Promise<void> {
     await this.identity.resetTwoFactor(scopeFrom(request), userId);
-  }
-
-  @Get("branches")
-  branches(@Req() request: AuthenticatedRequest) {
-    return this.identity.listBranches(scopeFrom(request));
   }
 
   @Get("permissions")

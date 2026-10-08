@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { formatDate } from "../lib/saas";
 import { currentSession, type AuthSession } from "../lib/session";
 import {
+  createBranch,
   createRole,
   createUser,
   deleteRole,
@@ -14,6 +15,7 @@ import {
   listUsers,
   resetUserPassword,
   resetUserTwoFactor,
+  updateBranch,
   updateRole,
   updateUser,
   type PermissionDefinition,
@@ -22,12 +24,15 @@ import {
   type TenantUser
 } from "../lib/users";
 
-type Tab = "users" | "roles";
+type Tab = "users" | "roles" | "branches";
 type UserPanel = { kind: "none" } | { kind: "create" } | { kind: "edit"; user: TenantUser } | { kind: "password"; user: TenantUser };
 type RolePanel = { kind: "none" } | { kind: "create" } | { kind: "edit"; role: TenantRole } | { kind: "view"; role: TenantRole };
+type BranchPanel = { kind: "none" } | { kind: "create" } | { kind: "edit"; branch: TenantBranch };
 
 const emptyUserForm = { displayName: "", email: "", password: "", roleIds: [] as string[], branchIds: [] as string[] };
 const emptyRoleForm = { name: "", description: "", permissionCodes: [] as string[] };
+const emptyBranchForm = { code: "", name: "" };
+
 
 function toggle(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
@@ -40,14 +45,17 @@ export default function UsersPage() {
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
   const [branches, setBranches] = useState<TenantBranch[]>([]);
+  const [allBranches, setAllBranches] = useState<TenantBranch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [userPanel, setUserPanel] = useState<UserPanel>({ kind: "none" });
   const [rolePanel, setRolePanel] = useState<RolePanel>({ kind: "none" });
+  const [branchPanel, setBranchPanel] = useState<BranchPanel>({ kind: "none" });
   const [userForm, setUserForm] = useState(emptyUserForm);
   const [roleForm, setRoleForm] = useState(emptyRoleForm);
+  const [branchForm, setBranchForm] = useState(emptyBranchForm);
   const [newPassword, setNewPassword] = useState("");
 
   const load = useCallback(async () => {
@@ -55,7 +63,18 @@ export default function UsersPage() {
     setUsers(nextUsers);
     setRoles(nextRoles);
     setPermissions(nextPermissions);
+    setAllBranches(nextBranches);
     setBranches(nextBranches.filter((branch) => branch.isActive));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam === "branches" || tabParam === "roles" || tabParam === "users") {
+        setTab(tabParam);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -156,6 +175,44 @@ export default function UsersPage() {
     });
   }
 
+  function openBranch(panel: BranchPanel): void {
+    setBranchPanel(panel);
+    setError(null);
+    setNotice(null);
+    setBranchForm(panel.kind === "edit"
+      ? { code: panel.branch.code, name: panel.branch.name }
+      : emptyBranchForm);
+  }
+
+  function submitBranch(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    void run(async () => {
+      const code = branchForm.code.trim().toUpperCase();
+      const name = branchForm.name.trim();
+      if (branchPanel.kind === "edit") {
+        await updateBranch(branchPanel.branch.id, { code, name });
+        setBranchPanel({ kind: "none" });
+        return "Sucursal actualizada.";
+      } else {
+        await createBranch({ code, name });
+        setBranchPanel({ kind: "none" });
+        return `Sucursal ${name} creada exitosamente.`;
+      }
+    });
+  }
+
+  function toggleBranchStatus(branch: TenantBranch): void {
+    const willDeactivate = branch.isActive;
+    if (willDeactivate && !window.confirm(`¿Desactivar la sucursal "${branch.name}"? Los usuarios no podrán operar en ella mientras esté inactiva.`)) {
+      return;
+    }
+    void run(async () => {
+      await updateBranch(branch.id, { isActive: !willDeactivate });
+      return willDeactivate ? `Sucursal ${branch.name} desactivada.` : `Sucursal ${branch.name} reactivada.`;
+    });
+  }
+
+
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando usuarios…</main>;
   }
@@ -180,6 +237,7 @@ export default function UsersPage() {
       <div className="segmented" role="tablist" aria-label="Secciones">
         <button aria-selected={tab === "users"} className={tab === "users" ? "is-active" : ""} onClick={() => setTab("users")} role="tab" type="button">Usuarios · {users.length}</button>
         <button aria-selected={tab === "roles"} className={tab === "roles" ? "is-active" : ""} onClick={() => setTab("roles")} role="tab" type="button">Roles · {roles.length}</button>
+        <button aria-selected={tab === "branches"} className={tab === "branches" ? "is-active" : ""} onClick={() => setTab("branches")} role="tab" type="button">Sucursales · {allBranches.length}</button>
       </div>
       {error ? <p className="form-error cash-message" role="alert">{error}</p> : null}
       {notice ? <p className="form-success cash-message" role="status">{notice}</p> : null}
@@ -282,7 +340,7 @@ export default function UsersPage() {
             )}
           </aside>
         </section>
-      ) : (
+      ) : tab === "roles" ? (
         <section className="cash-layout">
           <article className="panel">
             <div className="panel-heading"><div><p className="section-kicker">Permisos</p><h2>Roles</h2></div><button className="secondary-button" onClick={() => openRole({ kind: "create" })} type="button">+ Nuevo rol</button></div>
@@ -349,6 +407,104 @@ export default function UsersPage() {
                 {rolePanel.kind !== "view" ? (
                   <button className="primary-button" disabled={busy || !roleForm.permissionCodes.length} type="submit">{busy ? "Guardando…" : rolePanel.kind === "edit" ? "Guardar rol" : "Crear rol"}<span aria-hidden="true">↗</span></button>
                 ) : null}
+              </form>
+            )}
+          </aside>
+        </section>
+      ) : (
+        <section className="cash-layout">
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">Establecimientos</p>
+                <h2>Sucursales</h2>
+              </div>
+              <button className="secondary-button" onClick={() => openBranch({ kind: "create" })} type="button">
+                + Nueva sucursal
+              </button>
+            </div>
+            <div className="order-list">
+              {allBranches.map((branch) => (
+                <article className={`order-card ${branch.isActive ? "" : "is-inactive"}`} key={branch.id}>
+                  <div className="order-card-head">
+                    <div>
+                      <strong>{branch.name}</strong>
+                      <small>Código: <code>{branch.code}</code></small>
+                    </div>
+                    <span className={`order-status ${branch.isActive ? "order-open" : "order-partially_received"}`}>
+                      {branch.isActive ? "Activa" : "Desactivada"}
+                    </span>
+                  </div>
+                  <div className="order-card-foot">
+                    <small className="action-muted">
+                      {branch.isActive ? "Operativa para ventas e inventario" : "No admite nuevas operaciones"}
+                    </small>
+                    <div className="user-actions">
+                      <button className="row-action" onClick={() => openBranch({ kind: "edit", branch })} type="button">
+                        Editar
+                      </button>
+                      <button
+                        className={`row-action ${branch.isActive ? "row-action-danger" : ""}`}
+                        disabled={busy}
+                        onClick={() => toggleBranchStatus(branch)}
+                        type="button"
+                      >
+                        {branch.isActive ? "Desactivar" : "Reactivar"}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <aside className="panel cash-form-panel">
+            {branchPanel.kind === "none" ? (
+              <div className="inventory-action-placeholder billing-placeholder">
+                <span className="empty-symbol">✦</span>
+                <h2>Gestión de sucursales</h2>
+                <p>Cada sucursal creada habilita automáticamente su propio almacén central y membresía administrativa, consumiendo una cuota del plan.</p>
+              </div>
+            ) : (
+              <form className="cash-form" onSubmit={submitBranch}>
+                <div className="panel-heading">
+                  <div>
+                    <p className="section-kicker">{branchPanel.kind === "create" ? "Alta" : "Edición"}</p>
+                    <h2>{branchPanel.kind === "create" ? "Nueva sucursal" : branchPanel.branch.name}</h2>
+                  </div>
+                  <button aria-label="Cerrar" className="close-action" onClick={() => setBranchPanel({ kind: "none" })} type="button">×</button>
+                </div>
+                <label className="field">
+                  <span>Código de sucursal</span>
+                  <input
+                    autoCapitalize="characters"
+                    maxLength={20}
+                    minLength={2}
+                    placeholder="Ej. SUC-02"
+                    required
+                    style={{ textTransform: "uppercase" }}
+                    value={branchForm.code}
+                    onChange={(event) => setBranchForm({ ...branchForm, code: event.target.value.toUpperCase() })}
+                  />
+                </label>
+                <p className="form-note">Identificador único (máximo 20 caracteres en mayúsculas).</p>
+
+                <label className="field">
+                  <span>Nombre descriptivo</span>
+                  <input
+                    maxLength={120}
+                    minLength={2}
+                    placeholder="Ej. Sucursal Miraflores"
+                    required
+                    value={branchForm.name}
+                    onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })}
+                  />
+                </label>
+
+                <button className="primary-button" disabled={busy || !branchForm.code.trim() || !branchForm.name.trim()} type="submit">
+                  {busy ? "Guardando…" : branchPanel.kind === "create" ? "Crear sucursal" : "Guardar cambios"}
+                  <span aria-hidden="true">↗</span>
+                </button>
               </form>
             )}
           </aside>

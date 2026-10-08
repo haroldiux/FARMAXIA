@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "./auth/auth.module.js";
+import { BranchesModule } from "./branches/branches.module.js";
 import { CatalogModule } from "./catalog/catalog.module.js";
 import { CashModule } from "./cash/cash.module.js";
 import { FiscalModule } from "./fiscal/fiscal.module.js";
@@ -19,6 +20,7 @@ import { TransfersModule } from "./transfers/transfers.module.js";
 @Module({
   imports: [
     AuthModule,
+    BranchesModule,
     CashModule,
     CatalogModule,
     FiscalModule,

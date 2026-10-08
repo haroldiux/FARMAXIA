@@ -89,3 +89,14 @@ export async function updateRole(roleId: string, input: { name: string; descript
 export async function deleteRole(roleId: string): Promise<void> {
   await send(`/api/v1/roles/${encodeURIComponent(roleId)}`, "DELETE", undefined, "No pudimos eliminar el rol.");
 }
+
+export async function createBranch(input: { code: string; name: string }): Promise<TenantBranch> {
+  const response = await send("/api/v1/branches", "POST", input, "No pudimos crear la sucursal.");
+  return (await response.json()) as TenantBranch;
+}
+
+export async function updateBranch(branchId: string, input: { code?: string; name?: string; isActive?: boolean }): Promise<TenantBranch> {
+  const response = await send(`/api/v1/branches/${encodeURIComponent(branchId)}`, "PATCH", input, "No pudimos guardar los cambios de la sucursal.");
+  return (await response.json()) as TenantBranch;
+}
+

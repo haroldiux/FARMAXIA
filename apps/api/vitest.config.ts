@@ -25,6 +25,7 @@ export default defineConfig({
       "test/permissions.guard.spec.ts",
       "test/saas.spec.ts",
       "test/identity.spec.ts",
+      "test/branches.spec.ts",
       "test/catalog-profile.spec.ts",
       "test/inventory-operations.spec.ts",
       "test/sales-confirm.spec.ts",

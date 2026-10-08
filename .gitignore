@@ -12,3 +12,5 @@ pnpm-debug.log*
 # Local tool caches (regenerated on each machine)
 .atl/
 .codegraph/
+.local-preserve-*/
+
