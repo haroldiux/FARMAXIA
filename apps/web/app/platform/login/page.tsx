@@ -1,5 +1,7 @@
 "use client";
 
+import { AuthBrand, AuthShowcase } from "../../components/auth-showcase";
+import { ThemeToggle } from "../../components/theme-toggle";
 import { FormEvent, useState } from "react";
 import { platformLogin } from "../../lib/platform";
 
@@ -24,17 +26,16 @@ export default function PlatformLoginPage() {
   }
 
   return (
-    <main className="login-page">
+    <main className="login-page lx-page">
+      <ThemeToggle className="login-theme-toggle" />
       <section className="login-intro platform-intro">
-        <div className="brand-lockup brand-lockup-dark">
-          <div className="brand-mark">F</div>
-          <div><strong>FARMAXIA</strong><span>panel de plataforma</span></div>
-        </div>
+        <AuthBrand subtitle="panel de plataforma" />
         <div className="intro-copy">
           <p className="eyebrow">Solo operadores</p>
           <h1>Todas las farmacias,<br /><em>un solo lugar.</em></h1>
           <p>Planes, cobros, pagos por revisar y el estado de cada suscripción.</p>
         </div>
+        <AuthShowcase variant="platform" />
         <div className="intro-footer"><span>●</span> Acceso restringido <span>2026</span></div>
       </section>
       <section className="login-panel">

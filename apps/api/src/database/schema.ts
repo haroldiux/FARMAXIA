@@ -10,6 +10,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  text,
   timestamp,
   unique,
   uniqueIndex,
@@ -512,6 +513,52 @@ export const cashShiftControls = pgTable(
     check(
       "cash_shift_controls_difference_check",
       sql`${table.differenceAmountBob} is null or (${table.countedAmountBob} is not null and ${table.differenceAmountBob} = ${table.countedAmountBob} - ${table.expectedAmountBob})`
+    )
+  ]
+);
+
+export const cashMovements = pgTable(
+  "cash_movements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    cashShiftId: uuid("cash_shift_id").notNull(),
+    type: varchar("type", { length: 8 }).notNull(),
+    amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reason: varchar("reason", { length: 200 }).notNull(),
+    category: varchar("category", { length: 24 }),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "cash_movements_shift_fk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId],
+      foreignColumns: [cashShifts.tenantId, cashShifts.branchId, cashShifts.id]
+    }),
+    foreignKey({
+      name: "cash_movements_created_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [
+        userBranchMemberships.userId,
+        userBranchMemberships.tenantId,
+        userBranchMemberships.branchId
+      ]
+    }),
+    unique("cash_movements_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("cash_movements_shift_idx").on(
+      table.tenantId,
+      table.branchId,
+      table.cashShiftId,
+      table.createdAt
+    ),
+    check("cash_movements_type_check", sql`${table.type} in ('IN', 'OUT')`),
+    check("cash_movements_amount_positive_check", sql`${table.amountBob} > 0`),
+    check("cash_movements_reason_check", sql`length(btrim(${table.reason})) > 0`),
+    check(
+      "cash_movements_category_check",
+      sql`${table.category} is null or ${table.category} in ('CHANGE_FUND', 'EXPENSE', 'DEPOSIT', 'OTHER')`
     )
   ]
 );
@@ -1042,9 +1089,21 @@ export const purchaseOrders = pgTable(
     warehouseId: uuid("warehouse_id").notNull(),
     status: varchar("status", { length: 24 }).default("DRAFT").notNull(),
     orderedAt: timestamp("ordered_at", { withTimezone: true }).defaultNow().notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedByUserId: uuid("closed_by_user_id"),
+    closeReason: varchar("close_reason", { length: 255 }),
     createdAt
   },
   (table) => [
+    foreignKey({
+      name: "purchase_orders_closed_by_fk",
+      columns: [table.closedByUserId],
+      foreignColumns: [users.id]
+    }),
+    check(
+      "purchase_orders_status_check",
+      sql`${table.status} in ('DRAFT', 'SUBMITTED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELED', 'CLOSED')`
+    ),
     foreignKey({
       name: "purchase_orders_tenant_supplier_fk",
       columns: [table.tenantId, table.supplierId],
@@ -1545,9 +1604,13 @@ export const payables = pgTable(
     originalAmount: numeric("original_amount", { precision: 18, scale: 4 }).notNull(),
     outstandingAmount: numeric("outstanding_amount", { precision: 18, scale: 4 }).notNull(),
     status: varchar("status", { length: 24 }).default("OPEN").notNull(),
+    scheduledOn: date("scheduled_on"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt
   },
   (table) => [
+    check("payables_status_check", sql`${table.status} in ('OPEN', 'PARTIAL', 'PAID')`),
+    check("payables_outstanding_le_original_check", sql`${table.outstandingAmount} <= ${table.originalAmount}`),
     foreignKey({
       name: "payables_tenant_invoice_fk",
       columns: [table.tenantId, table.supplierInvoiceId],
@@ -1571,10 +1634,21 @@ export const sales = pgTable(
     status: varchar("status", { length: 24 }).default("CONFIRMED").notNull(),
     totalAmountBob: numeric("total_amount_bob", { precision: 18, scale: 4 }).notNull(),
     paidAmountBob: numeric("paid_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    changeAmountBob: numeric("change_amount_bob", { precision: 18, scale: 4 }).default("0").notNull(),
+    saleNumber: varchar("sale_number", { length: 40 }).notNull(),
     createdByUserId: uuid("created_by_user_id").notNull(),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedByUserId: uuid("voided_by_user_id"),
+    voidReason: varchar("void_reason", { length: 200 }),
+    customerId: uuid("customer_id"),
     createdAt
   },
   (table) => [
+    foreignKey({
+      name: "sales_tenant_customer_fk",
+      columns: [table.tenantId, table.customerId],
+      foreignColumns: [customers.tenantId, customers.id]
+    }),
     foreignKey({
       name: "sales_tenant_branch_fk",
       columns: [table.tenantId, table.branchId],
@@ -1596,10 +1670,58 @@ export const sales = pgTable(
       foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
     }),
     unique("sales_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("sales_tenant_branch_number_unique").on(table.tenantId, table.branchId, table.saleNumber),
     index("sales_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt),
-    check("sales_status_check", sql`${table.status} in ('CONFIRMED')`),
+    foreignKey({
+      name: "sales_voided_membership_fk",
+      columns: [table.voidedByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    check(
+      "sales_status_check",
+      sql`${table.status} in ('CONFIRMED', 'VOIDED', 'PARTIALLY_RETURNED', 'RETURNED')`
+    ),
+    check(
+      "sales_void_consistency_check",
+      sql`(${table.status} = 'VOIDED' and ${table.voidedAt} is not null and ${table.voidedByUserId} is not null and ${table.voidReason} is not null and length(btrim(${table.voidReason})) > 0) or (${table.status} <> 'VOIDED' and ${table.voidedAt} is null and ${table.voidedByUserId} is null and ${table.voidReason} is null)`
+    ),
     check("sales_total_nonnegative_check", sql`${table.totalAmountBob} >= 0`),
-    check("sales_paid_nonnegative_check", sql`${table.paidAmountBob} >= 0`)
+    check("sales_paid_nonnegative_check", sql`${table.paidAmountBob} >= 0`),
+    check("sales_change_nonnegative_check", sql`${table.changeAmountBob} >= 0`)
+  ]
+);
+
+export const stockAlerts = pgTable(
+  "stock_alerts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    daysOfStock: numeric("days_of_stock", { precision: 10, scale: 1 }),
+    availableBase: bigint("available_base", { mode: "number" }).notNull(),
+    createdAt,
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    acknowledgedByUserId: uuid("acknowledged_by_user_id"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true })
+  },
+  (table) => [
+    check("stock_alerts_kind_check", sql`${table.kind} in ('OUT_OF_STOCK', 'LOW_COVERAGE')`),
+    uniqueIndex("stock_alerts_one_open")
+      .on(table.tenantId, table.branchId, table.presentationId, table.kind)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    index("stock_alerts_branch_open_idx").on(table.tenantId, table.branchId, table.resolvedAt, table.createdAt),
+    foreignKey({
+      name: "stock_alerts_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "stock_alerts_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    })
   ]
 );
 
@@ -1615,6 +1737,10 @@ export const saleItems = pgTable(
     quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
     unitPriceBob: numeric("unit_price_bob", { precision: 18, scale: 4 }).notNull(),
     lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
+    fefoOverride: boolean("fefo_override").notNull().default(false),
+    fefoOverrideReason: varchar("fefo_override_reason", { length: 200 }),
+    /** F18: average cost per base unit snapshotted at confirm (null for historical sales or presentations without cost). */
+    unitCostBaseBob: numeric("unit_cost_base_bob", { precision: 18, scale: 6 }),
     createdAt
   },
   (table) => [
@@ -1631,7 +1757,12 @@ export const saleItems = pgTable(
     unique("sale_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
     index("sale_items_sale_idx").on(table.tenantId, table.branchId, table.saleId),
     check("sale_items_quantity_positive_check", sql`${table.quantity} > 0 and ${table.quantityBase} > 0`),
-    check("sale_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`)
+    check("sale_items_unit_cost_nonnegative_check", sql`${table.unitCostBaseBob} is null or ${table.unitCostBaseBob} >= 0`),
+    check("sale_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`),
+    check(
+      "sale_items_fefo_override_check",
+      sql`(${table.fefoOverride} and ${table.fefoOverrideReason} is not null and length(btrim(${table.fefoOverrideReason})) > 0) or (not ${table.fefoOverride} and ${table.fefoOverrideReason} is null)`
+    )
   ]
 );
 
@@ -1644,6 +1775,8 @@ export const salePayments = pgTable(
     saleId: uuid("sale_id").notNull(),
     method: varchar("method", { length: 16 }).notNull(),
     amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reference: varchar("reference", { length: 64 }),
+    reversedAt: timestamp("reversed_at", { withTimezone: true }),
     createdAt
   },
   (table) => [
@@ -1653,7 +1786,11 @@ export const salePayments = pgTable(
       foreignColumns: [sales.tenantId, sales.branchId, sales.id]
     }),
     unique("sale_payments_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
-    check("sale_payments_method_check", sql`${table.method} = 'CASH'`),
+    check("sale_payments_method_check", sql`${table.method} in ('CASH', 'CARD', 'QR', 'POINTS', 'AGREEMENT')`),
+    check(
+      "sale_payments_reference_check",
+      sql`(${table.method} in ('CASH', 'POINTS', 'AGREEMENT') and ${table.reference} is null) or (${table.method} in ('CARD', 'QR') and ${table.reference} is not null and length(btrim(${table.reference})) > 0)`
+    ),
     check("sale_payments_amount_nonnegative_check", sql`${table.amountBob} >= 0`)
   ]
 );
@@ -1667,6 +1804,7 @@ export const saleAllocations = pgTable(
     saleItemId: uuid("sale_item_id").notNull(),
     batchId: uuid("batch_id").notNull(),
     quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    fefoOverride: boolean("fefo_override").notNull().default(false),
     createdAt
   },
   (table) => [
@@ -1683,6 +1821,253 @@ export const saleAllocations = pgTable(
     unique("sale_allocations_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
     index("sale_allocations_item_idx").on(table.tenantId, table.branchId, table.saleItemId),
     check("sale_allocations_quantity_positive_check", sql`${table.quantityBase} > 0`)
+  ]
+);
+
+export const saleReturns = pgTable(
+  "sale_returns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    returnNumber: varchar("return_number", { length: 40 }).notNull(),
+    refundMethod: varchar("refund_method", { length: 8 }).notNull(),
+    refundReference: varchar("refund_reference", { length: 64 }),
+    refundAmountBob: numeric("refund_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reason: varchar("reason", { length: 200 }).notNull(),
+    restock: boolean("restock").notNull(),
+    cashShiftId: uuid("cash_shift_id"),
+    cashMovementId: uuid("cash_movement_id"),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    pointsReturned: integer("points_returned").notNull().default(0),
+    pointsRefundBob: numeric("points_refund_bob", { precision: 18, scale: 4 }).notNull().default("0"),
+    agreementRefundBob: numeric("agreement_refund_bob", { precision: 18, scale: 4 }).notNull().default("0"),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_returns_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    foreignKey({
+      name: "sale_returns_shift_fk",
+      columns: [table.tenantId, table.branchId, table.cashShiftId],
+      foreignColumns: [cashShifts.tenantId, cashShifts.branchId, cashShifts.id]
+    }),
+    foreignKey({
+      name: "sale_returns_movement_fk",
+      columns: [table.tenantId, table.branchId, table.cashMovementId],
+      foreignColumns: [cashMovements.tenantId, cashMovements.branchId, cashMovements.id]
+    }),
+    foreignKey({
+      name: "sale_returns_created_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    unique("sale_returns_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("sale_returns_tenant_branch_number_unique").on(table.tenantId, table.branchId, table.returnNumber),
+    index("sale_returns_sale_idx").on(table.tenantId, table.branchId, table.saleId),
+    check("sale_returns_method_check", sql`${table.refundMethod} in ('CASH', 'CARD', 'QR')`),
+    check(
+      "sale_returns_reference_check",
+      sql`(${table.refundMethod} = 'CASH' and ${table.refundReference} is null) or (${table.refundMethod} in ('CARD', 'QR') and ${table.refundReference} is not null and length(btrim(${table.refundReference})) > 0)`
+    ),
+    check("sale_returns_cash_shift_check", sql`(${table.refundMethod} = 'CASH') = (${table.cashShiftId} is not null)`),
+    check("sale_returns_amount_positive_check", sql`${table.refundAmountBob} > 0`),
+    check("sale_returns_reason_check", sql`length(btrim(${table.reason})) > 0`)
+  ]
+);
+
+export const saleReturnItems = pgTable(
+  "sale_return_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleReturnId: uuid("sale_return_id").notNull(),
+    saleItemId: uuid("sale_item_id").notNull(),
+    quantity: bigint("quantity", { mode: "number" }).notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    unitPriceBob: numeric("unit_price_bob", { precision: 18, scale: 4 }).notNull(),
+    lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_return_items_return_fk",
+      columns: [table.tenantId, table.branchId, table.saleReturnId],
+      foreignColumns: [saleReturns.tenantId, saleReturns.branchId, saleReturns.id]
+    }),
+    foreignKey({
+      name: "sale_return_items_item_fk",
+      columns: [table.tenantId, table.branchId, table.saleItemId],
+      foreignColumns: [saleItems.tenantId, saleItems.branchId, saleItems.id]
+    }),
+    unique("sale_return_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("sale_return_items_item_idx").on(table.tenantId, table.branchId, table.saleItemId),
+    index("sale_return_items_return_idx").on(table.tenantId, table.branchId, table.saleReturnId),
+    check("sale_return_items_quantity_positive_check", sql`${table.quantity} > 0 and ${table.quantityBase} > 0`),
+    check("sale_return_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`)
+  ]
+);
+
+export const saleReturnAllocations = pgTable(
+  "sale_return_allocations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleReturnItemId: uuid("sale_return_item_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    quantityBase: bigint("quantity_base", { mode: "number" }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sale_return_allocations_item_fk",
+      columns: [table.tenantId, table.branchId, table.saleReturnItemId],
+      foreignColumns: [saleReturnItems.tenantId, saleReturnItems.branchId, saleReturnItems.id]
+    }),
+    foreignKey({
+      name: "sale_return_allocations_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    index("sale_return_allocations_item_idx").on(table.tenantId, table.branchId, table.saleReturnItemId),
+    check("sale_return_allocations_quantity_positive_check", sql`${table.quantityBase} > 0`)
+  ]
+);
+
+// Module 5 (migration 0025): quotes (proformas). No stock reservation; EXPIRED is derived at read time.
+export const salesQuotes = pgTable(
+  "sales_quotes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    quoteNumber: varchar("quote_number", { length: 40 }).notNull(),
+    status: varchar("status", { length: 16 }).default("OPEN").notNull(),
+    customerName: varchar("customer_name", { length: 120 }),
+    customerNote: varchar("customer_note", { length: 500 }),
+    validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+    totalAmountBob: numeric("total_amount_bob", { precision: 18, scale: 4 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt,
+    convertedSaleId: uuid("converted_sale_id"),
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    canceledByUserId: uuid("canceled_by_user_id")
+  },
+  (table) => [
+    foreignKey({
+      name: "sales_quotes_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "sales_quotes_created_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    foreignKey({
+      name: "sales_quotes_canceled_membership_fk",
+      columns: [table.canceledByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    foreignKey({
+      name: "sales_quotes_sale_fk",
+      columns: [table.tenantId, table.branchId, table.convertedSaleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    unique("sales_quotes_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("sales_quotes_tenant_branch_number_unique").on(table.tenantId, table.branchId, table.quoteNumber),
+    index("sales_quotes_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt),
+    check("sales_quotes_status_check", sql`${table.status} in ('OPEN', 'CONVERTED', 'CANCELED')`),
+    check("sales_quotes_total_nonnegative_check", sql`${table.totalAmountBob} >= 0`),
+    check(
+      "sales_quotes_customer_name_check",
+      sql`${table.customerName} is null or length(btrim(${table.customerName})) > 0`
+    ),
+    check(
+      "sales_quotes_state_check",
+      sql`(${table.status} = 'OPEN' and ${table.convertedSaleId} is null and ${table.convertedAt} is null and ${table.canceledAt} is null and ${table.canceledByUserId} is null) or (${table.status} = 'CONVERTED' and ${table.convertedSaleId} is not null and ${table.convertedAt} is not null and ${table.canceledAt} is null and ${table.canceledByUserId} is null) or (${table.status} = 'CANCELED' and ${table.convertedSaleId} is null and ${table.convertedAt} is null and ${table.canceledAt} is not null and ${table.canceledByUserId} is not null)`
+    )
+  ]
+);
+
+export const salesQuoteItems = pgTable(
+  "sales_quote_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    quoteId: uuid("quote_id").notNull(),
+    position: integer("position").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    quantity: bigint("quantity", { mode: "number" }).notNull(),
+    unitPriceBob: numeric("unit_price_bob", { precision: 18, scale: 4 }).notNull(),
+    lineTotalBob: numeric("line_total_bob", { precision: 18, scale: 4 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "sales_quote_items_quote_fk",
+      columns: [table.tenantId, table.branchId, table.quoteId],
+      foreignColumns: [salesQuotes.tenantId, salesQuotes.branchId, salesQuotes.id]
+    }),
+    foreignKey({
+      name: "sales_quote_items_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    unique("sales_quote_items_position_unique").on(table.tenantId, table.branchId, table.quoteId, table.position),
+    unique("sales_quote_items_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("sales_quote_items_quote_idx").on(table.tenantId, table.branchId, table.quoteId),
+    check("sales_quote_items_quantity_positive_check", sql`${table.quantity} > 0`),
+    check("sales_quote_items_price_nonnegative_check", sql`${table.unitPriceBob} >= 0 and ${table.lineTotalBob} >= 0`)
+  ]
+);
+
+// F13 (0026): scaffold for module 6 fiscal invoicing (SIAT). D03 (SIN modality/contract/certificate)
+// is external and pending; this table only supports the FiscalProvider port + StubFiscalProvider,
+// never a real SIN connection. See D50-D52 in REGISTRO_DECISIONES.md.
+export const fiscalInvoices = pgTable(
+  "fiscal_invoices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    status: varchar("status", { length: 24 }).default("PENDING_PROVIDER").notNull(),
+    cuf: varchar("cuf", { length: 100 }),
+    cufd: varchar("cufd", { length: 100 }),
+    xml: text("xml"),
+    qrData: text("qr_data"),
+    providerName: varchar("provider_name", { length: 60 }),
+    errorMessage: varchar("error_message", { length: 500 }),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "fiscal_invoices_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "fiscal_invoices_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    unique("fiscal_invoices_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("fiscal_invoices_tenant_branch_sale_unique").on(table.tenantId, table.branchId, table.saleId),
+    index("fiscal_invoices_branch_status_idx").on(table.tenantId, table.branchId, table.status),
+    check(
+      "fiscal_invoices_status_check",
+      sql`${table.status} in ('PENDING_PROVIDER', 'ISSUED', 'CONTINGENCY', 'VOIDED', 'ERROR')`
+    )
   ]
 );
 
@@ -1826,5 +2211,592 @@ export const platformAuditEvents = pgTable(
       foreignColumns: [platformOperators.id]
     }),
     index("platform_audit_events_occurred_idx").on(table.occurredAt)
+  ]
+);
+
+export const supplierPayments = pgTable(
+  "supplier_payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    payableId: uuid("payable_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    paidOn: date("paid_on").notNull(),
+    amount: numeric("amount", { precision: 18, scale: 4 }).notNull(),
+    method: varchar("method", { length: 16 }).notNull(),
+    reference: varchar("reference", { length: 120 }),
+    notes: varchar("notes", { length: 255 }),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    unique("supplier_payments_tenant_id_unique").on(table.tenantId, table.id),
+    unique("supplier_payments_tenant_idempotency_unique").on(table.tenantId, table.idempotencyKey),
+    check("supplier_payments_amount_positive_check", sql`${table.amount} > 0`),
+    check("supplier_payments_method_check", sql`${table.method} in ('CASH', 'TRANSFER', 'CHECK', 'QR', 'OTHER')`),
+    foreignKey({ name: "supplier_payments_payable_fk", columns: [table.tenantId, table.payableId], foreignColumns: [payables.tenantId, payables.id] }),
+    foreignKey({ name: "supplier_payments_supplier_fk", columns: [table.tenantId, table.supplierId], foreignColumns: [suppliers.tenantId, suppliers.id] }),
+    foreignKey({ name: "supplier_payments_created_by_fk", columns: [table.createdByUserId], foreignColumns: [users.id] }),
+    index("supplier_payments_payable_idx").on(table.tenantId, table.payableId, table.paidOn)
+  ]
+);
+
+export const presentationCosts = pgTable(
+  "presentation_costs",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    averageUnitCost: numeric("average_unit_cost", { precision: 18, scale: 6 }).notNull(),
+    lastUnitCost: numeric("last_unit_cost", { precision: 18, scale: 4 }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    primaryKey({ name: "presentation_costs_pk", columns: [table.tenantId, table.presentationId] }),
+    check("presentation_costs_non_negative_check", sql`${table.averageUnitCost} >= 0 and ${table.lastUnitCost} >= 0`),
+    foreignKey({
+      name: "presentation_costs_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    })
+  ]
+);
+
+// F14 (T1): branch-to-branch transfers (module 7). Stock leaves the origin's inventory_balances
+// at DISPATCH and enters the destination's at RECEPTION, by the quantity actually received (D55).
+// Visible from both the origin and destination branch (RLS checks either warehouse's branch).
+export const transfers = pgTable(
+  "transfers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    originWarehouseId: uuid("origin_warehouse_id").notNull(),
+    destinationWarehouseId: uuid("destination_warehouse_id").notNull(),
+    status: varchar("status", { length: 24 }).default("REQUESTED").notNull(),
+    requestedByUserId: uuid("requested_by_user_id").notNull(),
+    dispatchedByUserId: uuid("dispatched_by_user_id"),
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    // F14 (T2): approval flow bookkeeping (Premium plan only, D53). See 0028_transfer_approval.sql.
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedByUserId: uuid("approved_by_user_id"),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectionReason: varchar("rejection_reason", { length: 255 }),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      name: "transfers_tenant_origin_warehouse_fk",
+      columns: [table.tenantId, table.originWarehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "transfers_tenant_destination_warehouse_fk",
+      columns: [table.tenantId, table.destinationWarehouseId],
+      foreignColumns: [warehouses.tenantId, warehouses.id]
+    }),
+    foreignKey({
+      name: "transfers_requested_by_fk",
+      columns: [table.requestedByUserId],
+      foreignColumns: [users.id]
+    }),
+    foreignKey({
+      name: "transfers_dispatched_by_fk",
+      columns: [table.dispatchedByUserId],
+      foreignColumns: [users.id]
+    }),
+    foreignKey({
+      name: "transfers_approved_by_fk",
+      columns: [table.approvedByUserId],
+      foreignColumns: [users.id]
+    }),
+    unique("transfers_tenant_id_unique").on(table.tenantId, table.id),
+    check(
+      "transfers_status_check",
+      sql`${table.status} in ('REQUESTED', 'APPROVED', 'DISPATCHED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'REJECTED', 'CANCELLED')`
+    ),
+    check("transfers_origin_destination_distinct_check", sql`${table.originWarehouseId} <> ${table.destinationWarehouseId}`)
+  ]
+);
+
+export const transferItems = pgTable(
+  "transfer_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    transferId: uuid("transfer_id").notNull(),
+    presentationId: uuid("presentation_id").notNull(),
+    batchId: uuid("batch_id").notNull(),
+    requestedQty: bigint("requested_qty", { mode: "number" }).notNull(),
+    dispatchedQty: bigint("dispatched_qty", { mode: "number" }),
+    receivedQty: bigint("received_qty", { mode: "number" }).default(0).notNull(),
+    differenceReason: varchar("difference_reason", { length: 255 }),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "transfer_items_tenant_transfer_fk",
+      columns: [table.tenantId, table.transferId],
+      foreignColumns: [transfers.tenantId, transfers.id]
+    }),
+    foreignKey({
+      name: "transfer_items_tenant_presentation_fk",
+      columns: [table.tenantId, table.presentationId],
+      foreignColumns: [productPresentations.tenantId, productPresentations.id]
+    }),
+    foreignKey({
+      name: "transfer_items_tenant_batch_fk",
+      columns: [table.tenantId, table.batchId],
+      foreignColumns: [inventoryBatches.tenantId, inventoryBatches.id]
+    }),
+    unique("transfer_items_tenant_id_unique").on(table.tenantId, table.id),
+    check("transfer_items_requested_qty_positive_check", sql`${table.requestedQty} > 0`),
+    check("transfer_items_dispatched_qty_non_negative_check", sql`${table.dispatchedQty} is null or ${table.dispatchedQty} >= 0`),
+    check("transfer_items_received_qty_non_negative_check", sql`${table.receivedQty} >= 0`)
+  ]
+);
+
+// F15 (T1): controlled medicines (module 8). One immutable prescription per sale that dispenses a
+// controlled product (D57); the app role only has SELECT/INSERT (migration 0029).
+export const controlledPrescriptions = pgTable(
+  "controlled_prescriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    folio: varchar("folio", { length: 40 }).notNull(),
+    doctorName: varchar("doctor_name", { length: 160 }).notNull(),
+    doctorLicense: varchar("doctor_license", { length: 40 }).notNull(),
+    patientName: varchar("patient_name", { length: 160 }).notNull(),
+    patientDocument: varchar("patient_document", { length: 40 }).notNull(),
+    issuingCenter: varchar("issuing_center", { length: 160 }).notNull(),
+    prescribedAt: date("prescribed_at").notNull(),
+    notes: varchar("notes", { length: 500 }),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "controlled_prescriptions_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "controlled_prescriptions_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    foreignKey({
+      name: "controlled_prescriptions_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    unique("controlled_prescriptions_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    unique("controlled_prescriptions_tenant_branch_sale_unique").on(table.tenantId, table.branchId, table.saleId),
+    unique("controlled_prescriptions_tenant_branch_folio_unique").on(table.tenantId, table.branchId, table.folio),
+    index("controlled_prescriptions_branch_created_idx").on(table.tenantId, table.branchId, table.createdAt)
+  ]
+);
+
+// F16 (T1): staff module (module 9). Branch roster of work shifts (not cash shifts), plus
+// tenant-wide commission rules and tiers (migration 0030, D61-D65).
+export const staffShifts = pgTable(
+  "staff_shifts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    notes: varchar("notes", { length: 300 }),
+    status: varchar("status", { length: 12 }).default("SCHEDULED").notNull(),
+    cancelReason: varchar("cancel_reason", { length: 200 }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+    checkedOutAt: timestamp("checked_out_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({
+      name: "staff_shifts_tenant_branch_fk",
+      columns: [table.tenantId, table.branchId],
+      foreignColumns: [branches.tenantId, branches.id]
+    }),
+    foreignKey({
+      name: "staff_shifts_user_membership_fk",
+      columns: [table.userId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    foreignKey({
+      name: "staff_shifts_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    unique("staff_shifts_tenant_branch_id_unique").on(table.tenantId, table.branchId, table.id),
+    index("staff_shifts_branch_start_idx").on(table.tenantId, table.branchId, table.startsAt),
+    index("staff_shifts_user_start_idx").on(table.tenantId, table.branchId, table.userId, table.startsAt),
+    check("staff_shifts_kind_check", sql`${table.kind} in ('REGULAR', 'NIGHT_DUTY')`),
+    check("staff_shifts_status_check", sql`${table.status} in ('SCHEDULED', 'CANCELED')`),
+    check("staff_shifts_window_check", sql`${table.endsAt} > ${table.startsAt}`),
+    check("staff_shifts_cancel_check", sql`(${table.status} = 'CANCELED') = (${table.cancelReason} is not null)`),
+    check(
+      "staff_shifts_attendance_check",
+      sql`${table.checkedOutAt} is null or (${table.checkedInAt} is not null and ${table.checkedOutAt} >= ${table.checkedInAt})`
+    )
+  ]
+);
+
+export const commissionRules = pgTable(
+  "commission_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    scope: varchar("scope", { length: 12 }).notNull(),
+    targetId: uuid("target_id"),
+    ratePercent: numeric("rate_percent", { precision: 5, scale: 2 }).notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "commission_rules_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    uniqueIndex("commission_rules_target_unique")
+      .on(table.tenantId, table.scope, table.targetId)
+      .where(sql`${table.targetId} is not null`),
+    uniqueIndex("commission_rules_default_unique").on(table.tenantId).where(sql`${table.scope} = 'DEFAULT'`),
+    check("commission_rules_scope_check", sql`${table.scope} in ('DEFAULT', 'CATEGORY', 'PRODUCT')`),
+    check("commission_rules_target_check", sql`(${table.scope} = 'DEFAULT') = (${table.targetId} is null)`),
+    check("commission_rules_rate_check", sql`${table.ratePercent} >= 0 and ${table.ratePercent} <= 100`)
+  ]
+);
+
+export const commissionTiers = pgTable(
+  "commission_tiers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    minNetSalesBob: numeric("min_net_sales_bob", { precision: 18, scale: 2 }).notNull(),
+    ratePercent: numeric("rate_percent", { precision: 5, scale: 2 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "commission_tiers_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    unique("commission_tiers_tenant_min_unique").on(table.tenantId, table.minNetSalesBob),
+    check("commission_tiers_min_check", sql`${table.minNetSalesBob} >= 0`),
+    check("commission_tiers_rate_check", sql`${table.ratePercent} >= 0 and ${table.ratePercent} <= 100`)
+  ]
+);
+
+// F17 (Part A): CRM customers and loyalty (migration 0031). Customers are tenant-wide.
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    fullName: varchar("full_name", { length: 160 }).notNull(),
+    docType: varchar("doc_type", { length: 10 }),
+    docNumber: varchar("doc_number", { length: 30 }),
+    complement: varchar("complement", { length: 3 }),
+    phone: varchar("phone", { length: 30 }),
+    email: varchar("email", { length: 160 }),
+    notes: varchar("notes", { length: 500 }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "customers_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    unique("customers_tenant_id_unique").on(table.tenantId, table.id),
+    uniqueIndex("customers_document_unique")
+      .on(table.tenantId, table.docType, table.docNumber)
+      .where(sql`${table.docNumber} is not null`),
+    index("customers_name_idx").on(table.tenantId, table.fullName),
+    check("customers_name_check", sql`length(btrim(${table.fullName})) > 0`),
+    check("customers_doc_type_check", sql`${table.docType} in ('CI', 'NIT', 'PASSPORT', 'OTHER')`),
+    check("customers_doc_pair_check", sql`(${table.docType} is null) = (${table.docNumber} is null)`),
+    check("customers_complement_check", sql`${table.complement} is null or ${table.docType} = 'CI'`)
+  ]
+);
+
+export const loyaltySettings = pgTable(
+  "loyalty_settings",
+  {
+    tenantId: uuid("tenant_id").primaryKey(),
+    enabled: boolean("enabled").notNull().default(true),
+    bobPerPoint: numeric("bob_per_point", { precision: 18, scale: 4 }).notNull().default("10"),
+    pointValueBob: numeric("point_value_bob", { precision: 18, scale: 4 }).notNull().default("0.10"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "loyalty_settings_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    check("loyalty_settings_bob_per_point_check", sql`${table.bobPerPoint} > 0`),
+    check("loyalty_settings_point_value_check", sql`${table.pointValueBob} > 0`)
+  ]
+);
+
+export const loyaltyMovements = pgTable(
+  "loyalty_movements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    saleId: uuid("sale_id"),
+    saleReturnId: uuid("sale_return_id"),
+    kind: varchar("kind", { length: 10 }).notNull(),
+    points: integer("points").notNull(),
+    reason: varchar("reason", { length: 300 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "loyalty_movements_tenant_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "loyalty_movements_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+    foreignKey({
+      name: "loyalty_movements_sale_fk",
+      columns: [table.tenantId, table.branchId, table.saleId],
+      foreignColumns: [sales.tenantId, sales.branchId, sales.id]
+    }),
+    foreignKey({
+      name: "loyalty_movements_creator_membership_fk",
+      columns: [table.createdByUserId, table.tenantId, table.branchId],
+      foreignColumns: [userBranchMemberships.userId, userBranchMemberships.tenantId, userBranchMemberships.branchId]
+    }),
+    index("loyalty_movements_customer_idx").on(table.tenantId, table.customerId, table.createdAt),
+    check("loyalty_movements_kind_check", sql`${table.kind} in ('EARN', 'REDEEM', 'REVERSAL', 'ADJUST')`),
+    check(
+      "loyalty_movements_points_check",
+      sql`${table.points} <> 0 and ((${table.kind} = 'EARN' and ${table.points} > 0) or (${table.kind} = 'REDEEM' and ${table.points} < 0) or ${table.kind} in ('REVERSAL', 'ADJUST'))`
+    ),
+    check(
+      "loyalty_movements_source_check",
+      sql`(${table.kind} = 'ADJUST' and ${table.saleId} is null and ${table.saleReturnId} is null) or (${table.kind} <> 'ADJUST' and ${table.saleId} is not null)`
+    ),
+    check("loyalty_movements_reason_check", sql`length(btrim(${table.reason})) > 0`)
+  ]
+);
+
+// F17 (Part B): CRM agreements (migration 0032). Agreements, members and statements are tenant-wide;
+// charges are written by the selling branch and read tenant-wide for the monthly statement.
+export const agreements = pgTable(
+  "agreements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    kind: varchar("kind", { length: 10 }).notNull(),
+    payerName: varchar("payer_name", { length: 160 }).notNull(),
+    payerTaxId: varchar("payer_tax_id", { length: 30 }),
+    coveragePercent: numeric("coverage_percent", { precision: 5, scale: 2 }).notNull(),
+    monthlyLimitBob: numeric("monthly_limit_bob", { precision: 18, scale: 4 }).notNull(),
+    notes: varchar("notes", { length: 500 }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreements_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    unique("agreements_tenant_id_unique").on(table.tenantId, table.id),
+    unique("agreements_tenant_name_unique").on(table.tenantId, table.name),
+    check("agreements_name_check", sql`length(btrim(${table.name})) > 0 and length(btrim(${table.payerName})) > 0`),
+    check("agreements_kind_check", sql`${table.kind} in ('INSURER', 'COMPANY', 'UNION')`),
+    check("agreements_coverage_check", sql`${table.coveragePercent} > 0 and ${table.coveragePercent} <= 100`),
+    check("agreements_limit_check", sql`${table.monthlyLimitBob} > 0`)
+  ]
+);
+
+export const agreementMembers = pgTable(
+  "agreement_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    agreementId: uuid("agreement_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    memberCode: varchar("member_code", { length: 40 }).notNull(),
+    monthlyLimitBob: numeric("monthly_limit_bob", { precision: 18, scale: 4 }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreement_members_agreement_fk", columns: [table.tenantId, table.agreementId], foreignColumns: [agreements.tenantId, agreements.id] }),
+    foreignKey({ name: "agreement_members_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+    unique("agreement_members_tenant_id_unique").on(table.tenantId, table.id),
+    unique("agreement_members_customer_unique").on(table.tenantId, table.agreementId, table.customerId),
+    unique("agreement_members_code_unique").on(table.tenantId, table.agreementId, table.memberCode),
+    index("agreement_members_customer_idx").on(table.tenantId, table.customerId),
+    check("agreement_members_code_check", sql`length(btrim(${table.memberCode})) > 0`),
+    check("agreement_members_limit_check", sql`${table.monthlyLimitBob} is null or ${table.monthlyLimitBob} > 0`)
+  ]
+);
+
+export const agreementStatements = pgTable(
+  "agreement_statements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    agreementId: uuid("agreement_id").notNull(),
+    period: varchar("period", { length: 7 }).notNull(),
+    statementNumber: varchar("statement_number", { length: 40 }).notNull(),
+    branchId: uuid("branch_id").notNull(),
+    totalBob: numeric("total_bob", { precision: 18, scale: 4 }).notNull(),
+    paidBob: numeric("paid_bob", { precision: 18, scale: 4 }).notNull().default("0"),
+    status: varchar("status", { length: 10 }).notNull().default("ISSUED"),
+    issuedByUserId: uuid("issued_by_user_id").notNull(),
+    issuedByName: varchar("issued_by_name", { length: 160 }).notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreement_statements_agreement_fk", columns: [table.tenantId, table.agreementId], foreignColumns: [agreements.tenantId, agreements.id] }),
+    foreignKey({ name: "agreement_statements_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "agreement_statements_issuer_fk", columns: [table.issuedByUserId], foreignColumns: [users.id] }),
+    unique("agreement_statements_tenant_id_unique").on(table.tenantId, table.id),
+    unique("agreement_statements_period_unique").on(table.tenantId, table.agreementId, table.period),
+    unique("agreement_statements_number_unique").on(table.tenantId, table.statementNumber),
+    check("agreement_statements_status_check", sql`${table.status} in ('ISSUED', 'PARTIAL', 'PAID')`),
+    check("agreement_statements_total_check", sql`${table.totalBob} > 0 and ${table.paidBob} >= 0 and ${table.paidBob} <= ${table.totalBob}`)
+  ]
+);
+
+export const agreementStatementPayments = pgTable(
+  "agreement_statement_payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    statementId: uuid("statement_id").notNull(),
+    amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    method: varchar("method", { length: 10 }).notNull(),
+    reference: varchar("reference", { length: 120 }),
+    paidOn: date("paid_on").notNull(),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdByName: varchar("created_by_name", { length: 160 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    foreignKey({ name: "agreement_statement_payments_statement_fk", columns: [table.tenantId, table.statementId], foreignColumns: [agreementStatements.tenantId, agreementStatements.id] }),
+    foreignKey({ name: "agreement_statement_payments_creator_fk", columns: [table.createdByUserId], foreignColumns: [users.id] }),
+    unique("agreement_statement_payments_key_unique").on(table.tenantId, table.idempotencyKey),
+    index("agreement_statement_payments_statement_idx").on(table.tenantId, table.statementId),
+    check("agreement_statement_payments_amount_check", sql`${table.amountBob} > 0`),
+    check("agreement_statement_payments_method_check", sql`${table.method} in ('TRANSFER', 'CHECK', 'CASH', 'QR', 'OTHER')`)
+  ]
+);
+
+export const agreementCharges = pgTable(
+  "agreement_charges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    agreementId: uuid("agreement_id").notNull(),
+    memberId: uuid("member_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    saleNumber: varchar("sale_number", { length: 40 }).notNull(),
+    branchCode: varchar("branch_code", { length: 30 }).notNull(),
+    amountBob: numeric("amount_bob", { precision: 18, scale: 4 }).notNull(),
+    reducedAmountBob: numeric("reduced_amount_bob", { precision: 18, scale: 4 }).notNull().default("0"),
+    status: varchar("status", { length: 10 }).notNull().default("OPEN"),
+    statementId: uuid("statement_id"),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({ name: "agreement_charges_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "agreement_charges_agreement_fk", columns: [table.tenantId, table.agreementId], foreignColumns: [agreements.tenantId, agreements.id] }),
+    foreignKey({ name: "agreement_charges_member_fk", columns: [table.tenantId, table.memberId], foreignColumns: [agreementMembers.tenantId, agreementMembers.id] }),
+    foreignKey({ name: "agreement_charges_customer_fk", columns: [table.tenantId, table.customerId], foreignColumns: [customers.tenantId, customers.id] }),
+    foreignKey({ name: "agreement_charges_sale_fk", columns: [table.tenantId, table.branchId, table.saleId], foreignColumns: [sales.tenantId, sales.branchId, sales.id] }),
+    foreignKey({ name: "agreement_charges_statement_fk", columns: [table.tenantId, table.statementId], foreignColumns: [agreementStatements.tenantId, agreementStatements.id] }),
+    unique("agreement_charges_sale_unique").on(table.tenantId, table.branchId, table.saleId),
+    index("agreement_charges_member_idx").on(table.tenantId, table.memberId, table.createdAt),
+    check("agreement_charges_status_check", sql`${table.status} in ('OPEN', 'BILLED', 'VOIDED')`),
+    check("agreement_charges_amount_check", sql`${table.amountBob} > 0 and ${table.reducedAmountBob} >= 0 and ${table.reducedAmountBob} <= ${table.amountBob}`),
+    check("agreement_charges_statement_check", sql`(${table.status} = 'BILLED') = (${table.statementId} is not null)`)
+  ]
+);
+
+// Migration 0035 (F19 Module 12): public API keys, webhook endpoints and deliveries.
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    name: varchar("name", { length: 100 }).notNull(),
+    keyPrefix: varchar("key_prefix", { length: 16 }).notNull(),
+    keyHash: varchar("key_hash", { length: 64 }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedByUserId: uuid("revoked_by_user_id"),
+    createdAt
+  },
+  (table) => [
+    uniqueIndex("api_keys_key_hash_unique").on(table.keyHash),
+    index("api_keys_tenant_branch_idx").on(table.tenantId, table.branchId, table.createdAt),
+    foreignKey({ name: "api_keys_tenant_branch_fk", columns: [table.tenantId, table.branchId], foreignColumns: [branches.tenantId, branches.id] }),
+    foreignKey({ name: "api_keys_created_by_fk", columns: [table.createdByUserId], foreignColumns: [users.id] }),
+    foreignKey({ name: "api_keys_revoked_by_fk", columns: [table.revokedByUserId], foreignColumns: [users.id] })
+  ]
+);
+
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    url: varchar("url", { length: 500 }).notNull(),
+    description: varchar("description", { length: 200 }),
+    secret: varchar("secret", { length: 128 }).notNull(),
+    eventTypes: text("event_types").array().notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdByUserId: uuid("created_by_user_id").notNull(),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+  },
+  (table) => [
+    unique("webhook_endpoints_tenant_id_unique").on(table.tenantId, table.id),
+    index("webhook_endpoints_tenant_idx").on(table.tenantId, table.isActive),
+    foreignKey({ name: "webhook_endpoints_tenant_fk", columns: [table.tenantId], foreignColumns: [tenants.id] }),
+    foreignKey({ name: "webhook_endpoints_created_by_fk", columns: [table.createdByUserId], foreignColumns: [users.id] })
+  ]
+);
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    endpointId: uuid("endpoint_id").notNull(),
+    outboxEventId: uuid("outbox_event_id").notNull(),
+    eventType: varchar("event_type", { length: 100 }).notNull(),
+    status: varchar("status", { length: 16 }).default("PENDING").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastStatusCode: integer("last_status_code"),
+    lastError: varchar("last_error", { length: 500 }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    createdAt
+  },
+  (table) => [
+    check("webhook_deliveries_status_check", sql`${table.status} in ('PENDING', 'SUCCEEDED', 'FAILED')`),
+    check("webhook_deliveries_attempts_check", sql`${table.attempts} >= 0`),
+    uniqueIndex("webhook_deliveries_endpoint_event_unique").on(table.endpointId, table.outboxEventId),
+    index("webhook_deliveries_due_idx").on(table.status, table.nextAttemptAt),
+    index("webhook_deliveries_tenant_idx").on(table.tenantId, table.createdAt),
+    foreignKey({
+      name: "webhook_deliveries_endpoint_fk",
+      columns: [table.tenantId, table.endpointId],
+      foreignColumns: [webhookEndpoints.tenantId, webhookEndpoints.id]
+    }),
+    foreignKey({ name: "webhook_deliveries_outbox_event_fk", columns: [table.outboxEventId], foreignColumns: [outboxEvents.id] })
   ]
 );

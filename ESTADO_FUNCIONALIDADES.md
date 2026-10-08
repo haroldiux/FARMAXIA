@@ -1,7 +1,7 @@
 # FARMAXIA — Estado de funcionalidades
 
-**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 27 de septiembre de 2026 (módulos 0, 1, 2 y 3 completados)
-**Rama revisada:** `Denil` (commit `240f272`, basado en `main` `38709c8`); módulos 0 y 1 en el commit `83ad80f` y módulos 2 y 3 sin commit en `Denil`
+**Fecha de revisión:** 25 de septiembre de 2026 · actualizado el 6 de octubre de 2026 (módulos 0 al 5 y 7 al 11 completados; módulo 6 con base técnica; módulo 12 sin e-commerce/delivery, pendiente de decisión)
+**Rama revisada:** `Denil` (commit `d21e333`); módulos 0 al 8 subidos a `Denil` y módulo 9 sin commit
 **Autor:** Denilson Godoy
 
 ## 1. Propósito de este documento
@@ -17,10 +17,10 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 **Estado real** (qué existe hoy), revisado directamente en el código:
 
-- Tablas de base de datos creadas por las migraciones (`apps/api/drizzle/0000` a `0014`).
+- Tablas de base de datos creadas por las migraciones (`apps/api/drizzle/0000` a `0029`).
 - Rutas de la API (`apps/api/src/*/*.controller.ts`).
 - Pantallas de la web (`apps/web/app`).
-- Pruebas automáticas: 71 de 71 pasan (`pnpm --filter @farmaxia/api test`).
+- Pruebas automáticas: 260 de 260 pasan en 33 archivos (`pnpm --filter @farmaxia/api test`, 2 de octubre de 2026).
 
 **Leyenda:**
 
@@ -38,18 +38,18 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 | 1. Seguridad y roles | 9 | 0 | 0 |
 | 2. Catálogo farmacéutico | 10 | 0 | 0 |
 | 3. Inventario, lotes y almacenes | 11 | 0 | 0 |
-| 4. Compras y proveedores | 3 | 2 | 4 |
-| 5. Punto de venta y caja | 5 | 0 | 10 |
+| 4. Compras y proveedores | 9 | 0 | 0 |
+| 5. Punto de venta y caja | 16 | 0 | 0 |
 | 6. Facturación SIAT | 0 | 0 | 8 |
-| 7. Traspasos entre sucursales | 0 | 0 | 5 |
-| 8. Medicamentos controlados (AGEMED) | 0 | 0 | 4 |
-| 9. Personal, turnos y comisiones | 0 | 0 | 3 |
-| 10. Clientes, fidelización y convenios | 0 | 0 | 5 |
-| 11. Analítica | 1 | 0 | 5 |
-| 12. API e integraciones | 0 | 1 | 3 |
-| **Total** | **52** | **3** | **47** |
+| 7. Traspasos entre sucursales | 5 | 0 | 0 |
+| 8. Medicamentos controlados (AGEMED) | 4 | 0 | 0 |
+| 9. Personal, turnos y comisiones | 3 | 0 | 0 |
+| 10. Clientes, fidelización y convenios | 5 | 0 | 0 |
+| 11. Analítica | 6 | 0 | 0 |
+| 12. API e integraciones | 3 | 0 | 1 |
+| **Total** | **94** | **0** | **9** |
 
-**Avance aproximado: ~50%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
+**Avance aproximado: ~91%.** La base técnica (multi-empresa con aislamiento por RLS, permisos, auditoría inmutable, idempotencia, FEFO transaccional y pruebas) está completa y sólida. Lo que falta es principalmente funcionalidad de negocio y los módulos regulatorios.
 
 > El porcentaje es orientativo: cuenta funcionalidades, no esfuerzo. Módulos como SIAT pesan mucho más que una pantalla.
 
@@ -115,12 +115,13 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 - ✅ Registro de proveedores con NIT
 - ✅ Órdenes de compra
 - ✅ Recepción por lote, sin superar lo ordenado (recepciones parciales)
-- 🟡 Facturas de proveedor y cuentas por pagar: se registra la deuda inicial, pero no hay pagos
-- 🟡 Órdenes con varios productos: la API lo permite, la pantalla solo admite uno por orden
-- ❌ Pagos a proveedores y programación de pagos
-- ❌ Costo promedio ponderado (decisión D08 pendiente)
-- ❌ Reposición sugerida según el stock
-- ❌ Cancelación de órdenes de compra
+- ✅ Facturas de proveedor y cuentas por pagar con saldo, estado (pendiente, pago parcial, vencida, pagada) y pagos registrados
+- ✅ Órdenes con varios productos desde la pantalla, con costo promedio sugerido, total estimado y avance de lo recibido por línea
+- ✅ Pagos a proveedores (`/procurement/payables`): parciales o totales, sin pasarse del saldo, con método, referencia, historial y auditoría. Permiso nuevo «Registrar pagos a proveedores» (D41)
+- ✅ Programación de pagos: agenda de vencidas, esta semana, próximos 30 días y más adelante, con fecha planificada por factura
+- ✅ Costo promedio ponderado por presentación, recalculado en cada recepción y sugerido al armar órdenes (D40, pendiente de confirmar)
+- ✅ Reposición sugerida (`/procurement/reorder`): según la venta de 30 días, el stock libre y lo ya pedido; crea la orden con un clic (D42)
+- ✅ Cancelación de órdenes sin recepciones y cierre del saldo pendiente de las parciales, con motivo y auditoría
 
 ### 5. Punto de venta (POS) y caja
 
@@ -128,17 +129,18 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 - ✅ Apertura de turno con fondo inicial
 - ✅ Conteo al cierre con cálculo de diferencia
 - ✅ Aprobación de diferencias por un supervisor
-- ✅ Venta en efectivo (no fiscal) que descuenta stock por FEFO
-- ❌ Pagos con tarjeta, QR, crédito y convenio
-- ❌ Búsqueda rápida y escaneo de código de barras en la venta
-- ❌ Recibo e impresión térmica (58 / 80 mm)
-- ❌ Proformas o cotizaciones
-- ❌ Anulación de ventas y devoluciones
-- ❌ Cambio de lote autorizado (saltar el FEFO con permiso)
-- ❌ Movimientos menores de caja (ingresos y egresos de efectivo)
-- ❌ Historial y consulta de ventas
-- ❌ Exigir receta al vender medicamentos controlados (depende del módulo 8)
-- ❌ Interfaz táctil y atajos de teclado
+- ✅ Venta (no fiscal) que descuenta stock por FEFO; el precio lo fija siempre el servidor según la lista de precios vigente y se rechaza la venta si no hay precio
+- ✅ Pagos con efectivo, tarjeta y QR, combinables en una misma venta, con cálculo de vuelto. Tarjeta y QR se registran con número de referencia, sin pasarela (D43)
+- ✅ Pagos por convenio (crédito mensual del afiliado) y con puntos de fidelidad, combinables con efectivo, tarjeta y QR; no mueven la caja (módulo 10, D68-D69)
+- ✅ Búsqueda rápida (nombre, genérico, principio activo, laboratorio o código de barras) con precio y stock disponible, y lector de código de barras que agrega el producto al carrito
+- ✅ Recibo no fiscal imprimible en papel térmico de 58 / 80 mm desde el navegador, con número de venta `V-<sucursal>-000001` (D44)
+- ✅ Proformas (`/sales/quotes`): numeradas `P-<sucursal>-000001`, válidas 7 días (1 a 30), imprimibles, sin apartar stock ni mover caja; se convierten en venta con el precio vigente (D48)
+- ✅ Anulación de ventas (solo con el turno de la venta abierto: el stock vuelve a los mismos lotes y el efectivo sale de la caja) y devoluciones parciales o totales en cualquier fecha, con reembolso en efectivo, tarjeta o QR, numeradas `D-<sucursal>-000001` y con opción de reponer o no al stock. Permiso nuevo «Anular ventas y registrar devoluciones» (D46)
+- ✅ Cambio de lote autorizado: quien tiene el permiso «Elegir lote distinto al FEFO» puede elegir otro lote disponible con un motivo obligatorio; queda en la auditoría y en el recibo (D47)
+- ✅ Movimientos de caja (ingresos y egresos de efectivo) en turnos abiertos, con motivo y categoría, inmutables y auditados; ajustan el efectivo esperado al cierre. Un egreso no puede superar el efectivo esperado (D49)
+- ✅ Historial de ventas (`/sales/history`) con filtros por fecha, turno, cajero y estado, y detalle de cada venta con lotes consumidos y pagos. El cajero ve solo sus ventas; Propietario, Regente y Encargado ven toda la sucursal (D45)
+- ✅ Exigir receta al vender medicamentos controlados: si el carrito tiene un producto controlado, el POS pide los datos de la receta antes de confirmar y la venta se rechaza sin ellos (`PRESCRIPTION_REQUIRED`), con factura o con recibo (D57)
+- ✅ Pantalla de mostrador táctil y atajos de teclado (F2 buscar, F4 pago, F9 confirmar, Esc limpiar)
 
 ### 6. Facturación SIAT (Servicio de Impuestos Nacionales)
 
@@ -153,50 +155,62 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 > Requiere elementos externos al código: credenciales del SIN, certificado digital y asesoría tributaria (decisión D03).
 
+> **F13 (scaffold técnico, octubre 2026):** ninguna de las 8 funcionalidades de arriba pasó a ✅ — todas siguen bloqueadas por D03. Lo que sí existe ahora es la base técnica para engancharlas: el puerto `FiscalProvider` (`issueInvoice`/`voidInvoice`), la tabla `fiscal_invoices` (tenant/branch, RLS, FK a `sales`) y un `StubFiscalProvider` que crea cada factura en estado `PENDING_PROVIDER` y nunca simula una emisión real (D50-D52). Cada venta confirmada ya genera su fila de borrador; el adaptador SIAT real sigue pendiente de D03.
+
 ### 7. Traspasos entre sucursales
 
-- ❌ Solicitud de mercadería a otra sucursal o al almacén central
-- ❌ Despacho (mercadería en tránsito)
-- ❌ Recepción con verificación física
-- ❌ Registro de diferencias y daños durante el traslado
-- ❌ Flujo de aprobación (plan Premium)
+- ✅ Solicitud de mercadería a otra sucursal o al almacén central (`/transfers`), eligiendo almacén de origen, destino y lote; nunca desde un almacén de cuarentena
+- ✅ Despacho (mercadería en tránsito): el stock sale del origen al despachar, sin dejar saldo negativo; lo pendiente en tránsito es lo despachado menos lo recibido (D55)
+- ✅ Recepción con verificación física: recepción parcial en varias entregas; el destino solo se acredita con lo realmente recibido (D54)
+- ✅ Registro de diferencias y daños durante el traslado: motivo de diferencia por ítem, en texto libre; la baja o cuarentena sigue siendo manual (D54)
+- ✅ Flujo de aprobación (plan Premium): aprobar o rechazar con motivo, permiso `transfers.approve`; en Profesional se despacha directo (D53, D56)
 
 ### 8. Medicamentos controlados (AGEMED / regencia)
 
-- ❌ Registro de receta: médico, matrícula, paciente, documento y centro emisor
-- ❌ Archivo o retención de la receta
-- ❌ Movimientos y balances mensuales de controlados
-- ❌ Libro digital de psicotrópicos exportable para fiscalización
+- ✅ Registro de receta al vender: médico, matrícula, paciente, documento, centro emisor y fecha de la receta. En planes Profesional y Premium se valida además el formato de matrícula y documento, y que la receta no sea futura ni tenga más de 30 días (D60)
+- ✅ Archivo de recetas (`/controlled`): cada receta queda vinculada a su venta, inmutable y con folio `R-<sucursal>-000001`, con búsqueda por fechas, médico o paciente y detalle de lo dispensado por lote. La copia escaneada queda pendiente (D58)
+- ✅ Balance mensual de controlados (`/controlled/balance`, plan Premium): saldo inicial, entradas y salidas por tipo de movimiento (compras, ventas, devoluciones, traspasos, bajas, ajustes) y saldo final, comparado con el stock actual
+- ✅ Libro digital de controlados (`/controlled/book`, plan Premium): movimientos cronológicos foliados con saldo por producto, documento y receta asociada; imprimible desde el navegador y descargable en CSV con el permiso «Exportar libro de controlados» (D59)
+
+> **F15 (octubre 2026):** permisos nuevos `controlled.read` (Propietario, Regente, Encargado) y `controlled.book.export` (Propietario, Regente). El libro se calcula desde los movimientos de inventario, sin escribir stock nuevo. Pendiente: mostrar el folio de la receta en el recibo impreso (hoy aparece en el panel de venta confirmada) y confirmar con regencia el formato oficial SEDES/AGEMED (D57-D60).
 
 ### 9. Personal, turnos y comisiones
 
-- ❌ Guardias nocturnas y turnos de trabajo (distintos de los turnos de caja, que sí existen)
-- ❌ Comisiones por venta o por producto (multinivel en Premium)
-- ❌ Productividad por dispensador
+- ✅ Turnos de trabajo y guardias nocturnas (`/staff`, plan Profesional o superior): calendario semanal por sucursal sin solapes por persona, cancelación con motivo y marcado propio de entrada y salida desde 30 minutos antes del inicio (D61). Son distintos de los turnos de caja
+- ✅ Comisiones por venta (`/staff/commissions`, plan Profesional o superior): reglas por producto, categoría o general, calculadas sobre la venta neta (sin anuladas y descontando devoluciones). En Premium, escalas por volumen vendido en el período (multinivel, D62-D63). Cada persona ve sus propias comisiones
+- ✅ Productividad por dispensador (`/staff/productivity`, todos los planes): ventas, monto neto, unidades, ticket promedio, devoluciones y anulaciones; horas trabajadas y venta por hora cuando el plan incluye turnos (D64)
+
+> **F16 (octubre 2026):** permisos nuevos `staff.shifts.manage` (Propietario, Regente, Encargado), `staff.commissions.manage` (Propietario) y `staff.reports.read` (Propietario, Regente, Encargado) (D65). Las comisiones se calculan al consultar el reporte; todavía no hay liquidación ni registro de pago de comisiones.
 
 ### 10. Clientes, fidelización y convenios
 
-- ❌ Directorio de clientes e historial de compras
-- ❌ Puntos de fidelidad
-- ❌ Convenios con aseguradoras, empresas y sindicatos
-- ❌ Crédito por empleado y copagos
-- ❌ Facturación centralizada de convenios
+- ✅ Directorio de clientes (`/customers`, todos los planes): alta y edición con documento único por tipo (CI, NIT, pasaporte, otro), búsqueda, cliente opcional en el POS e historial de compras de la sucursal activa, neto de devoluciones (D66)
+- ✅ Puntos de fidelidad (plan Profesional o superior): se ganan con lo pagado en efectivo, tarjeta o QR y se canjean como medio de pago `POINTS`; saldo, movimientos, ajuste manual con motivo y configuración en `/customers/loyalty`. Anulaciones y devoluciones revierten los puntos en proporción (D67, D68, D70)
+- ✅ Convenios con aseguradoras, empresas y sindicatos (`/customers/agreements`, plan Premium): pagador, NIT, porcentaje de cobertura, límite mensual y afiliados con código y límite propio
+- ✅ Crédito por afiliado y copagos: el convenio cubre hasta su porcentaje de la venta y el saldo mensual del afiliado; el resto lo paga el paciente con otros medios. Anular o devolver reduce el cobro del convenio (D69, D70)
+- ✅ Facturación centralizada de convenios (`/customers/statements`, plan Premium): estado de cuenta mensual por convenio con los cobros de todas las sucursales, pagos parciales sin pasarse del saldo, imprimible y en CSV. No es factura fiscal hasta SIAT (D71)
+
+> **F17 (octubre 2026):** permisos nuevos `customers.manage` (Propietario, Regente, Encargado, Cajero), `loyalty.manage` (Propietario), `agreements.manage` (Propietario, Encargado) y `agreements.billing` (Propietario) (D71). El recibo muestra cliente, puntos y convenio. Pendiente: crear clientes rápido desde el POS y confirmar el tratamiento tributario de puntos y convenios con SIAT (D03, D68).
 
 ### 11. Analítica
 
 - ✅ Reporte global de existencias
-- ❌ Matriz ABC de rotación
-- ❌ Rotación y días de inventario
-- ❌ Quiebres de stock y alertas de desabastecimiento
-- ❌ Margen y rentabilidad por producto, laboratorio y sucursal
-- ❌ Tablero ejecutivo y analítica predictiva
+- ✅ Matriz ABC de rotación (`/analytics/abc`, plan Premium): clasificación por venta neta del período (A 80 %, B 95 %, C resto), con unidades y participación (D73)
+- ✅ Rotación y días de inventario (`/analytics/rotation`, plan Profesional o superior): promedio diario vendido, disponible, días de inventario, rotación sobre el costo y productos sin movimiento (D74)
+- ✅ Quiebres de stock y alertas de desabastecimiento (`/analytics/stockouts`, plan Profesional o superior): agotados y cobertura baja (menos de 7 días) con cantidad sugerida; alertas automáticas cada hora por sucursal que se cierran solas al reponer y se pueden marcar como revisadas (D74)
+- ✅ Margen y rentabilidad por producto, laboratorio y sucursal (`/analytics/profitability`, plan Profesional o superior): venta neta, costo, margen y CSV. Cada venta guarda ahora su costo; las anteriores se calculan con el costo promedio actual y se marcan «estimado» (D72)
+- ✅ Tablero ejecutivo (`/analytics`, todos los planes; margen desde Profesional) y analítica predictiva (plan Premium): pronóstico semanal de demanda con promedio y tendencia de 8 semanas y fecha estimada de agotamiento (D75)
+
+> **F18 (octubre 2026):** permiso nuevo `analytics.read` (Propietario, Regente, Encargado) (D76). Los reportes juntan todas las sucursales asignadas al usuario, con filtro por sucursal. El margen depende del método de costeo (D08, D40), todavía provisional.
 
 ### 12. API pública e integraciones
 
-- 🟡 Cola interna de eventos (outbox), base para webhooks
-- ❌ API pública para terceros
-- ❌ Integración con e-commerce y apps de delivery
-- ❌ Webhooks en tiempo real y stock omnicanal
+- ✅ Cola interna de eventos (outbox) con despachador: cada evento (ventas, anulaciones, devoluciones, proformas, caja, traspasos) se entrega a los webhooks suscritos sin cambiar el estado de la cola (D80)
+- ✅ API pública para terceros (`api/public/v1`, plan Premium): claves de API por sucursal, de solo lectura, mostradas una sola vez y guardadas como hash; catálogo, precio vigente y stock disponible de la sucursal; límite de 120 consultas por minuto (D77, D78)
+- ❌ Integración con e-commerce y apps de delivery: decisión abierta (pedidos externos que crean ventas o reservan stock, proveedores y contratos; D81, D82)
+- ✅ Webhooks en tiempo real y stock omnicanal: endpoints HTTPS con eventos elegidos, firma HMAC-SHA256, reintentos hasta 8 veces e historial de entregas; el mismo stock de la sucursal se publica por la API para cualquier canal (D79)
+
+> **F19 (octubre 2026):** permiso nuevo `integrations.manage` (solo Propietario) y pantalla `/integrations` (Integraciones, en Administración) para claves de API, webhooks e historial de entregas. Migración `0035_public_api`. La API pública es solo lectura: escribir datos desde afuera queda como decisión abierta (D83).
 
 ## 5. Avance según el roadmap de la especificación maestra
 
@@ -204,16 +218,16 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 |---|---|---|
 | 1 | Núcleo, multi-tenancy, suscripciones, autenticación y RBAC | ✅ Casi completo (falta resolver la empresa por subdominio) |
 | 2 | Catálogo, fraccionamiento e inventario FEFO | ✅ Completo (ficha sanitaria, almacenes, conteo físico, actas y alertas programadas); la lista oficial AGEMED queda en D32 y D36 |
-| 3 | POS y control de turnos | 🟡 Falta receta en controlados, impresión térmica y otros medios de pago |
-| 4 | Facturación SIAT | ❌ No iniciado |
-| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | ❌ No iniciado |
+| 3 | POS y control de turnos | ✅ Completo (pagos combinados, recibo térmico, anulaciones, devoluciones, proformas, movimientos de caja, receta en controlados). Pagos con puntos y por convenio ✅ (módulo 10) |
+| 4 | Facturación SIAT | 🟡 Base técnica lista (F13: `FiscalProvider`, tabla `fiscal_invoices`, simulador); la emisión real espera D03 |
+| 5 | Traspasos, libro AGEMED, comisiones y matriz ABC | 🟡 En curso: traspasos ✅ (módulo 7, D53-D56), libro AGEMED ✅ (módulo 8, D57-D60) comisiones ✅ (módulo 9, D61-D65) y matriz ABC ✅ (módulo 11, D73) |
 
 ## 6. Propuesta de orden para completar el sistema
 
 | Fase | Contenido | Justificación |
 |---|---|---|
-| 1. Operación básica | POS completo (medios de pago, búsqueda y escaneo, recibo, anulaciones, historial), usuarios y roles, ficha sanitaria del producto | Sin esto el sistema no puede usarse en un mostrador real |
-| 2. Completar lo parcial | Pantallas de presentaciones, categorías e inventario físico; pagos a proveedores; órdenes con varios productos; almacenes | Aprovecha la API existente: alto impacto con poco esfuerzo |
+| 1. Operación básica ✅ | POS completo (medios de pago, búsqueda y escaneo, recibo, anulaciones, historial), usuarios y roles, ficha sanitaria del producto | Sin esto el sistema no puede usarse en un mostrador real |
+| 2. Completar lo parcial ✅ | Pantallas de presentaciones, categorías e inventario físico; pagos a proveedores; órdenes con varios productos; almacenes | Aprovecha la API existente: alto impacto con poco esfuerzo |
 | 3. Cumplimiento legal | Controlados (AGEMED) y facturación SIAT | Obligatorio para operar en Bolivia |
 | 4. Multi-sucursal y planes | Traspasos; planes Básico / Profesional / Premium aplicados en el servidor | Necesario para cadenas de farmacias y para cobrar por plan |
 | 5. Crecimiento | Clientes y convenios, comisiones, analítica, onboarding y cobro del SaaS | Valor agregado sobre una operación ya estable |
@@ -229,6 +243,8 @@ Tomadas de `REGISTRO_DECISIONES.md`:
 | D08 | Método de costeo (promedio ponderado o última compra) | Costeo en compras y márgenes en analítica |
 | D09 | Reglas de reserva de stock en proformas y ventas | Proformas en el POS |
 | D22 | Importación de catálogo y stock inicial | Puesta en marcha con datos reales |
+| D81, D82 | Pedidos externos (e-commerce, delivery) y proveedores | Integración con e-commerce y apps de delivery |
+| D83 | Escritura desde la API pública | API pública de escritura |
 
 ## 8. Preguntas para validar
 

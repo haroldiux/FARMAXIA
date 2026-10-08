@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { currentSession, logout, type AuthSession } from "../../lib/session";
+import { ProcurementNav } from "../../components/procurement-nav";
+import { currentSession, type AuthSession } from "../../lib/session";
 import {
   listPurchaseOrders,
   procurementIdempotencyKey,
@@ -185,10 +186,6 @@ export default function ReceivingPage() {
     }
   }
 
-  async function signOut(): Promise<void> {
-    await logout();
-    window.location.assign("/");
-  }
 
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando recepción…</main>;
@@ -202,13 +199,12 @@ export default function ReceivingPage() {
     <main className="receiving-page">
       <header className="procurement-header">
         <div>
-          <Link className="back-link" href="/procurement">← Volver a compras</Link>
           <p className="eyebrow">F5 · Recepción por lote</p>
           <h1>Cada lote entra con historia.</h1>
           <p className="procurement-lede">Registra vencimiento, cantidad y costo provisional sin superar lo ordenado.</p>
         </div>
-        <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
       </header>
+      <ProcurementNav />
 
       {error ? <p className="form-error procurement-message" role="alert">{error}</p> : null}
       {notice ? <p className="form-success procurement-message" role="status">{notice}</p> : null}

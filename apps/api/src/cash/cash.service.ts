@@ -1,7 +1,14 @@
-import { BadRequestException, ConflictException, Inject, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException
+} from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import { AuditService } from "../transversal/audit.service.js";
+import { OutboxService } from "../transversal/outbox.service.js";
 import {
   computePayloadHash,
   IdempotencyKeyReusedError
@@ -55,6 +62,48 @@ export interface CashShiftControlSummary {
   closedByUserId: string | null;
   closedAt: string | null;
   approvalNote: string | null;
+  /** Cash sales net of change, derived from expected cash, opening fund and movements. */
+  cashSalesBob: string;
+  movementsInBob: string;
+  movementsOutBob: string;
+}
+
+export type CashMovementType = "IN" | "OUT";
+export type CashMovementCategory = "CHANGE_FUND" | "EXPENSE" | "DEPOSIT" | "OTHER";
+
+export interface CreateCashMovementInput {
+  idempotencyKey: string;
+  type: CashMovementType;
+  amountBob: string;
+  reason: string;
+  category?: CashMovementCategory | null;
+}
+
+export interface CashMovementSummary {
+  id: string;
+  cashShiftId: string;
+  type: CashMovementType;
+  amountBob: string;
+  reason: string;
+  category: CashMovementCategory | null;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface CashMovementCreated extends CashMovementSummary {
+  /** Expected cash of the shift right after this movement. */
+  expectedAmountBob: string;
+}
+
+export interface CashMovementListResult {
+  items: CashMovementSummary[];
+  summary: {
+    openingAmountBob: string;
+    cashSalesBob: string;
+    movementsInBob: string;
+    movementsOutBob: string;
+    expectedAmountBob: string;
+  };
 }
 
 export interface OpenCashShiftInput {
@@ -114,6 +163,13 @@ interface ControlRow {
   closedByUserId: string | null;
   closedAt: Date | string | null;
   approvalNote: string | null;
+  cashSalesBob: string;
+  movementsInBob: string;
+  movementsOutBob: string;
+}
+
+interface MovementRow extends Omit<CashMovementSummary, "createdAt"> {
+  createdAt: Date | string;
 }
 
 interface StoredIdempotency<T> {
@@ -164,9 +220,46 @@ function money(value: string, field: string): string {
   return normalized;
 }
 
+const movementCategories: readonly CashMovementCategory[] = [
+  "CHANGE_FUND",
+  "EXPENSE",
+  "DEPOSIT",
+  "OTHER"
+];
+
+const movementTotal = (type: "IN" | "OUT") => `coalesce((select sum(m.amount_bob) from cash_movements m
+     where m.tenant_id = cash_shift_controls.tenant_id and m.branch_id = cash_shift_controls.branch_id
+       and m.cash_shift_id = cash_shift_controls.cash_shift_id and m.type = '${type}'), 0)`;
+
+// Shared projection of a shift control with its movement totals. Cash sales are what remains of
+// the expected cash after removing the opening fund and the manual movements.
+const controlColumns = `id, cash_shift_id as "cashShiftId", opening_amount_bob::text as "openingAmountBob",
+  expected_amount_bob::text as "expectedAmountBob", counted_amount_bob::text as "countedAmountBob",
+  difference_amount_bob::text as "differenceAmountBob", status,
+  opened_by_user_id as "openedByUserId", opened_at as "openedAt",
+  counted_by_user_id as "countedByUserId", counted_at as "countedAt",
+  approved_by_user_id as "approvedByUserId", approved_at as "approvedAt",
+  closed_by_user_id as "closedByUserId", closed_at as "closedAt",
+  approval_note as "approvalNote",
+  (${movementTotal("IN")})::numeric(18,4)::text as "movementsInBob",
+  (${movementTotal("OUT")})::numeric(18,4)::text as "movementsOutBob",
+  (expected_amount_bob - opening_amount_bob - ${movementTotal("IN")} + ${movementTotal("OUT")})::numeric(18,4)::text as "cashSalesBob"`;
+
+const movementColumns = `id, cash_shift_id as "cashShiftId", type, amount_bob::text as "amountBob", reason,
+  category, created_by_user_id as "createdByUserId", created_at as "createdAt"`;
+
+function movementAmount(value: string): string {
+  const normalized = money(value, "Amount");
+  if (!/[1-9]/.test(normalized)) {
+    throw new BadRequestException("Amount must be greater than zero.");
+  }
+  return normalized;
+}
+
 @Injectable()
 export class CashService {
   private readonly audit = new AuditService();
+  private readonly outbox = new OutboxService();
 
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
@@ -401,6 +494,118 @@ export class CashService {
     );
   }
 
+  async createMovement(
+    scope: TenantScope,
+    shiftId: string,
+    input: CreateCashMovementInput
+  ): Promise<CashMovementCreated> {
+    const normalizedShiftId = requiredText(shiftId, "Cash shift ID", 64);
+    const idempotencyKey = requiredText(input.idempotencyKey, "Idempotency key", 255);
+    if (input.type !== "IN" && input.type !== "OUT") {
+      throw new BadRequestException("Movement type must be IN or OUT.");
+    }
+    const type = input.type;
+    const amountBob = movementAmount(input.amountBob);
+    const reason = requiredText(input.reason, "Reason", 200);
+    const category = input.category ?? null;
+    if (category !== null && !movementCategories.includes(category)) {
+      throw new BadRequestException(`Category must be one of ${movementCategories.join(", ")}.`);
+    }
+    return this.controlIdempotent<CashMovementCreated>(
+      scope,
+      "cash.register_movement",
+      idempotencyKey,
+      { shiftId: normalizedShiftId, type, amountBob, reason, category },
+      async (client) => {
+        const control = await this.readControl(client, scope, normalizedShiftId, true);
+        if (!control) throw new NotFoundException("The cash shift has not been opened.");
+        if (control.status !== "OPEN") {
+          throw new ConflictException("Movements can only be registered on an open cash shift.");
+        }
+        await this.assertAssignedActiveUser(client, scope, normalizedShiftId);
+        const signedDelta = type === "IN" ? amountBob : `-${amountBob}`;
+        // The row is locked above, so this guarded update is the atomic overdraw check (D49).
+        const updated = await client.query<{ expected: string }>(
+          `update cash_shift_controls
+           set expected_amount_bob = expected_amount_bob + $4::numeric
+           where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3
+             and status = 'OPEN' and expected_amount_bob + $4::numeric >= 0
+           returning expected_amount_bob::text as expected`,
+          [scope.tenantId, scope.branchId, normalizedShiftId, signedDelta]
+        );
+        const expected = updated.rows[0]?.expected;
+        if (expected === undefined) {
+          throw new ConflictException({
+            code: "CASH_MOVEMENT_EXCEEDS_EXPECTED",
+            message: "The withdrawal cannot exceed the expected cash of the shift."
+          });
+        }
+        const inserted = await client.query<MovementRow>(
+          `insert into cash_movements (
+             tenant_id, branch_id, cash_shift_id, type, amount_bob, reason, category, created_by_user_id
+           ) values ($1, $2, $3, $4, $5::numeric, $6, $7, $8)
+           returning ${movementColumns}`,
+          [scope.tenantId, scope.branchId, normalizedShiftId, type, amountBob, reason, category, scope.userId]
+        );
+        const movement = this.mapMovement(inserted.rows[0] as MovementRow);
+        await this.audit.recordInTransaction(client, scope, {
+          action: "cash.movement_registered",
+          entityType: "cash_movement",
+          entityId: movement.id,
+          payload: {
+            cashShiftId: normalizedShiftId,
+            type,
+            amountBob: movement.amountBob,
+            category,
+            reason,
+            expectedAmountBob: expected
+          }
+        });
+        await this.outbox.enqueueInTransaction(client, scope, {
+          aggregateType: "cash_movement",
+          aggregateId: movement.id,
+          eventType: "cash.movement_registered",
+          payload: {
+            cashMovementId: movement.id,
+            cashShiftId: normalizedShiftId,
+            type,
+            amountBob: movement.amountBob
+          }
+        });
+        return { statusCode: 201, body: { ...movement, expectedAmountBob: expected } };
+      }
+    );
+  }
+
+  async listMovements(scope: TenantScope, shiftId: string): Promise<CashMovementListResult> {
+    const normalizedShiftId = requiredText(shiftId, "Cash shift ID", 64);
+    return this.database.withScope(scope, async (client) => {
+      const control = await this.readControl(client, scope, normalizedShiftId);
+      if (!control) throw new NotFoundException("The cash shift has not been opened.");
+      const rows = await client.query<MovementRow>(
+        `select ${movementColumns}
+         from cash_movements
+         where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3
+         order by created_at asc, id asc`,
+        [scope.tenantId, scope.branchId, normalizedShiftId]
+      );
+      return {
+        items: rows.rows.map((row) => this.mapMovement(row)),
+        summary: {
+          openingAmountBob: control.openingAmountBob,
+          cashSalesBob: control.cashSalesBob,
+          movementsInBob: control.movementsInBob,
+          movementsOutBob: control.movementsOutBob,
+          expectedAmountBob: control.expectedAmountBob
+        }
+      };
+    });
+  }
+
+  private mapMovement(row: MovementRow): CashMovementSummary {
+    return { ...row, createdAt: iso(row.createdAt) };
+  }
+
   private async controlIdempotent<T>(
     scope: TenantScope,
     operation: string,
@@ -509,14 +714,7 @@ export class CashService {
   ): Promise<CashShiftControlSummary | undefined> {
     const lock = forUpdate ? " for update" : "";
     const result = await client.query<ControlRow>(
-      `select id, cash_shift_id as "cashShiftId", opening_amount_bob::text as "openingAmountBob",
-              expected_amount_bob::text as "expectedAmountBob", counted_amount_bob::text as "countedAmountBob",
-              difference_amount_bob::text as "differenceAmountBob", status,
-              opened_by_user_id as "openedByUserId", opened_at as "openedAt",
-              counted_by_user_id as "countedByUserId", counted_at as "countedAt",
-              approved_by_user_id as "approvedByUserId", approved_at as "approvedAt",
-              closed_by_user_id as "closedByUserId", closed_at as "closedAt",
-              approval_note as "approvalNote"
+      `select ${controlColumns}
        from cash_shift_controls
        where tenant_id = $1 and branch_id = $2 and cash_shift_id = $3${lock}`,
       [scope.tenantId, scope.branchId, shiftId]
@@ -657,14 +855,7 @@ export class CashService {
       [scope.tenantId, scope.branchId, shiftIds]
     );
     const controls = await client.query<ControlRow>(
-      `select id, cash_shift_id as "cashShiftId", opening_amount_bob::text as "openingAmountBob",
-              expected_amount_bob::text as "expectedAmountBob", counted_amount_bob::text as "countedAmountBob",
-              difference_amount_bob::text as "differenceAmountBob", status,
-              opened_by_user_id as "openedByUserId", opened_at as "openedAt",
-              counted_by_user_id as "countedByUserId", counted_at as "countedAt",
-              approved_by_user_id as "approvedByUserId", approved_at as "approvedAt",
-              closed_by_user_id as "closedByUserId", closed_at as "closedAt",
-              approval_note as "approvalNote"
+      `select ${controlColumns}
        from cash_shift_controls
        where tenant_id = $1 and branch_id = $2 and cash_shift_id = any($3::uuid[])`,
       [scope.tenantId, scope.branchId, shiftIds]
@@ -703,7 +894,10 @@ export class CashService {
       approvedAt: row.approvedAt ? iso(row.approvedAt) : null,
       closedByUserId: row.closedByUserId,
       closedAt: row.closedAt ? iso(row.closedAt) : null,
-      approvalNote: row.approvalNote
+      approvalNote: row.approvalNote,
+      cashSalesBob: row.cashSalesBob,
+      movementsInBob: row.movementsInBob,
+      movementsOutBob: row.movementsOutBob
     };
   }
 }

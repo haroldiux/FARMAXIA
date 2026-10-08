@@ -1,0 +1,243 @@
+/* ═════════════════════════════════════════════════════════════
+   FARMAXIA · Login, registro y login de plataforma
+   Mismo lenguaje que el sistema: fondo lila, marco negro redondeado,
+   panel izquierdo oscuro con tarjetas pastel animadas y panel claro con el formulario.
+   Animaciones solo con CSS (livianas); se detienen si el sistema pide menos movimiento.
+   ═════════════════════════════════════════════════════════════ */
+
+.lx-page {
+  --lx-page: #d9dbe8;
+  --lx-frame: #17181c;
+  --lx-panel: #f2f4f7;
+  --lx-card: #ffffff;
+  --lx-line: #e3e5ec;
+  --lx-indigo: #4f5bd5;
+  --lx-lilac: #dfe1fb; --lx-mint: #d2efdd; --lx-peach: #f8ded2; --lx-sand: #ece6c9;
+  --lx-lilac-icon: #4f5bd5; --lx-mint-icon: #22a55a; --lx-peach-icon: #ee6a2c; --lx-sand-icon: #e2b714;
+
+  /* Tokens que usan el formulario y los mensajes */
+  --ink: #16171d;
+  --ink-soft: #5f6474;
+  --muted: #8b90a0;
+  --line: var(--lx-line);
+  --line-strong: #dcdfe7;
+  --line-hover: #c9cdd8;
+  --paper: var(--lx-panel);
+  --surface: var(--lx-card);
+  --surface-sunken: #f4f5f8;
+  --input-bg: #ffffff;
+  --blue: var(--lx-indigo);
+  --blue-ink: #3e49b8;
+  --blue-soft: #eceefd;
+  --blue-border: #d7dafa;
+  --pastel-blue: #eceefd;
+  --pastel-gray: #eef0f4;
+  --ring: 0 0 0 4px rgba(79, 91, 213, .18);
+  color-scheme: light;
+}
+:root[data-theme="dark"] .login-page.lx-page {
+  --lx-page: #242836;
+  --lx-frame: #000000;
+  --lx-panel: #111318;
+  --lx-card: #1a1d24;
+  --lx-line: #2a2d37;
+  --lx-indigo: #6a75f0;
+  --lx-lilac: #2b3060; --lx-mint: #183b2b; --lx-peach: #44291d; --lx-sand: #3b3519;
+  --lx-lilac-icon: #6a75f0; --lx-mint-icon: #34c472; --lx-peach-icon: #ff7d42; --lx-sand-icon: #f1c93a;
+
+  --ink: #eceef4;
+  --ink-soft: #a6abba;
+  --muted: #7f8595;
+  --line-strong: #353946;
+  --line-hover: #444958;
+  --surface-sunken: #21242c;
+  --input-bg: #15171d;
+  --blue-ink: #c3c8ff;
+  --blue-soft: #252a50;
+  --blue-border: #363c72;
+  --pastel-blue: #252a50;
+  --pastel-gray: #21242c;
+  --danger-soft: #3a1b20;
+  --ring: 0 0 0 4px rgba(106, 117, 240, .3);
+  color-scheme: dark;
+}
+
+/* ── Marco ─────────────────────────────────────────────────── */
+body:has(.lx-page) { background: #d9dbe8; }
+:root[data-theme="dark"] body:has(.lx-page) { background: #242836; }
+:root .login-page.lx-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: calc(100dvh - 32px);
+  margin: 16px;
+  padding: 14px;
+  border-radius: 36px;
+  background: var(--lx-frame);
+  color: var(--ink);
+  box-shadow: 0 30px 70px -34px rgba(18, 20, 45, .55);
+}
+:root[data-theme="dark"] .login-page.lx-page { border: 1px solid #3a3f52; box-shadow: 0 30px 70px -30px rgba(0, 0, 0, .8); }
+
+/* ── Panel izquierdo (oscuro, como el sidebar) ────────────────── */
+:root .lx-page > .login-intro {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 22px;
+  margin: 0;
+  padding: 26px clamp(20px, 3vw, 40px) 22px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 26px;
+  background: none;
+  color: #fff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root .lx-page > .login-intro::before, :root .lx-page > .login-intro::after { display: none; }
+.lx-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; }
+.lx-brand strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: .06em; }
+.lx-brand small { display: block; color: rgba(255, 255, 255, .6); font-size: 12px; }
+.lx-brand-mark { display: grid; grid-template-columns: repeat(2, 10px); gap: 4px; animation: lx-spin 14s linear infinite; }
+.lx-brand-mark span { width: 10px; height: 10px; border-radius: 50%; animation: lx-pulse 2.8s var(--ease) infinite; }
+.lx-brand-mark span:nth-child(1) { background: #6a75f0; }
+.lx-brand-mark span:nth-child(2) { background: #ff7d42; animation-delay: .35s; }
+.lx-brand-mark span:nth-child(3) { background: #34c472; animation-delay: .7s; }
+.lx-brand-mark span:nth-child(4) { background: #f1c93a; animation-delay: 1.05s; }
+:root .lx-page .intro-copy { position: relative; z-index: 1; max-width: 520px; margin: 18px 0 0; }
+:root .lx-page .intro-copy .eyebrow { display: inline-flex; margin-bottom: 14px; padding: 5px 12px; border-radius: 999px; background: rgba(255, 255, 255, .1); color: #c3c8ff; text-shadow: none; }
+:root .lx-page .intro-copy h1 { color: #fff; font-size: clamp(38px, 4.4vw, 64px); text-shadow: none; }
+:root .lx-page .intro-copy h1 em { color: #8e97ff; }
+:root .lx-page .intro-copy > p:last-child { max-width: 420px; margin-top: 16px; color: rgba(255, 255, 255, .72); text-shadow: none; }
+:root .lx-page .intro-footer { position: relative; z-index: 1; margin-top: auto; color: rgba(255, 255, 255, .5); }
+:root .lx-page .intro-footer span:first-child { color: #34c472; }
+
+/* Tarjetas animadas */
+.lx-showcase { position: relative; flex: 1; min-height: 250px; max-height: 360px; }
+.lx-glow { position: absolute; border-radius: 50%; filter: blur(40px); opacity: .5; animation: lx-drift 16s ease-in-out infinite alternate; pointer-events: none; }
+.lx-glow-a { width: 220px; height: 220px; top: 10%; left: 12%; background: #4f5bd5; }
+.lx-glow-b { width: 180px; height: 180px; right: 6%; bottom: 0; background: #ee6a2c; opacity: .28; animation-delay: -8s; }
+.lx-card { position: absolute; z-index: 1; display: flex; width: min(46%, 220px); flex-direction: column; gap: 4px; padding: 14px 16px 16px; border-radius: 20px; background: var(--tint); color: #16171d; box-shadow: 0 22px 40px -22px rgba(0, 0, 0, .7); animation: lx-float 7s ease-in-out infinite; }
+.lx-card.tint-lilac { --tint: #dfe1fb; --tint-icon: #4f5bd5; }
+.lx-card.tint-mint { --tint: #d2efdd; --tint-icon: #22a55a; }
+.lx-card.tint-peach { --tint: #f8ded2; --tint-icon: #ee6a2c; }
+.lx-card.tint-sand { --tint: #fcefb3; --tint-icon: #d9a80c; }
+:root[data-theme="dark"] .lx-card.tint-lilac { --tint: #cbd0fb; }
+.lx-card strong { font-size: 15px; font-weight: 700; }
+.lx-card small { color: #4e5363; font-size: 12px; }
+.lx-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lx-card-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--tint-icon); color: #fff; }
+.lx-card-icon svg { width: 16px; height: 16px; }
+.lx-card-1 { top: 2%; left: 0; transform: rotate(-4deg); animation-delay: 0s; }
+.lx-card-2 { top: 10%; right: 2%; transform: rotate(3deg); animation-delay: -1.8s; }
+.lx-card-3 { bottom: 4%; left: 10%; transform: rotate(2deg); animation-delay: -3.6s; }
+.lx-card-4 { right: 8%; bottom: 0; transform: rotate(-3deg); animation-delay: -5.2s; }
+
+/* Ilustraciones dentro de las tarjetas */
+.lx-visual-bars { display: flex; width: 54px; height: 30px; align-items: flex-end; gap: 3px; }
+.lx-visual-bars i { flex: 1; border-radius: 3px 3px 0 0; background: var(--tint-icon); opacity: .7; transform-origin: bottom; animation: lx-bar 2.6s ease-in-out infinite; }
+.lx-visual-ring { width: 34px; height: 34px; transform: rotate(-90deg); }
+.lx-visual-ring circle { fill: none; stroke: rgba(0, 0, 0, .1); stroke-width: 5; }
+.lx-visual-ring .lx-ring-value { stroke: var(--tint-icon); stroke-dasharray: 107; stroke-dashoffset: 107; stroke-linecap: round; animation: lx-ring 4s ease-in-out infinite; }
+.lx-visual-chips { display: flex; flex-direction: column; gap: 3px; }
+.lx-visual-chips i { display: block; width: 42px; height: 7px; border-radius: 999px; background: var(--tint-icon); opacity: .3; animation: lx-chip 3s ease-in-out infinite; }
+.lx-visual-chips i:nth-child(2) { width: 30px; animation-delay: .4s; }
+.lx-visual-chips i:nth-child(3) { width: 36px; animation-delay: .8s; }
+.lx-visual-check { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: #fff; color: var(--tint-icon); font-weight: 800; animation: lx-pop 3.2s ease-in-out infinite; }
+
+@keyframes lx-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -10px; } }
+@keyframes lx-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(40px, 30px) scale(1.15); } }
+@keyframes lx-bar { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+@keyframes lx-ring { 0% { stroke-dashoffset: 107; } 55%, 75% { stroke-dashoffset: 26; } 100% { stroke-dashoffset: 107; } }
+@keyframes lx-chip { 0%, 100% { opacity: .25; } 50% { opacity: .75; } }
+@keyframes lx-pop { 0%, 70%, 100% { transform: scale(1); } 80% { transform: scale(1.15); } }
+@keyframes lx-spin { to { transform: rotate(360deg); } }
+@keyframes lx-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(.72); } }
+
+/* ── Panel derecho (claro, como el contenido del sistema) ─────── */
+:root .lx-page > .login-panel {
+  position: relative;
+  display: flex;
+  width: auto;
+  min-width: 0;
+  align-self: stretch;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0;
+  padding: 72px clamp(22px, 5vw, 72px) 40px;
+  border: 0;
+  border-radius: 26px;
+  background: var(--lx-panel);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme="dark"] .lx-page > .login-panel { border: 1px solid #262a35; background: var(--lx-panel); }
+:root .lx-page > .login-panel > * { width: min(100%, 480px); margin-right: auto; margin-left: auto; }
+:root .lx-page > .login-panel.register-panel > * { width: min(100%, 660px); }
+:root .lx-page .login-panel-heading h2 { color: var(--ink); font-size: clamp(26px, 2.6vw, 34px); letter-spacing: -.03em; }
+:root .lx-page .login-panel-heading .section-kicker { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); }
+:root .lx-page .login-panel-heading .section-kicker::before { width: 7px; height: 7px; border-radius: 50%; background: var(--lx-indigo); content: ""; }
+
+/* Tarjeta del formulario, campos y botón como en el sistema */
+:root .lx-page :is(.login-form, .register-form, .register-success) { border: 1px solid var(--lx-line); border-radius: 24px; background: var(--lx-card); box-shadow: 0 20px 40px -32px rgba(16, 20, 45, .35); }
+:root[data-theme="dark"] .lx-page :is(.login-form, .register-form, .register-success, .branch-option, .plan-option) { background-color: var(--lx-card); }
+:root .lx-page .field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-color: var(--lx-line); border-radius: 14px; background-color: var(--input-bg); }
+:root[data-theme="dark"] .lx-page .field :is(input, select, textarea) { background-color: var(--input-bg); }
+:root .lx-page .field :is(input, select, textarea):focus { border-color: var(--lx-indigo); box-shadow: var(--ring); }
+:root .lx-page .primary-button { border-radius: 16px; background: var(--lx-indigo); box-shadow: 0 12px 22px -14px rgba(79, 91, 213, .8); transition: transform 160ms var(--ease), filter 160ms var(--ease); }
+:root .lx-page .primary-button:hover:not(:disabled) { background: var(--lx-indigo); filter: brightness(1.08); transform: translateY(-1px); }
+:root[data-theme="dark"] .lx-page .primary-button, :root[data-theme="dark"] .lx-page .primary-button:hover:not(:disabled) { background: var(--lx-indigo); }
+:root .lx-page .primary-button span { color: rgba(255, 255, 255, .8); }
+:root .lx-page :is(.branch-option, .plan-option) { border-color: var(--lx-line); border-radius: 18px; }
+:root .lx-page .plan-option.is-selected { border-color: var(--lx-indigo); background: var(--blue-soft); }
+:root .lx-page .auth-switch a, :root .lx-page .link-button { color: var(--lx-indigo); }
+:root[data-theme="dark"] .lx-page .auth-switch a, :root[data-theme="dark"] .lx-page .link-button { color: #aab2ff; }
+
+/* Botón de modo claro/oscuro: píldora en la esquina del panel claro */
+:root .lx-page .login-theme-toggle { position: fixed; top: 44px; right: 46px; border: 1px solid var(--lx-line); background: var(--lx-card); color: var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
+:root .lx-page .login-theme-toggle:hover { background: var(--surface-sunken); }
+
+/* ── Celular y tablet ──────────────────────────────────────── */
+@media (max-width: 900px) {
+  body:has(.lx-page) { background: var(--lx-frame, #17181c); }
+  :root[data-theme="dark"] body:has(.lx-page) { background: #000; }
+  :root .login-page.lx-page { display: flex; min-height: 100dvh; flex-direction: column; gap: 0; margin: 0; padding: 10px; border: 0; border-radius: 0; }
+  :root .lx-page > .login-intro { gap: 14px; padding: 16px 12px 18px; }
+  :root .lx-page .intro-copy { margin: 4px 0 0; }
+  :root .lx-page .intro-copy h1 { font-size: clamp(32px, 8vw, 46px); }
+  .lx-showcase { min-height: 170px; max-height: 190px; }
+  .lx-card { width: min(46%, 180px); padding: 10px 12px 12px; }
+  .lx-card-3, .lx-card-4 { display: none; }
+  :root .lx-page .intro-footer { display: none; }
+  :root .lx-page > .login-panel { padding: 64px 16px 32px; border-radius: 24px; }
+  :root .lx-page .login-theme-toggle { top: 20px; right: 22px; }
+}
+@media (max-width: 640px) {
+  :root .lx-page .intro-copy > p:last-child { display: none; }
+  :root .lx-page .login-theme-toggle { padding: 10px; }
+}
+
+/* ── Movimiento reducido ───────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .lx-brand-mark, .lx-brand-mark span, .lx-glow, .lx-card, .lx-visual-bars i, .lx-visual-ring .lx-ring-value, .lx-visual-chips i, .lx-visual-check { animation: none; }
+  .lx-visual-ring .lx-ring-value { stroke-dashoffset: 26; }
+}
+
+/* El panel izquierdo va directo sobre el marco (sin el degradado antiguo del modo oscuro) */
+:root[data-theme="dark"] .lx-page > .login-intro { border: 0; background: none; }
+
+/* En pantallas grandes el panel izquierdo queda fijo mientras se desplaza un formulario largo (registro) */
+@media (min-width: 901px) {
+  :root .lx-page > .login-intro { position: sticky; top: 30px; height: calc(100dvh - 60px); align-self: start; }
+}
+
+/* Fondo de afuera del marco: un solo color parejo, igual que en el sistema */
+html:has(.lx-page), body:has(.lx-page) { background: #ffffff; }
+:root[data-theme="dark"]:has(.lx-page), :root[data-theme="dark"] body:has(.lx-page) { background: #000000; }
+@media (max-width: 900px) {
+  html:has(.lx-page), body:has(.lx-page) { background: #17181c; }
+  :root[data-theme="dark"]:has(.lx-page), :root[data-theme="dark"] body:has(.lx-page) { background: #000000; }
+}

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { InventoryNav } from "../../components/inventory-nav";
 import { listReservations, releaseReservation, type ReservationStatus, type ReservationSummary } from "../../lib/inventory";
@@ -47,7 +46,6 @@ export default function ReservationsPage() {
     <main className="inventory-page">
       <header className="inventory-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Inventario · Reservas</p>
           <h1>Stock apartado para ventas.</h1>
           <p className="inventory-lede">Las ventas apartan unidades por lote (FEFO) mientras se confirman. Una reserva activa descuenta del stock libre y vence sola si no se usa. La venta POS actual descuenta directo; usar reservas en pedidos está pendiente (D09).</p>

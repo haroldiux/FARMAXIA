@@ -1,19 +1,20 @@
 import Link from "next/link";
+import { AuthBrand, AuthShowcase } from "./components/auth-showcase";
 import { LoginForm } from "./components/login-form";
+import { ThemeToggle } from "./components/theme-toggle";
 
 export default function HomePage() {
   return (
-    <main className="login-page">
+    <main className="login-page lx-page">
+      <ThemeToggle className="login-theme-toggle" />
       <section className="login-intro">
-        <div className="brand-lockup brand-lockup-dark">
-          <div className="brand-mark">F</div>
-          <div><strong>FARMAXIA</strong><span>operación inteligente</span></div>
-        </div>
+        <AuthBrand subtitle="operación inteligente" />
         <div className="intro-copy">
           <p className="eyebrow">Plataforma farmacéutica</p>
           <h1>Lo esencial,<br /><em>en orden.</em></h1>
           <p>Un espacio operativo para farmacias que necesitan claridad, trazabilidad y control en cada sucursal.</p>
         </div>
+        <AuthShowcase variant="login" />
         <div className="intro-footer"><span>●</span> Multi-tenant · Multi-sucursal <span>2026</span></div>
       </section>
       <section className="login-panel">

@@ -23,7 +23,6 @@ export default function WasteActsPage() {
     <main className="inventory-page">
       <header className="inventory-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Inventario · Actas de baja</p>
           <h1>Cada merma, con su acta.</h1>
           <p className="inventory-lede">Toda merma registrada genera un acta numerada por sucursal, lista para imprimir y firmar. Las mermas se registran desde Vencimientos.</p>

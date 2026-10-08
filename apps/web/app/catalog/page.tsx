@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { currentSession, logout, type AuthSession } from "../lib/session";
+import { currentSession, type AuthSession } from "../lib/session";
 import {
   createPriceList,
   findBarcode,
@@ -173,10 +173,6 @@ export default function CatalogPage() {
     }
   }
 
-  async function signOut(): Promise<void> {
-    await logout();
-    window.location.assign("/");
-  }
 
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando catálogo…</main>;
@@ -197,7 +193,6 @@ export default function CatalogPage() {
     <main className="catalog-page">
       <header className="catalog-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Catálogo</p>
           <h1>Productos que sí puedes rastrear.</h1>
           <p className="catalog-lede">Ficha sanitaria, presentaciones y códigos de cada producto de tu farmacia.</p>
@@ -205,7 +200,6 @@ export default function CatalogPage() {
         <div className="header-actions">
           {canManage ? <Link className="quiet-button" href="/catalog/categories">Categorías</Link> : null}
           {canManage ? <Link className="secondary-button" href="/catalog/products/new">+ Nuevo producto</Link> : null}
-          <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
         </div>
       </header>
       <section className="catalog-toolbar">

@@ -68,7 +68,6 @@ export default function AuditPage() {
     <main className="inventory-page">
       <header className="inventory-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Auditoría</p>
           <h1>Quién hizo qué, y cuándo.</h1>
           <p className="inventory-lede">Cada operación queda registrada y no se puede modificar ni borrar. Aquí ves la actividad de tu sucursal.</p>

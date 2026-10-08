@@ -8,3 +8,7 @@ coverage/
 pnpm-debug.log*
 *.tsbuildinfo
 .DS_Store
+
+# Local tool caches (regenerated on each machine)
+.atl/
+.codegraph/

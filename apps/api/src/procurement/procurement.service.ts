@@ -1,10 +1,11 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { TenantDatabase, type TenantScope } from "../database/tenant-database.js";
 import {
   IdempotencyService,
   type IdempotentExecutionResult
 } from "../transversal/idempotency.service.js";
+import { AuditService } from "../transversal/audit.service.js";
 
 export interface SupplierInput {
   name: string;
@@ -73,6 +74,7 @@ export interface PurchaseOrderLineSummary {
   presentationName: string;
   productName: string;
   quantityBase: number;
+  receivedBase: number;
   unitCost: string;
 }
 
@@ -84,6 +86,8 @@ export interface PurchaseOrderSummary {
   warehouseName: string;
   status: string;
   orderedAt: string;
+  closeReason: string | null;
+  closedAt: string | null;
   lines: PurchaseOrderLineSummary[];
 }
 
@@ -158,7 +162,27 @@ interface PurchaseOrderListRow {
   warehouseName: string;
   status: string;
   orderedAt: string | Date;
+  closeReason: string | null;
+  closedAt: string | Date | null;
   lines: PurchaseOrderLineSummary[];
+}
+
+export interface CancelPurchaseOrderInput {
+  reason: string;
+}
+
+export interface CancelPurchaseOrderResult {
+  id: string;
+  status: "CANCELED" | "CLOSED";
+}
+
+export interface PresentationCost {
+  presentationId: string;
+  productName: string;
+  presentationName: string;
+  averageUnitCost: string;
+  lastUnitCost: string;
+  updatedAt: string;
 }
 
 interface QuantityRow {
@@ -256,9 +280,77 @@ function requireRow<T>(row: T | undefined, message: string): T {
 @Injectable()
 export class ProcurementService {
   private readonly idempotency: IdempotencyService;
+  private readonly audit = new AuditService();
 
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {
     this.idempotency = new IdempotencyService();
+  }
+
+  /**
+   * Anula una orden sin recepciones (CANCELED) o cierra el saldo pendiente de una
+   * recepción parcial (CLOSED). Lo ya recibido no se toca.
+   */
+  async cancelPurchaseOrder(scope: TenantScope, id: string, input: CancelPurchaseOrderInput): Promise<CancelPurchaseOrderResult> {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      throw new NotFoundException("Orden de compra no encontrada.");
+    }
+    const reason = typeof input?.reason === "string" ? input.reason.trim() : "";
+    if (reason.length < 3 || reason.length > 255) {
+      throw new BadRequestException("Indica el motivo (entre 3 y 255 caracteres).");
+    }
+    return this.database.withScope(scope, async (client) => {
+      const order = await client.query<{ status: string }>(
+        `select po.status from purchase_orders po
+         join warehouses warehouse on warehouse.tenant_id = po.tenant_id and warehouse.id = po.warehouse_id
+         where po.tenant_id = $1 and po.id = $2 and warehouse.branch_id = $3
+         for update of po`,
+        [scope.tenantId, id, scope.branchId]
+      );
+      const current = order.rows[0];
+      if (!current) {
+        throw new NotFoundException("Orden de compra no encontrada.");
+      }
+      let status: "CANCELED" | "CLOSED";
+      if (current.status === "SUBMITTED" || current.status === "DRAFT") {
+        status = "CANCELED";
+      } else if (current.status === "PARTIALLY_RECEIVED") {
+        status = "CLOSED";
+      } else {
+        throw new ConflictException("La orden ya está recibida, cancelada o cerrada.");
+      }
+      await client.query(
+        `update purchase_orders
+         set status = $3, close_reason = $4, closed_at = now(), closed_by_user_id = $5
+         where tenant_id = $1 and id = $2`,
+        [scope.tenantId, id, status, reason, scope.userId]
+      );
+      await this.audit.recordInTransaction(client, {
+        action: status === "CANCELED" ? "procurement.purchase_order_canceled" : "procurement.purchase_order_closed",
+        entityType: "purchase_order",
+        entityId: id,
+        payload: { previousStatus: current.status, reason }
+      });
+      return { id, status };
+    });
+  }
+
+  /** Costo promedio ponderado vigente de cada presentación (BOB por unidad base). */
+  async listCosts(scope: TenantScope): Promise<{ items: PresentationCost[] }> {
+    return this.database.withScope(scope, async (client) => {
+      const result = await client.query<PresentationCost & { updatedAt: Date }>(
+        `select cost.presentation_id as "presentationId", product.name as "productName",
+                presentation.name as "presentationName",
+                round(cost.average_unit_cost, 4)::text as "averageUnitCost",
+                cost.last_unit_cost::text as "lastUnitCost", cost.updated_at as "updatedAt"
+         from presentation_costs cost
+         join product_presentations presentation on presentation.tenant_id = cost.tenant_id and presentation.id = cost.presentation_id
+         join products product on product.tenant_id = presentation.tenant_id and product.id = presentation.product_id
+         where cost.tenant_id = $1
+         order by product.name, presentation.name`,
+        [scope.tenantId]
+      );
+      return { items: result.rows.map((row) => ({ ...row, updatedAt: new Date(row.updatedAt).toISOString() })) };
+    });
   }
 
   async listSuppliers(scope: TenantScope): Promise<SupplierListResult> {
@@ -306,6 +398,8 @@ export class ProcurementService {
                 warehouse.name as "warehouseName",
                 po.status,
                 po.ordered_at as "orderedAt",
+                po.close_reason as "closeReason",
+                po.closed_at as "closedAt",
                 coalesce(
                   json_agg(
                     json_build_object(
@@ -313,6 +407,14 @@ export class ProcurementService {
                       'presentationName', presentation.name,
                       'productName', product.name,
                       'quantityBase', item.quantity_base,
+                      'receivedBase', coalesce((
+                        select sum(received.quantity_base)
+                        from goods_receipt_items received
+                        join goods_receipts receipt
+                          on receipt.tenant_id = received.tenant_id and receipt.id = received.goods_receipt_id
+                        where receipt.tenant_id = po.tenant_id and receipt.purchase_order_id = po.id
+                          and received.presentation_id = item.presentation_id
+                      ), 0),
                       'unitCost', item.unit_cost::text
                     ) order by item.id
                   ) filter (where item.id is not null),
@@ -331,7 +433,7 @@ export class ProcurementService {
            on product.tenant_id = presentation.tenant_id and product.id = presentation.product_id
          where po.tenant_id = $1 and warehouse.branch_id = $2
          group by po.id, po.supplier_id, supplier.name, po.warehouse_id,
-                  warehouse.name, po.status, po.ordered_at
+                  warehouse.name, po.status, po.ordered_at, po.close_reason, po.closed_at
          order by po.ordered_at desc, po.id desc`,
         [scope.tenantId, scope.branchId]
       );
@@ -339,6 +441,7 @@ export class ProcurementService {
         items: result.rows.map((row) => ({
           ...row,
           orderedAt: new Date(row.orderedAt).toISOString(),
+          closedAt: row.closedAt ? new Date(row.closedAt).toISOString() : null,
           lines: row.lines ?? []
         }))
       };
@@ -536,6 +639,32 @@ export class ProcurementService {
     });
   }
 
+  /**
+   * Costo promedio ponderado perpetuo (decisión D08, pendiente de confirmar):
+   * nuevo = (stock actual × promedio + cantidad recibida × costo) / (stock actual + cantidad).
+   * El stock es el de toda la farmacia antes de sumar esta recepción.
+   */
+  private async updateAverageCost(client: PoolClient, scope: TenantScope, presentationId: string, quantityBase: number, unitCost: string): Promise<void> {
+    const stock = await client.query<{ quantity: string }>(
+      `select coalesce(sum(ib.quantity_base), 0)::text as quantity
+       from inventory_balances ib
+       join inventory_batches b on b.tenant_id = ib.tenant_id and b.id = ib.batch_id
+       where ib.tenant_id = $1 and b.presentation_id = $2`,
+      [scope.tenantId, presentationId]
+    );
+    await client.query(
+      `insert into presentation_costs (tenant_id, presentation_id, average_unit_cost, last_unit_cost)
+       values ($1, $2, $4::numeric, $4::numeric)
+       on conflict (tenant_id, presentation_id) do update set
+         average_unit_cost = round(
+           (presentation_costs.average_unit_cost * $3::numeric + $4::numeric * $5::numeric)
+           / nullif($3::numeric + $5::numeric, 0), 6),
+         last_unit_cost = $4::numeric,
+         updated_at = now()`,
+      [scope.tenantId, presentationId, stock.rows[0]?.quantity ?? "0", unitCost, quantityBase]
+    );
+  }
+
   private normalizeReceive(input: ReceiveInput): ReceiveInput {
     const idempotencyKey = text(input.idempotencyKey, "Idempotency key", 255);
     const receivedAt = dateTime(input.receivedAt, "Received date").toISOString();
@@ -584,8 +713,8 @@ export class ProcurementService {
     if (order.supplierId !== input.supplierId || order.warehouseId !== input.warehouseId) {
       throw new Error("Receipt supplier and warehouse must match the purchase order.");
     }
-    if (order.status === "CANCELED") {
-      throw new Error("Canceled purchase orders cannot be received.");
+    if (order.status === "CANCELED" || order.status === "CLOSED") {
+      throw new Error("Canceled or closed purchase orders cannot be received.");
     }
 
     const receiptResult = await client.query<CreatedRow>(
@@ -660,6 +789,8 @@ export class ProcurementService {
         );
         batch = requireRow(batchResult.rows[0], "Inventory batch was not created.");
       }
+
+      await this.updateAverageCost(client, scope, line.presentationId, line.quantityBase, line.unitCost);
 
       await client.query(
         `insert into goods_receipt_items

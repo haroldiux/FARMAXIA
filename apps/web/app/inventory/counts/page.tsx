@@ -46,7 +46,6 @@ export default function CountsPage() {
     <main className="inventory-page">
       <header className="inventory-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Inventario · Inventario físico</p>
           <h1>Conteo ciego, ajuste aprobado.</h1>
           <p className="inventory-lede">Quien cuenta no ve el stock del sistema. Al enviar el conteo aparecen las diferencias y un responsable las aprueba para ajustar el inventario.</p>

@@ -28,6 +28,7 @@ export interface PurchaseOrderLine {
   presentationName: string;
   productName: string;
   quantityBase: number;
+  receivedBase: number;
   unitCost: string;
 }
 
@@ -39,6 +40,8 @@ export interface PurchaseOrder {
   warehouseName: string;
   status: string;
   orderedAt: string;
+  closeReason: string | null;
+  closedAt: string | null;
   lines: PurchaseOrderLine[];
 }
 
@@ -49,7 +52,7 @@ export interface PurchaseOrderList {
 export interface PurchaseOrderInput {
   supplierId: string;
   warehouseId: string;
-  lines: [{ presentationId: string; quantityBase: number; unitCost: string }];
+  lines: Array<{ presentationId: string; quantityBase: number; unitCost: string }>;
 }
 
 export interface ReceiptLineInput {
@@ -126,16 +129,19 @@ export function procurementIdempotencyKey(): string {
 
 async function parseError(response: Response): Promise<Error> {
   let message = "No pudimos completar la operación de compras.";
+  let serverMessage: string | undefined;
   try {
     const body = (await response.json()) as { message?: string; error?: { message?: string } };
-    message = body.message ?? body.error?.message ?? message;
+    serverMessage = typeof body.message === "string" ? body.message : body.error?.message;
+    message = serverMessage ?? message;
   } catch {
     // Keep a stable message when the API has no JSON error body.
   }
   if (response.status === 403) {
-    message = "Tu sesión no tiene permiso para administrar compras.";
+    message = "Tu sesión no tiene permiso para esta operación de compras.";
   }
-  if (response.status === 409) {
+  // Un 409 con explicación del servidor (p. ej. "El pago supera el saldo") se muestra tal cual.
+  if (response.status === 409 && (!serverMessage || serverMessage === "Conflict")) {
     message = "La compra cambió mientras trabajabas. Actualiza la vista e inténtalo nuevamente.";
   }
   return new Error(message);
@@ -201,5 +207,124 @@ export function receivePurchaseOrder(input: ReceiveInput): Promise<ReceiveResult
       "idempotency-key": input.idempotencyKey
     },
     body: JSON.stringify(input)
+  });
+}
+
+// ---- Módulo 4: cancelación, costos, reposición y pagos a proveedores ----
+
+export interface PresentationCost {
+  presentationId: string;
+  productName: string;
+  presentationName: string;
+  averageUnitCost: string;
+  lastUnitCost: string;
+  updatedAt: string;
+}
+
+export interface ReorderSuggestion {
+  presentationId: string;
+  productName: string;
+  presentationName: string;
+  baseUnitFactor: number;
+  soldBase: number;
+  averageDailyBase: number;
+  availableBase: number;
+  incomingBase: number;
+  daysOfStock: number | null;
+  suggestedBase: number;
+  averageUnitCost: string | null;
+  estimatedCost: string | null;
+  lastSupplierId: string | null;
+  lastSupplierName: string | null;
+}
+
+export type PayableStatus = "OPEN" | "PARTIAL" | "PAID" | "OVERDUE";
+export type ScheduleBucket = "overdue" | "thisWeek" | "next30" | "later" | "paid";
+export type PaymentMethod = "CASH" | "TRANSFER" | "CHECK" | "QR" | "OTHER";
+
+export const paymentMethodLabels: Record<PaymentMethod, string> = {
+  CASH: "Efectivo",
+  TRANSFER: "Transferencia",
+  CHECK: "Cheque",
+  QR: "QR",
+  OTHER: "Otro"
+};
+
+export interface Payable {
+  payableId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  supplierId: string;
+  supplierName: string;
+  currency: string;
+  issuedOn: string;
+  dueOn: string;
+  scheduledOn: string | null;
+  originalAmount: string;
+  outstandingAmount: string;
+  paidAmount: string;
+  status: PayableStatus;
+  bucket: ScheduleBucket;
+  daysToDue: number;
+  paymentCount: number;
+}
+
+export interface PayableList {
+  items: Payable[];
+  totals: Array<{ bucket: Exclude<ScheduleBucket, "paid">; currency: string; outstanding: string; count: number }>;
+}
+
+export interface SupplierPayment {
+  id: string;
+  paidOn: string;
+  amount: string;
+  method: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  createdByName: string | null;
+  createdAt: string;
+}
+
+export function cancelPurchaseOrder(orderId: string, reason: string): Promise<{ id: string; status: "CANCELED" | "CLOSED" }> {
+  return request(`/api/v1/procurement/purchase-orders/${orderId}/cancel`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+}
+
+export function listCosts(): Promise<{ items: PresentationCost[] }> {
+  return request("/api/v1/procurement/costs");
+}
+
+export function reorderSuggestions(coverageDays: number): Promise<{ coverageDays: number; salesWindowDays: number; items: ReorderSuggestion[] }> {
+  return request(`/api/v1/procurement/reorder-suggestions?coverageDays=${coverageDays}`);
+}
+
+export function listPayables(): Promise<PayableList> {
+  return request("/api/v1/procurement/payables");
+}
+
+export function listSupplierPayments(payableId: string): Promise<{ items: SupplierPayment[] }> {
+  return request(`/api/v1/procurement/payables/${payableId}/payments`);
+}
+
+export function registerSupplierPayment(
+  payableId: string,
+  input: { amount: string; paidOn: string; method: PaymentMethod; reference?: string; notes?: string }
+): Promise<{ paymentId: string; outstandingAmount: string; status: "OPEN" | "PARTIAL" | "PAID" }> {
+  const idempotencyKey = procurementIdempotencyKey();
+  return request(`/api/v1/procurement/payables/${payableId}/payments`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+    body: JSON.stringify({ ...input, idempotencyKey })
+  });
+}
+
+export function schedulePayable(payableId: string, scheduledOn: string | null): Promise<{ payableId: string; scheduledOn: string | null }> {
+  return request(`/api/v1/procurement/payables/${payableId}/schedule`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ scheduledOn })
   });
 }

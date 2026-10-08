@@ -15,7 +15,8 @@ import {
   type CashShift,
   type EligibleCashUser
 } from "../lib/cash";
-import { currentSession, logout, type AuthSession } from "../lib/session";
+import { CashMovementsPanel } from "../components/cash-movements-panel";
+import { currentSession, type AuthSession } from "../lib/session";
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("es-BO", {
@@ -184,10 +185,6 @@ export default function CashPage() {
     }
   }
 
-  async function signOut(): Promise<void> {
-    await logout();
-    window.location.assign("/");
-  }
 
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando turnos de caja…</main>;
@@ -203,12 +200,10 @@ export default function CashPage() {
     <main className="cash-page">
       <header className="cash-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">F6 · Ventas y caja</p>
           <h1>Una caja, el turno correcto.</h1>
           <p className="cash-lede">Programa horarios fechados y asigna a una o más personas sin superponer la misma caja.</p>
         </div>
-        <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
       </header>
 
       {error ? <p className="form-error cash-message" role="alert">{error}</p> : null}
@@ -231,6 +226,7 @@ export default function CashPage() {
               </> : <>
                 <div className="cash-control-heading"><strong>Control de caja</strong><span className={`cash-control-status cash-control-status-${shift.control.status.toLowerCase()}`}>{shift.control.status === "OPEN" ? "Abierto" : shift.control.status === "PENDING_APPROVAL" ? "Pendiente de aprobación" : "Cerrado"}</span></div>
                 <p className="cash-control-values">Esperado: <strong>{shift.control.expectedAmountBob} BOB</strong>{shift.control.differenceAmountBob !== null ? <> · Diferencia: <strong>{shift.control.differenceAmountBob} BOB</strong></> : null}</p>
+                {shift.control.status === "OPEN" ? <CashMovementsPanel canRegister={shift.users.some((user) => user.id === session.userId)} control={shift.control} onChanged={refresh} shiftId={shift.id} /> : null}
                 {shift.control.status === "OPEN" && shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action">
                   <label className="field"><span>Conteo final (BOB)</span><input type="text" inputMode="decimal" placeholder="0.0000" value={countingDrafts[shift.id] ?? ""} onChange={(event) => setCountingDrafts((current) => ({ ...current, [shift.id]: event.target.value }))} /></label>
                   <button className="secondary-button" disabled={controlBusy === `${shift.id}:count`} onClick={() => void handleCount(shift)} type="button">{controlBusy === `${shift.id}:count` ? "Guardando…" : "Guardar conteo"}</button>

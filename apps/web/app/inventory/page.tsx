@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { InventoryNav } from "../components/inventory-nav";
-import { currentSession, logout, type AuthSession } from "../lib/session";
+import { currentSession, type AuthSession } from "../lib/session";
 import {
   acknowledgeAlert,
   disposalMethodLabels,
@@ -240,10 +240,6 @@ export default function InventoryPage() {
     }
   }
 
-  async function signOut(): Promise<void> {
-    await logout();
-    window.location.assign("/");
-  }
 
   if (loading) {
     return <main className="center-state"><span className="loading-orb" />Cargando inventario…</main>;
@@ -259,12 +255,10 @@ export default function InventoryPage() {
     <main className="inventory-page">
       <header className="inventory-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">F3 · Inventario operativo</p>
           <h1>Que nada se pierda antes de tiempo.</h1>
           <p className="inventory-lede">Revisa los lotes próximos a vencer y decide qué hacer con cada incidencia desde la sucursal activa.</p>
         </div>
-        <button className="quiet-button" onClick={signOut} type="button">Cerrar sesión ↗</button>
       </header>
 
       <InventoryNav />

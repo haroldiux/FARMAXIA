@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { InventoryNav } from "../../components/inventory-nav";
 import {
@@ -65,7 +64,6 @@ export default function WarehousesPage() {
     <main className="inventory-page">
       <header className="inventory-header">
         <div>
-          <Link className="back-link" href="/dashboard">← Volver al resumen</Link>
           <p className="eyebrow">Inventario · Almacenes</p>
           <h1>Almacenes de la sucursal.</h1>
           <p className="inventory-lede">Separa el stock en almacén central, cuarentena y cadena de frío. Solo los almacenes con despacho activo abastecen las ventas.</p>
