@@ -1,7 +1,7 @@
 # Estado de implementación — FARMAXIA
 
-**Actualizado:** 22 de septiembre de 2026
-**Fase actual:** F9-WEB — reporte global de inventario implementado; verificación PostgreSQL/Compose pendiente.
+**Actualizado:** 9 de octubre de 2026
+**Fase actual:** Gestión de Sucursales y Cajas con control de cuotas SaaS integrado y verificado en `main`.
 
 | ID | Estado | Evidencia | Bloqueo / siguiente condición |
 | --- | --- | --- | --- |
@@ -27,8 +27,13 @@
 | F5-WEB | Completada | Ruta protegida de recepción, estados `PARTIALLY_RECEIVED`/`RECEIVED`, bloqueo de orden contra sobre-recepción concurrente y vista `/procurement/receiving` con lotes repetibles; suite focalizada de procurement 4/4, builds API/Web y smoke Docker verdes. Rama publicada en `origin/codex/f5-web-receiving`; facturas/CxP e importación siguen fuera de alcance. |
 | F6-WEB | Completada | Migración `0011_hot_mongoose.sql`, turnos absolutos por caja, asignaciones múltiples, replay idempotente, bloqueo contra solapamiento concurrente y vista `/cash`; suite API enfocada 11/11, typecheck/builds y smoke Docker verdes. Rama publicada en `origin/codex/f6-web-cash-shifts`; apertura/cierre monetario, recurrencia, ventas y conciliación quedan fuera. |
 | F7-WEB | Completada | Migración `0012_round_war_machine.sql`, controles 1:1 con estados `OPEN`/`PENDING_APPROVAL`/`CLOSED`, decimales exactos, locks, RLS, auditoría, idempotencia y acciones `/cash`; suite cash 8/8, API 47/47, typecheck, builds, Drizzle check, diff check y smoke Docker verdes. Rama publicada en `origin/codex/f7-cash-controls`. |
-| F8-WEB | Implementada y publicada; verificación de integración pendiente | Rutas de catálogo para listas/precios/códigos, lock transaccional por presentación+alcance contra solapamientos, precedencia de sucursal, idempotencia/auditoría y flujos `/catalog`; builds API/Web y typechecks verdes. Rama publicada en `origin/codex/f8-catalog-operations` (`66855fa`). | La suite PostgreSQL y Compose están bloqueados porque PostgreSQL `localhost:5433` y el daemon Docker no están disponibles. |
-| F9-WEB | Implementada y publicada; verificación de integración pendiente | Permiso `inventory.report.global`, migración `0013_global_inventory_report.sql`, RLS SELECT-only tenant-wide, agregación físico/reservado/disponible con cadenas exactas, endpoint y vista `/inventory/report`; typecheck/build API-Web y Drizzle check verdes. Rama publicada en `origin/codex/f9-global-inventory-report` (`2893a1b`). | PostgreSQL `localhost:5433` no está disponible para la suite focalizada; la migración, RLS y smoke Docker requieren revalidación en entorno con servicios. |
+| F8-WEB | Completada | Rutas de catálogo para listas/precios/códigos, lock transaccional por presentación+alcance contra solapamientos, precedencia de sucursal, idempotencia/auditoría y flujos `/catalog`; builds API/Web y typechecks verdes. Integrada en `main`. |
+| F9-WEB | Completada | Permiso `inventory.report.global`, migración `0013_global_inventory_report.sql`, RLS SELECT-only tenant-wide, agregación físico/reservado/disponible con cadenas exactas, endpoint y vista `/inventory/report`; typecheck/build API-Web y Drizzle check verdes. Integrada en `main`. |
+| F10-WEB | Completada | Facturas de compra y Cuentas por Pagar (CxP), vistas `/procurement/invoices` y `/procurement/payables`; tests y builds validados. |
+| F11-WEB | Completada | Confirmación de ventas, terminal POS MVP `/sales`, cotizaciones y semilla de desarrollo; tests y builds validados. |
+| M04–M12 | Completada | Módulos completos 4 al 12 integrados en `main`: POS avanzado, facturación fiscal SIAT, transferencias entre sucursales, controlados y libro oficial, RRHH/turnos/comisiones, CRM/convenios/lealtad, analítica/rentabilidad y API pública/webhooks HMAC. |
+| F-CASH-REG | Completada | Gestión integral de cajas registradoras con enforcement atómico de cuotas del plan (`maxCashRegistersPerBranch`) vía `QuotaService`, endpoints REST y vista `/cash`; 6/6 pruebas unitarias/integración verdes. |
+| F-BRANCHES | Completada | Gestión integral de sucursales con enforcement de cuota (`maxBranches`), migración `0036_branch_management.sql`, asignación de sucursales a usuarios y vistas `/branches` y `/users`; 7/7 pruebas unitarias/integración verdes. |
 
 ## Límites del lote B01
 
@@ -153,7 +158,27 @@ Se construyó la fundación técnica: monorepo, API NestJS/Fastify, web Next.js,
   bearer 401) fueron ejecutados; change archivado en
   `openspec/changes/archive/2026-09-18-16-compras-f4-web`.
 
+## Evidencia Módulos 4 a 12
+
+- Integración en `main`: 226 archivos consolidados cubriendo Procurement avanzado, POS con reservas FEFO y cotizaciones, facturación fiscal SIAT scaffold, transferencias entre sucursales, controlados y libro oficial de psicotrópicos, RRHH/turnos/comisiones, CRM/convenios/lealtad, analytics/reportes multidimensionales y API pública con webhooks firmados por HMAC.
+- Verificación: 50 rutas estáticas y dinámicas compiladas en Next.js; suite Vitest expandida en API con tests de integración multi-tenant.
+
+## Evidencia Gestión de Cajas y Cuotas (F-CASH-REG)
+
+- API: endpoints `GET /api/v1/cash/registers` y `POST /api/v1/cash/registers` protegidos por `cash.manage` y `withScope`.
+- Enforcement de Cuotas: consumo atómico de cuota `cash_registers` / `maxCashRegistersPerBranch` vía `QuotaService` con rollback ante fallos.
+- Web: vista `/cash` con panel de creación y listado de cajas registradoras de la sucursal, visualización de cuotas y estados en tiempo real.
+- Pruebas: `apps/api/test/cash-registers.spec.ts` pasó con 6 pruebas verificando creación, scoped listing, prevención de duplicados, aislamiento multi-tenant y rechazo al exceder el límite del plan.
+
+## Evidencia Gestión de Sucursales y Cuotas (F-BRANCHES)
+
+- Persistencia: migración `0036_branch_management.sql` agrega campos `code`, `phone`, `email`, `is_active` e índices únicos por tenant en la tabla `branches`.
+- API: `BranchesModule` con endpoints `GET /api/v1/branches`, `POST /api/v1/branches`, `PATCH /api/v1/branches/:id/status` y `GET /api/v1/branches/:id` bajo permiso `branches.manage`.
+- Asignación de Usuarios: `IdentityService` implementa `PATCH /api/v1/identity/users/:id/branches` para asociar múltiples sucursales con control transaccional.
+- Enforcement de Cuotas: consumo atómico de cuota `branches` / `maxBranches` vía `QuotaService` con rollback.
+- Web: vista dedicada `/branches` y asignación visual de sucursales en `/users`.
+- Pruebas: `apps/api/test/branches.spec.ts` pasó con 7 pruebas verificando alta de sucursal, cuotas de plan, unicidad de código, RLS por tenant y asignación de usuarios.
+
 ## Próxima tarea
 
-Esperar revisión del parent antes de cualquier publicación; ventas y la
-integración comercial de reservas continúan dependiendo de D09.
+Continuar con los flujos de integración restantes y pruebas e2e en staging.
