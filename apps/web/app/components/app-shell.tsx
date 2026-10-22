@@ -9,7 +9,10 @@ import { moduleForPath, moduleSections, type AppModule } from "../lib/modules";
 import { statusLabels, subscriptionSummary, type SubscriptionSummary } from "../lib/saas";
 import { currentSession, logout, type AuthSession } from "../lib/session";
 import { setTheme, useTheme } from "../lib/theme";
+import { getTourForPathname } from "../lib/tour-definitions";
 import { NavIcon } from "./nav-icon";
+import { SandboxBanner, RoleTrainingModal, SandboxProvider, useSandbox } from "./sandbox/index.ts";
+import { TourProvider, useTour } from "./tours";
 
 /** Rutas del sistema interno de la farmacia: todas llevan el marco con sidebar y barra superior. */
 const tenantRoutes = ["/dashboard", "/catalog", "/inventory", "/procurement", "/transfers", "/controlled", "/staff", "/cash", "/sales", "/customers", "/analytics", "/audit", "/users", "/branches", "/integrations", "/billing", "/account"];
@@ -36,6 +39,61 @@ const ShellContext = createContext<ShellValue | null>(null);
 /** Datos que ya cargó el marco (sesión, cuenta, suscripción y alertas); evita pedirlos otra vez. */
 export function useShellSession(): ShellValue | null {
   return useContext(ShellContext);
+}
+
+/** Inicia el tutorial automáticamente si es la primera visita del usuario a la pantalla. */
+function TourAutoLauncher() {
+  const pathname = usePathname();
+  const { startTour } = useTour();
+
+  useEffect(() => {
+    const tour = getTourForPathname(pathname);
+    if (!tour) return;
+    const timer = window.setTimeout(() => {
+      startTour(tour, false);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [pathname, startTour]);
+
+  return null;
+}
+
+/** Botón de ayuda para reproducir el tutorial del módulo actual bajo demanda. */
+function TourTriggerButton() {
+  const pathname = usePathname();
+  const { startTour } = useTour();
+  const tour = getTourForPathname(pathname);
+
+  if (!tour) return null;
+
+  return (
+    <button
+      aria-label={`Iniciar tutorial guiado: ${tour.title}`}
+      className="ax-icon-button ax-help-button"
+      onClick={() => startTour(tour, true)}
+      title={`Iniciar tutorial (${tour.title})`}
+      type="button"
+    >
+      <NavIcon name="help" />
+    </button>
+  );
+}
+
+/** Botón para abrir el selector de entrenamiento por rol y modo sandbox. */
+function RoleTrainingTriggerButton() {
+  const { openModal } = useSandbox();
+
+  return (
+    <button
+      aria-label="Entrenamiento interactivo por rol"
+      className="ax-icon-button ax-training-button"
+      onClick={openModal}
+      title="Entrenamiento interactivo por rol"
+      type="button"
+    >
+      <NavIcon name="users" />
+    </button>
+  );
 }
 
 /** Va en el layout raíz: envuelve con el marco solo las páginas internas (nunca el login). */
@@ -110,51 +168,58 @@ function AppShell({ children }: Readonly<{ children: ReactNode }>) {
 
   return (
     <ShellContext.Provider value={{ session, account, subscription, alerts }}>
-      <div className={`app-shell ax-shell ${mobileOpen ? "is-menu-open" : ""}`}>
-        <button aria-hidden="true" className="ax-backdrop" onClick={() => setMobileOpen(false)} tabIndex={-1} type="button" />
+      <TourProvider tenantId={session.tenantId} userId={session.userId}>
+        <SandboxProvider>
+          <TourAutoLauncher />
+          <SandboxBanner />
+          <RoleTrainingModal />
+          <div className={`app-shell ax-shell ${mobileOpen ? "is-menu-open" : ""}`}>
+            <button aria-hidden="true" className="ax-backdrop" onClick={() => setMobileOpen(false)} tabIndex={-1} type="button" />
 
-        <aside aria-label="Menú principal" className="ax-sidebar">
-          <div className="ax-brand-row">
-            <Link className="ax-brand" href="/dashboard">
-              <span className="ax-brand-mark" aria-hidden="true"><span /><span /><span /><span /></span>
-              <strong>FARMAXIA</strong>
-            </Link>
-            <button aria-label="Cerrar menú" className="ax-icon-button ax-close" onClick={() => setMobileOpen(false)} type="button"><NavIcon name="close" /></button>
-          </div>
-
-          <nav className="ax-nav" aria-label="Navegación principal">
-            {visibleSections.map((section) => (
-              <div className="ax-nav-section" key={section.label}>
-                {section.label !== "General" ? <p className="ax-nav-label">{section.label}</p> : null}
-                {section.items.map((item) => {
-                  const active = item.href === current;
-                  return (
-                    <Link aria-current={active ? "page" : undefined} className={`ax-link ${active ? "is-active" : ""}`} href={item.href} key={item.href}>
-                      <NavIcon name={item.icon} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
+            <aside aria-label="Menú principal" className="ax-sidebar">
+              <div className="ax-brand-row">
+                <Link className="ax-brand" href="/dashboard">
+                  <span className="ax-brand-mark" aria-hidden="true"><span /><span /><span /><span /></span>
+                  <strong>FARMAXIA</strong>
+                </Link>
+                <button aria-label="Cerrar menú" className="ax-icon-button ax-close" onClick={() => setMobileOpen(false)} type="button"><NavIcon name="close" /></button>
               </div>
-            ))}
-          </nav>
 
-          {subscription ? (
-            <div className="ax-promo">
-              <span className="ax-promo-shape" aria-hidden="true" />
-              <strong>{subscription.plan.name}</strong>
-              <p>{statusLabels[subscription.status]}{subscription.openInvoices ? ` · ${subscription.openInvoices} por pagar` : " · al día"}</p>
-              {session.permissions.includes("billing.manage") ? <Link className="ax-promo-button" href="/billing">Ver suscripción</Link> : null}
+              <nav className="ax-nav" aria-label="Navegación principal" data-tour="dashboard-modules">
+                {visibleSections.map((section) => (
+                  <div className="ax-nav-section" key={section.label}>
+                    {section.label !== "General" ? <p className="ax-nav-label">{section.label}</p> : null}
+                    {section.items.map((item) => {
+                      const active = item.href === current;
+                      return (
+                        <Link aria-current={active ? "page" : undefined} className={`ax-link ${active ? "is-active" : ""}`} href={item.href} key={item.href}>
+                          <NavIcon name={item.icon} />
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
+
+              {subscription ? (
+                <div className="ax-promo" data-tour="shell-plan-card">
+                  <span className="ax-promo-shape" aria-hidden="true" />
+                  <strong>{subscription.plan.name}</strong>
+                  <p>{statusLabels[subscription.status]}{subscription.openInvoices ? ` · ${subscription.openInvoices} por pagar` : " · al día"}</p>
+                  {session.permissions.includes("billing.manage") ? <Link className="ax-promo-button" href="/billing">Ver suscripción</Link> : null}
+                </div>
+              ) : null}
+            </aside>
+
+            <div className="app-content" data-alt-tone={currentModule?.altTone ?? "lilac"} data-module={currentModule?.key ?? "dashboard"} data-tone={currentModule?.tone ?? "blue"}>
+              <Topbar account={account} alerts={alerts} modules={visibleModules} onMenu={() => setMobileOpen(true)} onSignOut={signOut} />
+              {/* key: al cambiar de página el contenido vuelve a entrar con una transición suave */}
+              <div className="page-transition" key={pathname}>{children}</div>
             </div>
-          ) : null}
-        </aside>
-
-        <div className="app-content" data-alt-tone={currentModule?.altTone ?? "lilac"} data-module={currentModule?.key ?? "dashboard"} data-tone={currentModule?.tone ?? "blue"}>
-          <Topbar account={account} alerts={alerts} modules={visibleModules} onMenu={() => setMobileOpen(true)} onSignOut={signOut} />
-          {/* key: al cambiar de página el contenido vuelve a entrar con una transición suave */}
-          <div className="page-transition" key={pathname}>{children}</div>
-        </div>
-      </div>
+          </div>
+        </SandboxProvider>
+      </TourProvider>
     </ShellContext.Provider>
   );
 }
@@ -228,7 +293,7 @@ function Topbar({ account, alerts, modules, onMenu, onSignOut }: Readonly<{
       </div>
 
       <div className="ax-topbar-right">
-        {account ? <span className="ax-branch-pill"><span className="status-dot" />{account.branchName}</span> : null}
+        {account ? <span className="ax-branch-pill" data-tour="shell-branch-status"><span className="status-dot" />{account.branchName}</span> : null}
         <form className="ax-search" onSubmit={search} role="search">
           <NavIcon name="search" />
           <input aria-label="Buscar módulo" onChange={(event) => setQuery(event.target.value)} placeholder="Buscar…" value={query} />
@@ -240,6 +305,8 @@ function Topbar({ account, alerts, modules, onMenu, onSignOut }: Readonly<{
             </div>
           ) : null}
         </form>
+        <RoleTrainingTriggerButton />
+        <TourTriggerButton />
         <div className="ax-bell-wrap">
           <button aria-expanded={menu === "alerts"} aria-label={`Alertas${pending ? `: ${pending} sin revisar` : ""}`} className="ax-icon-button ax-bell" onClick={() => setMenu(menu === "alerts" ? null : "alerts")} type="button">
             <NavIcon name="bell" />

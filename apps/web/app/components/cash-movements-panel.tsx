@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSandbox } from "./sandbox/index.ts";
 import {
   cashShiftIdempotencyKey,
   createCashMovement,
@@ -31,6 +32,7 @@ interface CashMovementsPanelProps {
 
 /** Movimientos de caja (ingresos y egresos) de un turno abierto. */
 export function CashMovementsPanel({ shiftId, control, canRegister, onChanged }: CashMovementsPanelProps) {
+  const { notifyAction } = useSandbox();
   const [data, setData] = useState<CashMovementList | null>(null);
   const [type, setType] = useState<CashMovementType>("OUT");
   const [amountBob, setAmountBob] = useState("");
@@ -77,6 +79,7 @@ export function CashMovementsPanel({ shiftId, control, canRegister, onChanged }:
       setReason("");
       setCategory("");
       await Promise.all([load(), onChanged()]);
+      notifyAction("record_movement");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "No pudimos registrar el movimiento.");
     } finally {

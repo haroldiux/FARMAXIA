@@ -18,8 +18,15 @@ export function InventoryNav() {
     <nav className="inventory-subnav" aria-label="Secciones de inventario">
       {links.map((link) => {
         const active = link.href === "/inventory" ? pathname === "/inventory" : pathname.startsWith(link.href);
+        const isAudit = link.href === "/inventory/counts";
         return (
-          <Link aria-current={active ? "page" : undefined} className={active ? "is-active" : ""} href={link.href} key={link.href}>
+          <Link
+            aria-current={active ? "page" : undefined}
+            className={active ? "is-active" : ""}
+            href={link.href}
+            key={link.href}
+            {...(isAudit ? { "data-tour": "inventory-audit-report" } : {})}
+          >
             {link.label}
           </Link>
         );

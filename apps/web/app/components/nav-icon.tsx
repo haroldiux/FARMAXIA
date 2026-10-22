@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type NavIconName = "overview" | "catalog" | "inventory" | "report" | "procurement" | "transfer" | "cash" | "sales" | "audit" | "billing" | "tenants" | "plans" | "users" | "account" | "logout" | "menu" | "close" | "collapse" | "search" | "bell" | "chevron" | "sun" | "moon" | "trend" | "alert" | "controlled" | "staff" | "customers" | "integrations";
+export type NavIconName = "overview" | "catalog" | "inventory" | "report" | "procurement" | "transfer" | "cash" | "sales" | "audit" | "billing" | "tenants" | "plans" | "users" | "account" | "logout" | "menu" | "close" | "collapse" | "search" | "bell" | "chevron" | "sun" | "moon" | "trend" | "alert" | "controlled" | "staff" | "customers" | "integrations" | "help";
 
 // Trazos inline (24×24, currentColor) para no añadir una librería de iconos.
 const paths: Record<NavIconName, ReactNode> = {
@@ -32,7 +32,8 @@ const paths: Record<NavIconName, ReactNode> = {
   customers: <><rect x="3" y="4" width="18" height="16" rx="2.5" /><circle cx="9" cy="11" r="2.2" /><path d="M5.5 17c.5-2 1.9-3 3.5-3s3 1 3.5 3" /><path d="M15 9h3M15 12h3" /></>,
   staff: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   integrations: <><path d="M9 2v5M15 2v5" /><path d="M6 7h12v4a6 6 0 0 1-12 0Z" /><path d="M12 17v5" /></>,
-  collapse: <><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9 4v16" /><path d="m15 10-2 2 2 2" /></>
+  collapse: <><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9 4v16" /><path d="m15 10-2 2 2 2" /></>,
+  help: <><circle cx="12" cy="12" r="9" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><circle cx="12" cy="17" r=".5" fill="currentColor" /></>
 };
 
 export function NavIcon({ name }: Readonly<{ name: NavIconName }>) {

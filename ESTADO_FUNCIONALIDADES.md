@@ -212,6 +212,28 @@ Comparar todas las funcionalidades previstas para el sistema con lo que ya está
 
 > **F19 (octubre 2026):** permiso nuevo `integrations.manage` (solo Propietario) y pantalla `/integrations` (Integraciones, en Administración) para claves de API, webhooks e historial de entregas. Migración `0035_public_api`. La API pública es solo lectura: escribir datos desde afuera queda como decisión abierta (D83).
 
+### Experiencia de usuario y onboarding (F20)
+
+- ✅ Tours interactivos y recorridos guiados nativos en React 19 (F20, D84): motor ligero sin dependencias externas con spotlight recortado en SVG, tarjeta flotante adaptada al sistema de diseño Bento (modo claro y oscuro), y persistencia en `localStorage` por empresa y usuario
+- ✅ Recorridos guiados configurados:
+  - **Panel de control (`/dashboard`)**: KPIs diarios, navegación por módulos, sucursal/turno y cuotas del plan SaaS
+  - **Mostrador de ventas POS (`/sales`)**: búsqueda con lector y atajo F2, clientes y fidelización, carrito con lotes FEFO, acciones rápidas y cobro multimoneda (F4/F9)
+  - **Gestión de inventario (`/inventory`)**: selector de almacenes, semáforo de vencimientos FEFO, panel de acciones (cuarentena y bajas) y auditoría de conteo físico
+- ✅ Auto-lanzamiento en la primera visita de cada usuario y botón de ayuda en la barra superior para iniciar o repetir el tutorial bajo demanda
+
+### Modo sandbox interactivo y entrenamiento por rol (F21)
+
+- ✅ Modo sandbox efímero en memoria (`SandboxStore`) sin persistencia en base de datos PostgreSQL: estado inicial realista con productos, lotes, turnos, ventas y actas de merma de demostración (D85)
+- ✅ Interceptor de peticiones cliente (`handleSandboxRequest` en `authenticatedFetch`): desvía operaciones operativas clave (aperturas de turno, búsquedas y cobro POS, arqueos, cuarentenas y bajas) al almacén en memoria sin impacto en datos reales
+- ✅ 5 itinerarios de entrenamiento estructurados por rol:
+  - **Cajero / Ventas POS**: apertura con fondo inicial (200 BOB), búsqueda rápida de fármacos (F2), cobro en efectivo/QR, gastos menores de caja chica y arqueo de cierre
+  - **Almacenero / Logística**: órdenes de compra pendientes, recepción física de lote y vencimiento, semáforo FEFO, aislamiento en cuarentena y emisión de acta de baja
+  - **Regente Farmacéutico**: verificación de clasificación sanitaria AGEMED, dispensación bajo receta médica, archivo digital de folios y Libro Oficial de Controlados
+  - **Encargado de Sucursal**: traspasos inter-sucursales, planificación de turnos de personal, supervisión de diferencias de arqueo y monitoreo de almacenes
+  - **Propietario / Administrador**: KPIs ejecutivos en tiempo real, administración de usuarios dentro de cuotas SaaS, gestión de sucursales/cajas activas y analítica de márgenes
+- ✅ Interfaz Bento: selector modal de roles accesible desde la barra superior, barra superior persistente con progreso de pasos, indicador de rol, guía operativa y botón de salida con purga completa de datos de prueba
+
+
 ## 5. Avance según el roadmap de la especificación maestra
 
 | Sprint | Contenido | Estado |

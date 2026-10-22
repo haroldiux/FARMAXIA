@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShellSession } from "../components/app-shell";
+import { useSandbox } from "../components/sandbox/index.ts";
 import { PosCustomerPicker, type PosCustomer } from "../components/pos-customer";
 import { SalesNav } from "../components/sales-nav";
 import {
@@ -95,6 +96,7 @@ function itemLabel(item: SalesLookupItem): string {
 
 export default function SalesPage() {
   const shell = useShellSession();
+  const { notifyAction } = useSandbox();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [customer, setCustomer] = useState<PosCustomer | null>(null);
   const [shifts, setShifts] = useState<SalesShift[]>([]);
@@ -262,6 +264,7 @@ export default function SalesPage() {
           setResults(items);
           setHighlight(0);
           setSearching(false);
+          if (items.length > 0) notifyAction("search_product");
         })
         .catch((reason) => {
           if (seq !== searchSeq.current || controller.signal.aborted) return;
@@ -439,6 +442,7 @@ export default function SalesPage() {
         ...(needsPrescription && prescription ? { prescription: prescriptionPayload(prescription) } : {})
       });
       setSale(result);
+      notifyAction("confirm_sale");
       setRxOpen(false);
       setRxError(null);
       setRxDraft(emptyPrescription());
@@ -485,6 +489,7 @@ export default function SalesPage() {
       return;
     }
     setRxError(null);
+    notifyAction("submit_prescription");
     void submitSale(rxDraft);
   }
 
@@ -554,7 +559,7 @@ export default function SalesPage() {
           <label className="inventory-filter"><span>Turno abierto</span><select value={shiftId} onChange={(event) => setShiftId(event.target.value)}><option value="">Selecciona un turno abierto</option>{openShifts.map((shift) => <option key={shift.id} value={shift.id}>{shiftLabel(shift)}</option>)}</select></label>
           <label className="inventory-filter"><span>Almacén de despacho</span><select value={warehouseId} onChange={(event) => changeWarehouse(event.target.value)}><option value="">Selecciona un almacén</option>{dispatchWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
         </div>
-        <div className="pos-search">
+        <div className="pos-search" data-tour="pos-search">
           <label className="inventory-filter"><span>Producto o código de barras</span>
             <input ref={searchRef} autoFocus autoComplete="off" role="combobox" aria-expanded={results.length > 0} aria-controls="pos-results" aria-autocomplete="list" placeholder="Nombre, DCI, principio activo, laboratorio o escanea el código" value={query} disabled={!warehouseId} onChange={(event) => setQuery(event.target.value)} onKeyDown={onSearchKeyDown} />
           </label>
@@ -571,7 +576,7 @@ export default function SalesPage() {
           })}</ul> : null}
         </div>
         {notice ? <p className="pos-notice" role="status">{notice}</p> : null}
-        {cart.length ? <ul className="pos-cart" aria-label="Carrito">{cart.map((line) => <li className="pos-cart-line" key={line.presentationId}>
+        <div data-tour="pos-cart">{cart.length ? <ul className="pos-cart" aria-label="Carrito">{cart.map((line) => <li className="pos-cart-line" key={line.presentationId}>
           <div className="pos-cart-name"><strong>{line.label}{line.isControlled ? <em className="controlled-badge">Controlado</em> : null}</strong><small>{line.unitPriceBob} BOB c/u · disponibles: {line.available}</small>{line.batchLabel ? <small className="pos-lot-chosen">Lote elegido: {line.batchLabel}</small> : null}</div>
           <div className="pos-qty" role="group" aria-label={`Cantidad de ${line.label}`}>
             <button className="quiet-button pos-touch" type="button" aria-label="Quitar una unidad" disabled={line.quantity <= 1} onClick={() => applyCart(decrementLine(cart, line.presentationId))}>−</button>
@@ -588,15 +593,15 @@ export default function SalesPage() {
               </button>
             </li>)}</ul> : <small className="pos-hint">No hay lotes disponibles en este almacén.</small>) : null}
           </div> : null}
-        </li>)}</ul> : <p className="pos-empty">El carrito está vacío. Escanea un producto o búscalo para empezar.</p>}
+        </li>)}</ul> : <p className="pos-empty">El carrito está vacío. Escanea un producto o búscalo para empezar.</p>}</div>
         {needsPrescription ? <p className="pos-notice" role="status">El carrito tiene medicamentos controlados: al confirmar te pediremos los datos de la receta.</p> : null}
         {hasOverride ? <label className="inventory-filter pos-override-reason"><span>Motivo del cambio de lote (obligatorio)</span><input required maxLength={200} value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Ej.: el cliente pidió el lote de mayor vencimiento" /></label> : null}
         <p className="pos-shortcuts" aria-label="Atajos de teclado"><kbd>F2</kbd> Buscar · <kbd>↑</kbd><kbd>↓</kbd> + <kbd>Enter</kbd> Elegir · <kbd>F4</kbd> Cobro · <kbd>F9</kbd> Confirmar · <kbd>Esc</kbd> Limpiar</p>
       </section>
-      <aside className="panel cash-form-panel sales-summary">
+      <aside className="panel cash-form-panel sales-summary" data-tour="pos-tender">
         <div className="panel-heading"><div><p className="section-kicker">Cobro</p><h2>Confirmación</h2></div></div>
         <div className="sales-estimate"><span>Total</span><strong>{fromUnits(estimatedUnits)} BOB</strong><small>Según los precios vigentes de la sucursal. El total final lo calcula el servidor.</small></div>
-        {customersPlan ? <PosCustomerPicker agreementsPlan={agreementsPlan} disabled={saving} loyaltyPlan={loyaltyPlan} onChange={changeCustomer} value={customer} /> : null}
+        {customersPlan ? <div data-tour="pos-customer"><PosCustomerPicker agreementsPlan={agreementsPlan} disabled={saving} loyaltyPlan={loyaltyPlan} onChange={changeCustomer} value={customer} /></div> : null}
         {payments.map((payment, index) => {
           const agreement = payment.method === "AGREEMENT" ? customer?.agreements.find((item) => item.agreementId === payment.agreementId) : undefined;
           const due = dueWithoutPayment(index);

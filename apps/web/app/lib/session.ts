@@ -1,3 +1,5 @@
+import { handleSandboxRequest } from "./sandbox/sandbox-interceptor.ts";
+
 export interface LoginInput {
   email: string;
   password: string;
@@ -119,6 +121,15 @@ async function refresh(): Promise<void> {
 }
 
 export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  if (typeof window !== "undefined" && window.sessionStorage.getItem("farmaxia.sandbox_active") === "true") {
+    const sandboxRes = await handleSandboxRequest(path, init);
+    if (sandboxRes.handled) {
+      return new Response(JSON.stringify(sandboxRes.body), {
+        status: sandboxRes.status,
+        headers: { "content-type": "application/json" }
+      });
+    }
+  }
   let accessToken = token();
   if (!accessToken) {
     await refresh();

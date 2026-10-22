@@ -91,7 +91,7 @@ export function DashboardShell() {
 
   return (
     <main className="dashboard-main ax-dashboard">
-      <section className="ax-grid" aria-label="Métricas principales">
+      <section className="ax-grid" aria-label="Métricas principales" data-tour="dashboard-kpis">
         {topMetrics.slice(0, 4).map((metric, index) => <MetricCard key={metric.key} metric={metric} tint={tints[index] ?? "lilac"} />)}
       </section>
 

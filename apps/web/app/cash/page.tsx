@@ -19,6 +19,7 @@ import {
 } from "../lib/cash";
 import { CashMovementsPanel } from "../components/cash-movements-panel";
 import { currentSession, type AuthSession } from "../lib/session";
+import { useSandbox } from "../components/sandbox/index.ts";
 
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("es-BO", {
@@ -28,6 +29,7 @@ function formatTimestamp(value: string): string {
 }
 
 export default function CashPage() {
+  const { notifyAction } = useSandbox();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [registers, setRegisters] = useState<CashRegister[]>([]);
   const [users, setUsers] = useState<EligibleCashUser[]>([]);
@@ -141,6 +143,7 @@ export default function CashPage() {
     setControlBusy(`${shift.id}:open`);
     try {
       await openCashShift(shift.id, { idempotencyKey: cashShiftIdempotencyKey(), openingAmountBob });
+      notifyAction("open_shift");
       await refresh();
       setOpeningDrafts((current) => ({ ...current, [shift.id]: "" }));
       setNotice("Turno abierto. El monto inicial será la base esperada del conteo.");
@@ -162,6 +165,7 @@ export default function CashPage() {
     setControlBusy(`${shift.id}:count`);
     try {
       await countCashShift(shift.id, { idempotencyKey: cashShiftIdempotencyKey(), countedAmountBob });
+      notifyAction("close_shift");
       await refresh();
       setCountingDrafts((current) => ({ ...current, [shift.id]: "" }));
       setNotice("Conteo guardado. Las diferencias distintas de cero requieren aprobación.");
@@ -181,6 +185,7 @@ export default function CashPage() {
         idempotencyKey: cashShiftIdempotencyKey(),
         approvalNote: "Diferencia revisada por supervisor"
       });
+      notifyAction("approve_difference");
       await refresh();
       setNotice("Diferencia aprobada y turno cerrado.");
     } catch (reason) {

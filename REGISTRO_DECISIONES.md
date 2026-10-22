@@ -87,6 +87,8 @@ Complementa `PLAN_IMPLEMENTACION_ANTIGRAVITY.md`. Una decisión abierta bloquea 
 | D81 | Abierta · consultar con el docente (producto) | Producto | ¿Los pedidos externos (tienda en línea, delivery) deben crear ventas o reservar stock? No implementado: depende de las reglas de reserva (D09) y de la facturación (D03). | Módulo 12 (pedidos externos) |
 | D82 | Abierta · consultar con el docente (producto/comercial) | Producto/Comercial | ¿Con qué apps de delivery o plataformas de e-commerce se integra el sistema, y bajo qué contratos y comisiones? No implementado. | Módulo 12 (delivery) |
 | D83 | Abierta · consultar con el docente (producto/seguridad) | Producto/Seguridad | ¿La API pública debe permitir escribir datos (clientes, pedidos, precios, stock) o solo leerlos? Hoy es solo lectura. | Módulo 12 (API pública) |
+| D84 | Confirmada · 2026-10-21 | Harold / Gentle | Motor de tours interactivos sin dependencias externas (React 19 nativo) con spotlight SVG, tarjeta Bento y persistencia en localStorage por tenant y usuario. Permite auto-inicio en primera visita y repetición bajo demanda desde la barra superior. | Web F20, T1–T6 |
+| D85 | Confirmada · 2026-10-21 | Harold / Gentle | Modo entrenamiento y sandbox en memoria para 5 roles operativos (Cajero, Almacenero, Regente, Encargado, Propietario). Intercepta llamadas REST en el cliente sin persistencia en PostgreSQL, banner persistente con avance de pasos interactivos y purga automática al salir. | Web F21, T1–T6 |
 
 ## Regla de actualización
 

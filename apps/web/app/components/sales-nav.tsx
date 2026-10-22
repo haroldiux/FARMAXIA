@@ -23,7 +23,7 @@ export function SalesNav() {
   const shell = useShellSession();
   const visible = links.filter((link) => !shell || shell.session.permissions.includes(link.permission));
   return (
-    <nav className="inventory-subnav" aria-label="Secciones de ventas">
+    <nav className="inventory-subnav" aria-label="Secciones de ventas" data-tour="pos-quick-actions">
       {visible.map((link) => {
         const active = isActive(link.href, pathname);
         return (
