@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useSandbox } from "./sandbox-context";
 
 /**
@@ -15,8 +15,29 @@ export function SandboxBanner() {
     currentStep,
     nextStep,
     prevStep,
-    exitTraining,
+    requestExit,
   } = useSandbox();
+
+  const bannerRef = useRef<HTMLElement | null>(null);
+  const isVisible = Boolean(isSandboxActive && activeTrack && currentStep);
+
+  // Publish the banner height so the shell (desktop) and the sticky topbar (mobile) can offset it.
+  useEffect(() => {
+    const root = document.documentElement;
+    const banner = bannerRef.current;
+    if (!isVisible || !banner) {
+      root.style.removeProperty("--ax-training-banner-h");
+      return;
+    }
+    const publish = () => root.style.setProperty("--ax-training-banner-h", `${banner.offsetHeight}px`);
+    publish();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    observer?.observe(banner);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--ax-training-banner-h");
+    };
+  }, [isVisible]);
 
   if (!isSandboxActive || !activeTrack || !currentStep) {
     return null;
@@ -27,45 +48,37 @@ export function SandboxBanner() {
   const isFirst = currentStepIndex === 0;
   const isLast = currentStepIndex === totalSteps - 1;
 
-  const handleExit = () => {
-    const confirmed = window.confirm(
-      "¿Deseas salir del modo entrenamiento?\nTodos los datos y movimientos de prueba simulados se borrarán por completo de la memoria.",
-    );
-    if (confirmed) {
-      exitTraining();
-    }
-  };
-
   return (
     <aside
+      ref={bannerRef}
       role="status"
       aria-label="Modo entrenamiento activo"
-      className="sticky top-0 z-[9980] w-full bg-amber-500/15 dark:bg-amber-950/70 border-b border-amber-500/40 text-amber-950 dark:text-amber-100 backdrop-blur-md px-4 py-2.5 transition-all shadow-sm"
+      className="ax-training-banner"
     >
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs sm:text-sm">
+      <div className="ax-training-banner-inner">
         {/* Left: Role Pill & Step Title */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider text-[11px] bg-amber-500 text-white shadow-xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+        <div className="ax-training-banner-title">
+          <span className="ax-training-pill">
+            <span className="ax-training-pill-dot" />
             Entrenamiento: {activeTrack.roleCode}
           </span>
-          <span className="font-semibold text-slate-800 dark:text-slate-100">
+          <span className="ax-training-step">
             Paso {stepNumber} de {totalSteps}: {currentStep.title}
           </span>
         </div>
 
         {/* Center: Action prompt guidance */}
-        <div className="flex-1 md:px-4 text-xs font-medium text-amber-900 dark:text-amber-200/90 italic">
+        <div className="ax-training-prompt">
           👉 {currentStep.actionPrompt}
         </div>
 
         {/* Right: Step navigation & Exit purge button */}
-        <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+        <div className="ax-training-actions">
           {!isFirst && (
             <button
               type="button"
               onClick={prevStep}
-              className="px-2.5 py-1 rounded-md text-xs font-medium border border-amber-500/40 hover:bg-amber-500/20 text-amber-900 dark:text-amber-100 transition-colors"
+              className="ax-training-btn"
             >
               Anterior
             </button>
@@ -74,15 +87,15 @@ export function SandboxBanner() {
           <button
             type="button"
             onClick={nextStep}
-            className="px-3 py-1 rounded-md text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition-colors"
+            className="ax-training-btn is-primary"
           >
             {isLast ? "Finalizar" : "Siguiente"}
           </button>
 
           <button
             type="button"
-            onClick={handleExit}
-            className="px-2.5 py-1 rounded-md text-xs font-semibold bg-red-100 hover:bg-red-200 dark:bg-red-950/60 dark:hover:bg-red-900/80 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800/80 transition-colors"
+            onClick={requestExit}
+            className="ax-training-btn is-danger"
             title="Borra todos los datos de prueba y vuelve al inicio"
           >
             Salir y borrar datos

@@ -151,3 +151,15 @@ export function calculatePopoverPosition(
     actualPlacement,
   };
 }
+
+/**
+ * Whether two rects are the same within a 1px tolerance, so polling callers avoid re-rendering
+ * on sub-pixel jitter.
+ */
+export function rectsEqual(a: DOMRectLike | null, b: DOMRectLike | null): boolean {
+  if (a === null || b === null) {
+    return a === b;
+  }
+  const close = (x: number, y: number) => Math.abs(x - y) < 1;
+  return close(a.top, b.top) && close(a.left, b.left) && close(a.width, b.width) && close(a.height, b.height);
+}

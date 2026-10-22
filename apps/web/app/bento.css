@@ -551,3 +551,136 @@ html:has(.ax-shell), body:has(.ax-shell) { background: #ffffff; }
 .ax-sidebar { overflow: hidden; }
 .ax-brand-row, .ax-promo { flex-shrink: 0; }
 .ax-sidebar > .ax-nav { flex: 1 1 auto; min-height: 0; margin-bottom: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }
+
+/* ── 9. Entrenamiento por rol y tours guiados ───────────────────
+   Estos componentes se montan fuera de .ax-shell, así que usan los tokens globales
+   (--surface, --ink, --line...), que ya cambian con <html data-theme>. ─────────── */
+:root {
+  --training-amber: #d97706;
+  --training-amber-ink: #5c3a05;
+  --training-amber-soft: #fff4dc;
+  --training-amber-border: #f0c777;
+}
+:root[data-theme="dark"] {
+  --training-amber: #f59e0b;
+  --training-amber-ink: #fde7b0;
+  --training-amber-soft: #2e2410;
+  --training-amber-border: #6b4e12;
+}
+
+/* Banner: en el escritorio ocupa su propia fila arriba y el marco se acorta por su altura
+   (--ax-training-banner-h la publica el componente); en celular queda pegado arriba. */
+.ax-training-banner { position: sticky; top: 0; z-index: 60; width: 100%; padding: 8px 16px; border-bottom: 1px solid var(--training-amber-border); background: var(--training-amber-soft); color: var(--training-amber-ink); box-shadow: var(--shadow-sm); }
+.ax-training-banner-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1400px; margin: 0 auto; font-size: 13px; }
+.ax-training-banner-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.ax-training-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-pill); background: var(--training-amber); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.ax-training-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: ax-training-pulse 1.6s ease-in-out infinite; }
+.ax-training-step { color: var(--ink); font-weight: 600; }
+.ax-training-prompt { flex: 1; min-width: 0; padding: 0 12px; font-size: 12px; font-style: italic; font-weight: 500; overflow-wrap: anywhere; }
+.ax-training-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
+.ax-training-btn { min-height: 30px; padding: 4px 11px; border: 1px solid var(--training-amber-border); border-radius: var(--radius-xs); background: transparent; color: var(--training-amber-ink); font-size: 12px; font-weight: 600; cursor: pointer; transition: background-color var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.ax-training-btn:hover { background: rgba(217, 119, 6, .14); }
+.ax-training-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(217, 119, 6, .35); }
+.ax-training-btn.is-primary { border-color: var(--training-amber); background: var(--training-amber); color: #fff; }
+.ax-training-btn.is-primary:hover { border-color: #b45309; background: #b45309; }
+.ax-training-btn.is-danger { border-color: var(--danger-border, #f2cbc9); background: var(--danger-soft, #fdefef); color: var(--danger-ink, #a93634); }
+.ax-training-btn.is-danger:hover { background: var(--danger-border, #f2cbc9); }
+@keyframes ax-training-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes ax-training-ring { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
+
+@media (min-width: 901px) {
+  :root body:has(.ax-training-banner) .app-shell.ax-shell { height: calc(100dvh - 32px - var(--ax-training-banner-h, 0px)); }
+}
+@media (max-width: 900px) {
+  .ax-training-banner-inner { flex-direction: column; align-items: stretch; gap: 8px; }
+  .ax-training-prompt { padding: 0; }
+  .ax-training-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .ax-topbar { top: var(--ax-training-banner-h, 0px); }
+}
+
+/* Resaltado no bloqueante del elemento del paso actual */
+.ax-training-spotlight { position: fixed; z-index: 9970; border: 3px solid #f59e0b; border-radius: 14px; box-shadow: 0 0 0 4px rgba(245, 158, 11, .25), 0 0 24px rgba(245, 158, 11, .45); pointer-events: none; transition: all .25s cubic-bezier(.16, 1, .3, 1); animation: ax-training-ring 2s ease-in-out infinite; }
+
+/* Modal de selección de rol */
+.ax-training-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; padding: 16px; overflow-y: auto; background: rgba(5, 10, 22, .6); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.ax-training-modal { position: relative; width: 100%; max-width: 760px; max-height: calc(100dvh - 32px); margin: auto; padding: 24px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg); }
+.ax-training-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.ax-training-eyebrow { display: inline-flex; align-items: center; margin-bottom: 6px; padding: 3px 10px; border: 1px solid var(--blue-border); border-radius: var(--radius-pill); background: var(--blue-soft); color: var(--blue-ink); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.ax-training-modal-title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; line-height: 1.25; }
+.ax-training-modal-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.ax-training-close { display: grid; width: 32px; height: 32px; flex-shrink: 0; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--muted); cursor: pointer; transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.ax-training-close:hover { background: var(--line); color: var(--ink); }
+.ax-training-close:focus-visible { outline: none; box-shadow: var(--ring); }
+.ax-training-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
+.ax-training-role { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-sunken); transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.ax-training-role:hover { border-color: var(--blue); box-shadow: var(--shadow); }
+.ax-training-role-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ax-training-role-title { color: var(--ink); font-size: 14px; font-weight: 700; }
+.ax-training-duration { padding: 2px 8px; border-radius: var(--radius-xs); background: var(--line); color: var(--ink-soft); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.ax-training-role-desc { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+.ax-training-role-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ax-training-role-steps { color: var(--muted); font-size: 11px; }
+.ax-training-start { min-height: 32px; padding: 6px 12px; border: 0; border-radius: var(--radius-xs); background: var(--blue); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; transition: filter var(--dur) var(--ease); }
+.ax-training-start:hover { filter: brightness(.92); }
+.ax-training-start:focus-visible { outline: none; box-shadow: var(--ring); }
+.ax-training-note { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding: 12px; border: 1px solid var(--training-amber-border); border-radius: var(--radius); background: var(--training-amber-soft); color: var(--training-amber-ink); font-size: 12px; }
+.ax-training-note-icon { font-size: 16px; }
+@media (max-width: 640px) {
+  .ax-training-backdrop { padding: 12px; }
+  .ax-training-modal { max-height: calc(100dvh - 24px); padding: 18px 16px; }
+  .ax-training-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Diálogos de entrenamiento (sustituyen alert/confirm) y confeti de finalización */
+.ax-training-start.is-quiet { border: 1px solid var(--line); background: var(--surface-sunken); color: var(--ink); }
+.ax-training-start.is-quiet:hover { filter: none; background: var(--line); }
+.ax-training-start.is-danger { background: var(--danger-ink, #a93634); }
+.ax-training-dialog { z-index: 1; max-width: 440px; animation: ax-training-dialog-in 240ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+.ax-training-dialog-backdrop { animation: ax-training-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+.ax-training-dialog .ax-training-modal-title { margin-top: 2px; }
+.ax-training-dialog-text { margin: 10px 0 0; color: var(--ink-soft); font-size: 14px; line-height: 1.55; }
+.ax-training-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+.ax-training-dialog-actions .ax-training-start { min-height: 38px; padding: 8px 16px; font-size: 13px; }
+.ax-confetti-layer { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.ax-confetti-piece { position: absolute; top: 50%; left: 50%; display: block; border-radius: 2px; background: var(--cf-color); opacity: 0; will-change: transform, opacity; animation: ax-confetti-burst 2000ms both; }
+@keyframes ax-training-dialog-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes ax-training-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ax-confetti-burst {
+  0% { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.6); animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+  35% { opacity: 1; transform: translate3d(var(--cf-dx), var(--cf-dy), 0) rotate(var(--cf-rot)) scale(1); animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--cf-dx), calc(var(--cf-dy) + var(--cf-fall)), 0) rotate(calc(var(--cf-rot) * 1.6)) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ax-training-dialog { animation: ax-training-fade-in 160ms linear both; }
+  .ax-confetti-layer { display: none; }
+}
+
+/* Tour guiado: tarjeta flotante (posición inline) y capa con recorte */
+.ax-tour-overlay { position: fixed; inset: 0; z-index: 9990; overflow: hidden; pointer-events: auto; }
+.ax-tour-overlay.is-dim { background: rgba(5, 10, 22, .6); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.ax-tour-overlay-svg { display: block; width: 100%; height: 100%; }
+.ax-tour-card { position: fixed; z-index: 9995; width: 360px; max-width: calc(100vw - 32px); padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg); transition: top 200ms var(--ease), left 200ms var(--ease); user-select: none; }
+.ax-tour-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.ax-tour-card-meta { display: flex; align-items: center; gap: 8px; }
+.ax-tour-step-pill { display: inline-flex; align-items: center; padding: 3px 10px; border: 1px solid var(--blue-border); border-radius: var(--radius-pill); background: var(--blue-soft); color: var(--blue-ink); font-size: 12px; font-weight: 600; }
+.ax-tour-badge { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid var(--training-amber-border); border-radius: 6px; background: var(--training-amber-soft); color: var(--training-amber-ink); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+.ax-tour-close { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--muted); cursor: pointer; }
+.ax-tour-close:hover { color: var(--ink); }
+.ax-tour-close:focus-visible, .ax-tour-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.ax-tour-title { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.ax-tour-description { margin: 6px 0 0; color: var(--ink-soft); font-size: 14px; line-height: 1.55; }
+.ax-tour-progress { width: 100%; height: 6px; margin-top: 14px; overflow: hidden; border-radius: var(--radius-pill); background: var(--line); }
+.ax-tour-progress-bar { height: 100%; border-radius: var(--radius-pill); background: var(--blue); transition: width 300ms var(--ease); }
+.ax-tour-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
+.ax-tour-skip { padding: 4px 2px; border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; }
+.ax-tour-skip:hover { color: var(--ink); text-decoration: underline; }
+.ax-tour-actions { display: flex; align-items: center; gap: 8px; }
+.ax-tour-btn { min-height: 32px; padding: 6px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-xs); background: transparent; color: var(--ink-soft); font-size: 12px; font-weight: 600; cursor: pointer; transition: background-color var(--dur) var(--ease); }
+.ax-tour-btn:hover { background: var(--surface-sunken); }
+.ax-tour-btn.is-primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+.ax-tour-btn.is-primary:hover { background: var(--blue); filter: brightness(.92); }
+@media (prefers-reduced-motion: reduce) {
+  .ax-training-pill-dot, .ax-training-spotlight { animation: none; }
+  .ax-tour-card, .ax-tour-progress-bar { transition: none; }
+}

@@ -96,7 +96,7 @@ function itemLabel(item: SalesLookupItem): string {
 
 export default function SalesPage() {
   const shell = useShellSession();
-  const { notifyAction } = useSandbox();
+  const { notifyAction, isSandboxActive } = useSandbox();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [customer, setCustomer] = useState<PosCustomer | null>(null);
   const [shifts, setShifts] = useState<SalesShift[]>([]);
@@ -165,8 +165,9 @@ export default function SalesPage() {
   const changeUnits = paidUnits > estimatedUnits ? paidUnits - estimatedUnits : 0n;
   const crmFeatures = shell?.subscription?.features;
   // Without the plan snapshot nothing CRM is offered; the API enforces the plan in any case.
-  const customersPlan = crmFeatures !== undefined && planAllows(crmFeatures, "crm.customers");
-  const loyaltyPlan = crmFeatures !== undefined && planAllows(crmFeatures, "crm.loyalty");
+  // Training mode simulates the CRM so every pharmacy can practice customers and points.
+  const customersPlan = isSandboxActive || (crmFeatures !== undefined && planAllows(crmFeatures, "crm.customers"));
+  const loyaltyPlan = isSandboxActive || (crmFeatures !== undefined && planAllows(crmFeatures, "crm.loyalty"));
   const agreementsPlan = crmFeatures !== undefined && planAllows(crmFeatures, "crm.agreements");
   const pointValueUnits = customer?.points ? toUnits(customer.points.settings.pointValueBob) : 0n;
   const tenderOptions: SaleTender[] = [
@@ -329,6 +330,7 @@ export default function SalesPage() {
   /** A different (or no) customer invalidates any POINTS/AGREEMENT payment typed for the previous one. */
   function changeCustomer(next: PosCustomer | null): void {
     setCustomer(next);
+    if (next) notifyAction("link_customer");
     setPayments((current) => current.map((payment) => isCreditLike(payment.method) ? emptyPayment() : payment));
   }
 
@@ -551,7 +553,7 @@ export default function SalesPage() {
     {workspaceHeader}
     {error ? <p className="form-error cash-message" role="alert">{error}</p> : null}
     {quote ? <p className="pos-notice quote-banner" role="status">Cobrando la proforma <strong>{quote.number}</strong>{quote.customerName ? ` de ${quote.customerName}` : ""}. Puedes editar las líneas; el precio es siempre el vigente. <button className="quiet-button" type="button" onClick={() => { setQuote(null); setCart([]); setNotice(null); window.history.replaceState(null, "", "/sales"); }}>Descartar proforma</button></p> : null}
-    {sale ? <section className="panel cash-shifts-panel sale-confirmed" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>{sale.payments.map((payment) => `${saleTenderLabels[payment.method]} ${payment.amountBob}${payment.reference ? ` (${payment.reference})` : ""}`).join(" · ")} · Cambio {sale.changeAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><p>Número de venta: <strong>{sale.saleNumber}</strong></p>{sale.customer ? <p>Cliente: <strong>{sale.customer.fullName}</strong>{sale.loyalty ? ` · ganó ${sale.loyalty.earned} pts${sale.loyalty.redeemed ? `, canjeó ${sale.loyalty.redeemed}` : ""} · saldo ${sale.loyalty.balance} pts` : ""}{sale.agreement ? ` · convenio ${sale.agreement.name} cubrió ${formatMoney(sale.agreement.coverageAmountBob)}` : ""}</p> : null}{sale.prescription ? <p>Receta archivada: <strong>{sale.prescription.folio}</strong></p> : null}<div className="user-actions"><Link className="primary-button receipt-link" href={`/sales/${sale.id}`}>Ver / imprimir recibo</Link><button className="quiet-button pos-touch" type="button" onClick={() => { setSale(null); focusSearch(); }}>Siguiente cliente</button></div></section> : null}
+    {sale ? <section className="panel cash-shifts-panel sale-confirmed" aria-live="polite"><p className="section-kicker">Venta confirmada</p><h2>{sale.totalBob} BOB</h2><p>{sale.payments.map((payment) => `${saleTenderLabels[payment.method]} ${payment.amountBob}${payment.reference ? ` (${payment.reference})` : ""}`).join(" · ")} · Cambio {sale.changeAmountBob} BOB · FEFO aplicado a {sale.items.length} línea(s).</p><p>Número de venta: <strong>{sale.saleNumber}</strong></p>{sale.customer ? <p>Cliente: <strong>{sale.customer.fullName}</strong>{sale.loyalty ? ` · ganó ${sale.loyalty.earned} pts${sale.loyalty.redeemed ? `, canjeó ${sale.loyalty.redeemed}` : ""} · saldo ${sale.loyalty.balance} pts` : ""}{sale.agreement ? ` · convenio ${sale.agreement.name} cubrió ${formatMoney(sale.agreement.coverageAmountBob)}` : ""}</p> : null}{sale.prescription ? <p>Receta archivada: <strong>{sale.prescription.folio}</strong></p> : null}<div className="user-actions"><Link className="primary-button receipt-link" data-tour="pos-receipt-link" href={`/sales/${sale.id}`}>Ver / imprimir recibo</Link><button className="quiet-button pos-touch" type="button" onClick={() => { setSale(null); focusSearch(); }}>Siguiente cliente</button></div></section> : null}
     <form className="cash-layout sales-layout" onSubmit={(event) => { event.preventDefault(); void submitSale(); }}>
       <section className="panel cash-shifts-panel">
         <div className="panel-heading"><div><p className="section-kicker">Venta del mostrador</p><h2>Buscar y agregar productos</h2></div><span className="panel-count">{cart.length.toString().padStart(2, "0")}</span></div>

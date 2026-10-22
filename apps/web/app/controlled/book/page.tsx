@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ControlledDenied, ControlledHeader, PremiumRequired, formatDay, useControlledAccess } from "../../components/controlled-shared";
+import { useTrainingViewAction } from "../../components/sandbox/index.ts";
 import { ControlledNav } from "../../components/controlled-nav";
 import {
   currentMonth,
@@ -21,6 +22,7 @@ export default function ControlledBookPage() {
   const [restricted, setRestricted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  useTrainingViewAction("view_controlled_book", !loading && data !== null);
 
   useEffect(() => {
     if (access.status !== "ready" || !/^\d{4}-\d{2}$/.test(month)) return;
@@ -79,7 +81,7 @@ export default function ControlledBookPage() {
             </div>
           </section>
 
-          <section className="panel controlled-book-sheet">
+          <section className="panel controlled-book-sheet" data-tour="controlled-book-table">
             <div className="panel-heading">
               <div><p className="section-kicker">Libro de controlados</p><h2>Período {month}</h2></div>
               <span className="panel-count no-print">{(data?.lines.length ?? 0).toString().padStart(2, "0")}</span>

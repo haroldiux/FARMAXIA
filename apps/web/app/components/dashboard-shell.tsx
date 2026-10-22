@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTrainingViewAction } from "./sandbox/index.ts";
 import { listProducts } from "../lib/catalog";
 import { salesSummary, type SalesSummary } from "../lib/sales";
 import { daysUntil, formatBob, formatDate, statusLabels } from "../lib/saas";
@@ -60,6 +61,8 @@ export function DashboardShell() {
       mounted = false;
     };
   }, [session, canSeeSales, canSeeCatalog]);
+
+  useTrainingViewAction("review_kpis", Boolean(session) && (!canSeeSales || sales !== null || salesError));
 
   if (!shell || !session) return null;
   const { account, subscription, alerts } = shell;

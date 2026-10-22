@@ -20,7 +20,6 @@ import {
   completeTour,
   progressPercentage,
   isTourCompleted,
-  markTourCompleted,
   resetTourProgress,
   getBrowserStorage,
 } from "../../lib/tours";
@@ -28,6 +27,7 @@ import {
   type DOMRectLike,
   calculateTargetRect,
 } from "./tour-position";
+import { recordTourClosed } from "../../lib/tours/auto-launch";
 import { TourOverlay } from "./tour-overlay";
 import { TourCard } from "./tour-card";
 
@@ -88,7 +88,7 @@ export function TourProvider({
     if (!state || !activeTour) return;
     const completed = completeTour(state);
     setState(completed);
-    markTourCompleted(getBrowserStorage(), tenantId, userId, activeTour.id);
+    recordTourClosed(getBrowserStorage(), tenantId, userId, activeTour.id);
     setActiveTour(null);
   }, [state, activeTour, tenantId, userId]);
 
@@ -114,8 +114,10 @@ export function TourProvider({
     if (!state || !activeTour) return;
     const skipped = skipTour(state);
     setState(skipped);
+    // A dismissed tour counts as seen: it only replays from the help button.
+    recordTourClosed(getBrowserStorage(), tenantId, userId, activeTour.id);
     setActiveTour(null);
-  }, [state, activeTour]);
+  }, [state, activeTour, tenantId, userId]);
 
   const resetTour = useCallback(
     (tourId: string) => {

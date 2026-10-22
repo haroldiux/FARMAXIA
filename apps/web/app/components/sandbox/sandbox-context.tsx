@@ -5,17 +5,31 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { purgeSandbox } from "../../lib/sandbox/sandbox-store.ts";
+import { purgeSandbox, setSandboxUserId } from "../../lib/sandbox/sandbox-store.ts";
+import {
+  exitSandboxSession,
+  restoreSandboxSession,
+  saveSandboxSession,
+  startSandboxSession,
+} from "../../lib/sandbox/sandbox-session.ts";
 import {
   type RoleTrainingTrack,
   type TrainingStep,
-  getTrainingTrackForRole,
-  allRoleTracks,
+  shouldNavigateToStep,
 } from "../../lib/tours/role-tracks.ts";
+import {
+  INITIAL_TRAINING_DIALOG,
+  trainingDialogReducer,
+  type TrainingDialogState,
+} from "../../lib/sandbox/training-dialog.ts";
+import { getAvailableTracks } from "../../lib/tours/track-access.ts";
 
 export interface SandboxContextValue {
   isSandboxActive: boolean;
@@ -31,6 +45,12 @@ export interface SandboxContextValue {
   prevStep: () => void;
   exitTraining: () => void;
   notifyAction: (actionType: string) => void;
+  /** In-app dialogs replacing alert()/confirm(). */
+  dialog: TrainingDialogState;
+  requestExit: () => void;
+  cancelExit: () => void;
+  confirmExit: () => void;
+  dismissCompletion: () => void;
 }
 
 const defaultContextValue: SandboxContextValue = {
@@ -39,7 +59,7 @@ const defaultContextValue: SandboxContextValue = {
   currentStepIndex: 0,
   currentStep: null,
   isModalOpen: false,
-  availableTracks: allRoleTracks,
+  availableTracks: [],
   openModal: () => {},
   closeModal: () => {},
   startTraining: () => {},
@@ -47,15 +67,24 @@ const defaultContextValue: SandboxContextValue = {
   prevStep: () => {},
   exitTraining: () => {},
   notifyAction: () => {},
+  dialog: INITIAL_TRAINING_DIALOG,
+  requestExit: () => {},
+  cancelExit: () => {},
+  confirmExit: () => {},
+  dismissCompletion: () => {},
 };
 
 const SandboxContext = createContext<SandboxContextValue | null>(null);
 
 export interface SandboxProviderProps {
   children: ReactNode;
+  /** Signed-in user id: simulated cash shifts and staff are assigned to this person. */
+  userId?: string;
+  /** Signed-in permissions: only tracks the user can fully complete are offered. */
+  permissions?: readonly string[];
 }
 
-export function SandboxProvider({ children }: SandboxProviderProps) {
+export function SandboxProvider({ children, userId, permissions }: SandboxProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -63,6 +92,12 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
   const [activeTrack, setActiveTrack] = useState<RoleTrainingTrack | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dialog, dispatchDialog] = useReducer(trainingDialogReducer, INITIAL_TRAINING_DIALOG);
+  // Furthest step reached. Revisiting an earlier step never auto-advances again.
+  const maxReachedRef = useRef(0);
+
+  // Until the permissions are known nothing is offered (never everything).
+  const availableTracks = useMemo(() => getAvailableTracks(permissions ?? []), [permissions]);
 
   const currentStep = useMemo<TrainingStep | null>(() => {
     if (!activeTrack || !activeTrack.steps.length) return null;
@@ -77,14 +112,44 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
     setIsModalOpen(false);
   }, []);
 
+  // Must run before the restore effect below so reseeded data is assigned to the signed-in user.
+  useEffect(() => {
+    if (userId) setSandboxUserId(userId);
+  }, [userId]);
+
+  // Restore the track after a reload: the sessionStorage flag survives but React state does not.
+  useEffect(() => {
+    // Wait for the session: restoring early would exit a legitimate track.
+    if (!permissions) return;
+    const restored = restoreSandboxSession(window.sessionStorage, permissions);
+    if (restored) {
+      setActiveTrack(restored.track);
+      setCurrentStepIndex(restored.stepIndex);
+      maxReachedRef.current = restored.stepIndex;
+      setIsSandboxActive(true);
+    }
+  }, [permissions]);
+
+  // Keep the persisted step in sync while training is active.
+  useEffect(() => {
+    if (isSandboxActive && activeTrack) {
+      saveSandboxSession(window.sessionStorage, {
+        roleCode: activeTrack.roleCode,
+        stepIndex: currentStepIndex,
+      });
+    }
+  }, [isSandboxActive, activeTrack, currentStepIndex]);
+
   const exitTraining = useCallback(() => {
     if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem("farmaxia.sandbox_active");
+      exitSandboxSession(window.sessionStorage);
+    } else {
+      purgeSandbox();
     }
-    purgeSandbox();
     setIsSandboxActive(false);
     setActiveTrack(null);
     setCurrentStepIndex(0);
+    maxReachedRef.current = 0;
     setIsModalOpen(false);
     if (pathname !== "/dashboard") {
       router.push("/dashboard");
@@ -93,47 +158,52 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
 
   const startTraining = useCallback(
     (roleCode: string) => {
-      purgeSandbox();
-      const track = getTrainingTrackForRole(roleCode);
-      if (!track || !track.steps.length) {
+      if (!availableTracks.some((item) => item.roleCode === roleCode)) return;
+      const track =
+        typeof window !== "undefined" ? startSandboxSession(window.sessionStorage, roleCode) : null;
+      if (!track) {
         return;
-      }
-
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem("farmaxia.sandbox_active", "true");
       }
       setActiveTrack(track);
       setCurrentStepIndex(0);
+      maxReachedRef.current = 0;
       setIsSandboxActive(true);
       setIsModalOpen(false);
 
       const firstStep = track.steps[0]!;
-      if (pathname !== firstStep.path) {
+      if (shouldNavigateToStep(firstStep, pathname)) {
         router.push(firstStep.path);
       }
     },
-    [pathname, router],
+    [availableTracks, pathname, router],
   );
 
   const nextStep = useCallback(() => {
     if (!activeTrack) return;
 
     if (currentStepIndex >= activeTrack.steps.length - 1) {
-      // Completed all steps in the track!
-      alert(
-        `¡Entrenamiento de ${activeTrack.title} finalizado!\nTodos los datos de prueba han sido eliminados de la sesión.`,
-      );
+      // Completed all steps in the track: celebrate in-app, then purge.
+      dispatchDialog({ type: "finish", roleTitle: activeTrack.title });
       exitTraining();
       return;
     }
 
     const nextIndex = currentStepIndex + 1;
+    maxReachedRef.current = Math.max(maxReachedRef.current, nextIndex);
     setCurrentStepIndex(nextIndex);
     const step = activeTrack.steps[nextIndex];
-    if (step && pathname !== step.path) {
+    if (step && shouldNavigateToStep(step, pathname)) {
       router.push(step.path);
     }
   }, [activeTrack, currentStepIndex, exitTraining, pathname, router]);
+
+  const requestExit = useCallback(() => dispatchDialog({ type: "request_exit" }), []);
+  const cancelExit = useCallback(() => dispatchDialog({ type: "cancel_exit" }), []);
+  const dismissCompletion = useCallback(() => dispatchDialog({ type: "dismiss_completion" }), []);
+  const confirmExit = useCallback(() => {
+    dispatchDialog({ type: "cancel_exit" });
+    exitTraining();
+  }, [exitTraining]);
 
   const prevStep = useCallback(() => {
     if (!activeTrack || currentStepIndex <= 0) return;
@@ -141,7 +211,7 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
     const prevIndex = currentStepIndex - 1;
     setCurrentStepIndex(prevIndex);
     const step = activeTrack.steps[prevIndex];
-    if (step && pathname !== step.path) {
+    if (step && shouldNavigateToStep(step, pathname)) {
       router.push(step.path);
     }
   }, [activeTrack, currentStepIndex, pathname, router]);
@@ -149,6 +219,7 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
   const notifyAction = useCallback(
     (actionType: string) => {
       if (!isSandboxActive || !currentStep) return;
+      if (currentStepIndex < maxReachedRef.current) return;
 
       if (currentStep.interactiveAction === actionType) {
         // Automatically advance to the next step when interactive condition is met
@@ -157,7 +228,7 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
         }, 300);
       }
     },
-    [isSandboxActive, currentStep, nextStep],
+    [isSandboxActive, currentStep, currentStepIndex, nextStep],
   );
 
   const contextValue = useMemo<SandboxContextValue>(
@@ -167,7 +238,7 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
       currentStepIndex,
       currentStep,
       isModalOpen,
-      availableTracks: allRoleTracks,
+      availableTracks,
       openModal,
       closeModal,
       startTraining,
@@ -175,6 +246,11 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
       prevStep,
       exitTraining,
       notifyAction,
+      dialog,
+      requestExit,
+      cancelExit,
+      confirmExit,
+      dismissCompletion,
     }),
     [
       isSandboxActive,
@@ -182,6 +258,7 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
       currentStepIndex,
       currentStep,
       isModalOpen,
+      availableTracks,
       openModal,
       closeModal,
       startTraining,
@@ -189,6 +266,11 @@ export function SandboxProvider({ children }: SandboxProviderProps) {
       prevStep,
       exitTraining,
       notifyAction,
+      dialog,
+      requestExit,
+      cancelExit,
+      confirmExit,
+      dismissCompletion,
     ],
   );
 

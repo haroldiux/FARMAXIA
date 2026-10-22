@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { useTrainingViewAction } from "../components/sandbox/index.ts";
 import { currentSession, type AuthSession } from "../lib/session";
 import {
   createPriceList,
@@ -43,6 +44,7 @@ export default function CatalogPage() {
   const [priceListName, setPriceListName] = useState("");
   const [priceCurrency, setPriceCurrency] = useState("BOB");
   const [priceListBranchScope, setPriceListBranchScope] = useState(false);
+  useTrainingViewAction("view_controlled_catalog", !loading && products !== null);
   const [selectedPriceListId, setSelectedPriceListId] = useState("");
   const [selectedPresentationId, setSelectedPresentationId] = useState("");
   const [priceAmount, setPriceAmount] = useState("");
@@ -222,7 +224,7 @@ export default function CatalogPage() {
       </section>
       {error ? <p className="form-error catalog-message" role="alert">{error}</p> : null}
       {notice ? <p className="form-success catalog-message" role="status">{notice}</p> : null}
-      <section className="product-list-panel catalog-list-full">
+      <section className="product-list-panel catalog-list-full" data-tour="catalog-table">
         <div className="panel-heading"><div><p className="section-kicker">Catálogo</p><h2>Productos</h2></div><span className="panel-count">{products.items.length.toString().padStart(2, "0")}</span></div>
         {products.items.length ? <div className="product-list">{products.items.map((product) => (
           <Link className={`product-row product-row-link ${product.isActive ? "" : "is-inactive"}`} href={`/catalog/products/${product.productId}`} key={product.productId}>

@@ -6,14 +6,51 @@
 
 export interface TrainingStep {
   id: string;
+  /** Where the learner is sent (may redirect, e.g. /branches -> /users?tab=branches). */
   path: string;
+  /** Pathname where the target actually lives when it differs from `path` because of a redirect. */
+  landingPath?: string;
   targetSelector: string;
   title: string;
   description: string;
   actionPrompt: string;
-  interactiveAction?: string;
+  interactiveAction?: TrainingAction;
   badge?: string;
 }
+
+/**
+ * Every `interactiveAction` a track step may wait for. The UI reports each one through
+ * `notifyAction` (or `useTrainingViewAction`); a test keeps this list, the tracks and the UI in sync.
+ */
+export const SUPPORTED_TRAINING_ACTIONS = [
+  "open_shift",
+  "search_product",
+  "link_customer",
+  "confirm_sale",
+  "open_receipt",
+  "choose_receipt_width",
+  "record_movement",
+  "close_shift",
+  "view_orders",
+  "receive_batch",
+  "check_fefo_alerts",
+  "quarantine_batch",
+  "create_waste_act",
+  "view_controlled_catalog",
+  "submit_prescription",
+  "view_prescription_archive",
+  "view_controlled_book",
+  "request_transfer",
+  "schedule_shift",
+  "approve_difference",
+  "view_warehouses",
+  "review_kpis",
+  "create_user",
+  "check_quotas",
+  "review_analytics",
+] as const;
+
+export type TrainingAction = (typeof SUPPORTED_TRAINING_ACTIONS)[number];
 
 export interface RoleTrainingTrack {
   id: string;
@@ -60,6 +97,17 @@ export const cajeroTrainingTrack: RoleTrainingTrack = {
       badge: "Atajo F2",
     },
     {
+      id: "cajero-pos-customer",
+      path: "/sales",
+      targetSelector: '[data-tour="pos-customer"]',
+      title: "Cliente y Puntos de Fidelidad",
+      description:
+        "Asociar al cliente a la venta acumula sus puntos y permite canjearlos como medio de pago.",
+      actionPrompt: "Busca a 'María' en el campo Cliente y selecciónala para ver su saldo de puntos.",
+      interactiveAction: "link_customer",
+      badge: "Puntos",
+    },
+    {
       id: "cajero-pos-confirm",
       path: "/sales",
       targetSelector: '[data-tour="pos-tender"]',
@@ -69,6 +117,29 @@ export const cajeroTrainingTrack: RoleTrainingTrack = {
       actionPrompt: "Elige cobro en Efectivo con monto exacto y presiona 'Confirmar venta (F9)'.",
       interactiveAction: "confirm_sale",
       badge: "Atajo F4 / F9",
+    },
+    {
+      id: "cajero-receipt-open",
+      path: "/sales",
+      targetSelector: '[data-tour="pos-receipt-link"]',
+      title: "Recibo de la Venta",
+      description:
+        "Cada venta confirmada genera un recibo no fiscal que puedes mostrar al cliente o imprimir.",
+      actionPrompt: "Presiona 'Ver / imprimir recibo' en el cuadro de venta confirmada.",
+      interactiveAction: "open_receipt",
+      badge: "Recibo",
+    },
+    {
+      id: "cajero-receipt-width",
+      path: "/sales",
+      landingPath: "/sales/[saleId]",
+      targetSelector: '[data-tour="receipt-width"]',
+      title: "Papel Térmico de 58 u 80 mm",
+      description:
+        "El recibo se adapta al ancho de tu impresora térmica; la elección se recuerda en este equipo.",
+      actionPrompt: "Alterna entre 58 mm y 80 mm y observa cómo cambia la vista previa.",
+      interactiveAction: "choose_receipt_width",
+      badge: "58 / 80 mm",
     },
     {
       id: "cajero-petty-cash",
@@ -252,7 +323,7 @@ export const encargadoTrainingTrack: RoleTrainingTrack = {
       title: "Planificación de Turnos de Personal",
       description:
         "Asigna los horarios de trabajo y turnos de caja para asegurar la cobertura continua de la farmacia.",
-      actionPrompt: "Revisa el calendario semanal de turnos y cajeros asignados.",
+      actionPrompt: "Revisa el calendario semanal y programa un turno para un cajero.",
       interactiveAction: "schedule_shift",
       badge: "Horarios",
     },
@@ -317,6 +388,7 @@ export const ownerTrainingTrack: RoleTrainingTrack = {
     {
       id: "owner-branches-plan",
       path: "/branches",
+      landingPath: "/users",
       targetSelector: '[data-tour="branches-list"]',
       title: "Sucursales Habilitadas y Cajas Activas",
       description:
@@ -338,6 +410,45 @@ export const ownerTrainingTrack: RoleTrainingTrack = {
     },
   ],
 };
+
+/**
+ * Pathname where a step's target lives, as `usePathname` reports it (no query string or hash).
+ */
+export function stepPathname(step: Pick<TrainingStep, "path" | "landingPath">): string {
+  return step.landingPath ?? (step.path.split(/[?#]/)[0] || "/");
+}
+
+function hasDynamicLanding(step: Pick<TrainingStep, "landingPath">): boolean {
+  return Boolean(step.landingPath && /\[[^/]+\]/.test(step.landingPath));
+}
+
+/**
+ * Whether `pathname` is where the step's target lives. Landing paths may contain `[param]`
+ * segments (for example `/sales/[saleId]`) that match any single path segment.
+ */
+export function stepMatchesPath(step: Pick<TrainingStep, "path" | "landingPath">, pathname: string): boolean {
+  const pattern = stepPathname(step);
+  if (!/\[[^/]+\]/.test(pattern)) {
+    return pathname === pattern;
+  }
+  const source = pattern
+    .split("/")
+    .map((segment) => (/^\[[^/]+\]$/.test(segment) ? "[^/]+" : segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+    .join("/");
+  return new RegExp(`^${source}/?$`).test(pathname);
+}
+
+/**
+ * Whether entering a step should navigate. Dynamic landing pages (a sale receipt) cannot be
+ * reached from `path`, so a learner already on one is never sent away.
+ */
+export function shouldNavigateToStep(
+  step: Pick<TrainingStep, "path" | "landingPath">,
+  pathname: string,
+): boolean {
+  if (pathname === step.path) return false;
+  return !(hasDynamicLanding(step) && stepMatchesPath(step, pathname));
+}
 
 export const allRoleTracks: RoleTrainingTrack[] = [
   cajeroTrainingTrack,

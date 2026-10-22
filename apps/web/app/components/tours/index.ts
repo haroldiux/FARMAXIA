@@ -11,6 +11,7 @@ export { TourCard } from "./tour-card";
 export {
   calculateTargetRect,
   calculatePopoverPosition,
+  rectsEqual,
   POPOVER_GAP,
   VIEWPORT_MARGIN,
   type DOMRectLike,

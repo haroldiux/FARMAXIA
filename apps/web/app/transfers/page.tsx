@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { useSandbox } from "../components/sandbox/index.ts";
 import { currentSession, type AuthSession } from "../lib/session";
 import {
   listTransfers,
@@ -40,6 +41,7 @@ function stockKey(item: TransferStockLookupItem): string {
 const emptyItem = (): DraftItem => ({ stockKey: "", quantity: "1" });
 
 export default function TransfersPage() {
+  const { notifyAction } = useSandbox();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [warehouses, setWarehouses] = useState<TransferWarehouseOption[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
@@ -154,6 +156,7 @@ export default function TransfersPage() {
     try {
       await requestTransfer({ originWarehouseId, destinationWarehouseId, items: payloadItems });
       await refresh();
+      notifyAction("request_transfer");
       setNotice("Traspaso solicitado. Ya puedes seguir su estado en la lista.");
       setItems([emptyItem()]);
     } catch (reasonValue) {
@@ -191,7 +194,7 @@ export default function TransfersPage() {
       {notice ? <p className="form-success procurement-message" role="status">{notice}</p> : null}
 
       <section className="procurement-layout">
-        <article className="procurement-orders panel">
+        <article className="procurement-orders panel" data-tour="transfers-list">
           <div className="panel-heading">
             <div><p className="section-kicker">Traspasos</p><h2>Historial y seguimiento</h2></div>
             <span className="panel-count">{transfers.length.toString().padStart(2, "0")}</span>

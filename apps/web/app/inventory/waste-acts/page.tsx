@@ -31,7 +31,7 @@ export default function WasteActsPage() {
       <InventoryNav />
       {error ? <p className="form-error inventory-message" role="alert">{error}</p> : null}
 
-      <section className="panel">
+      <section className="panel" data-tour="inventory-waste-acts-list">
         <div className="panel-heading"><div><p className="section-kicker">Historial</p><h2>Actas de baja</h2></div><span className="panel-count">{(acts?.length ?? 0).toString().padStart(2, "0")}</span></div>
         {acts === null ? <div className="inventory-state"><span className="loading-orb" />Cargando…</div> : acts.length ? (
           <div className="category-list">

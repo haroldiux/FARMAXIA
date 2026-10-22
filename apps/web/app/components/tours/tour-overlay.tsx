@@ -21,7 +21,7 @@ export function TourOverlay() {
   if (!targetRect) {
     return (
       <div
-        className="fixed inset-0 z-[9990] bg-black/60 backdrop-blur-[2px] pointer-events-auto"
+        className="ax-tour-overlay is-dim"
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -38,7 +38,7 @@ export function TourOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[9990] overflow-hidden pointer-events-auto"
+      className="ax-tour-overlay"
       onClick={(e) => {
         // Intercept all outside clicks
         e.stopPropagation();
@@ -47,7 +47,7 @@ export function TourOverlay() {
       aria-hidden="true"
     >
       <svg
-        className="w-full h-full block"
+        className="ax-tour-overlay-svg"
         style={{
           width: "100vw",
           height: "100vh",

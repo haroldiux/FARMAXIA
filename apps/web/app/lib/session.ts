@@ -1,4 +1,5 @@
 import { handleSandboxRequest } from "./sandbox/sandbox-interceptor.ts";
+import { SANDBOX_FLAG_KEY, exitSandboxSession } from "./sandbox/sandbox-session.ts";
 
 export interface LoginInput {
   email: string;
@@ -121,7 +122,7 @@ async function refresh(): Promise<void> {
 }
 
 export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  if (typeof window !== "undefined" && window.sessionStorage.getItem("farmaxia.sandbox_active") === "true") {
+  if (typeof window !== "undefined" && window.sessionStorage.getItem(SANDBOX_FLAG_KEY) === "true") {
     const sandboxRes = await handleSandboxRequest(path, init);
     if (sandboxRes.handled) {
       return new Response(JSON.stringify(sandboxRes.body), {
@@ -199,5 +200,7 @@ export async function logout(): Promise<void> {
     });
   } finally {
     window.sessionStorage.removeItem(accessTokenKey);
+    // Training mode must never outlive the session.
+    exitSandboxSession(window.sessionStorage);
   }
 }

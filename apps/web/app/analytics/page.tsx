@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTrainingViewAction } from "../components/sandbox/index.ts";
 import { AnalyticsFrame, ForecastChart, InvalidPeriod, Kpi, PeriodFilters, ReportState, useReport, validPeriod } from "../components/analytics-shared";
 import { useShellSession } from "../components/app-shell";
 import { baseQty, getDashboard, getForecast, monthStartIso, money, percent, shortDay, todayIso } from "../lib/analytics";
@@ -67,7 +68,7 @@ function Dashboard({ branches }: Readonly<{ branches: Array<{ id: string; name: 
           <ReportState error={report.error} loading={report.loading} empty={false} emptyTitle="" emptyHint="" />
           {data ? (
             <>
-              <section className="analytics-kpis">
+              <section className="analytics-kpis" data-tour="analytics-cards">
                 <Kpi label="Venta neta" value={money(data.netSalesBob)} hint="Descuenta devoluciones; sin anuladas" />
                 <Kpi label="Tickets" value={data.tickets.toLocaleString("es-BO")} hint={`Ticket promedio ${money(data.averageTicketBob)}`} />
                 <Kpi label="Unidades vendidas" value={data.units.toLocaleString("es-BO")} hint="En la unidad de cada presentación" />
@@ -112,6 +113,7 @@ function Dashboard({ branches }: Readonly<{ branches: Array<{ id: string; name: 
 
 /** Executive dashboard (analytics.read). KPIs are available on every plan; the forecast needs analytics.abc. */
 export default function AnalyticsDashboardPage() {
+  useTrainingViewAction("review_analytics", true);
   return (
     <AnalyticsFrame kicker="Analítica · Panel" title="Panel ejecutivo." lede="Ventas, ticket promedio, agotados, productos por vencer y margen del período.">
       {({ branches }) => <Dashboard branches={branches} />}

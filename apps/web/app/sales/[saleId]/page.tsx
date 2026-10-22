@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { useSandbox, useTrainingViewAction } from "../../components/sandbox/index.ts";
 import { SaleActions } from "../../components/sale-actions";
 import { SalesNav } from "../../components/sales-nav";
 import { getFiscalInvoice, type FiscalInvoiceStatus } from "../../lib/fiscal";
@@ -36,11 +37,13 @@ function formatMonth(value: string): string {
 /** Detalle de venta y recibo NO fiscal imprimible en papel térmico de 58 u 80 mm (decisión provisional D44). */
 export default function SaleDetailPage() {
   const { saleId } = useParams<{ saleId: string }>();
+  const { notifyAction } = useSandbox();
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [width, setWidth] = useState<PaperWidth>(80);
   const [canVoid, setCanVoid] = useState(false);
   const [fiscalStatus, setFiscalStatus] = useState<FiscalInvoiceStatus | null>(null);
+  useTrainingViewAction("open_receipt", sale !== null, 800);
 
   useEffect(() => {
     try {
@@ -78,6 +81,7 @@ export default function SaleDetailPage() {
 
   function chooseWidth(value: PaperWidth): void {
     setWidth(value);
+    notifyAction("choose_receipt_width");
     try {
       window.localStorage.setItem("farmaxia.receiptWidth", String(value));
     } catch {
@@ -96,7 +100,7 @@ export default function SaleDetailPage() {
       <div className="receipt-nav no-print"><SalesNav /></div>
       <div className="receipt-toolbar no-print">
         <Link className="back-link" href="/sales/history">← Volver al historial</Link>
-        <div className="segmented" role="group" aria-label="Ancho del papel">
+        <div className="segmented" role="group" aria-label="Ancho del papel" data-tour="receipt-width">
           {([58, 80] as const).map((value) => (
             <button aria-pressed={width === value} className={width === value ? "is-active" : ""} key={value} onClick={() => chooseWidth(value)} type="button">{value} mm</button>
           ))}

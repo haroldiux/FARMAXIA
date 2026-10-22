@@ -59,20 +59,20 @@ export function TourCard() {
       aria-modal="true"
       aria-labelledby="farmaxia-tour-card-title"
       aria-describedby="farmaxia-tour-card-description"
-      className="fixed z-[9995] w-[360px] max-w-[calc(100vw-32px)] rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-indigo-950/20 p-5 text-slate-900 dark:text-slate-100 transition-[top,left] duration-200 ease-out select-none"
+      className="ax-tour-card"
       style={{
         top: `${position.top}px`,
         left: `${position.left}px`,
       }}
     >
       {/* Header with step pill and dismiss button */}
-      <div className="flex items-center justify-between gap-2 mb-2.5">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+      <div className="ax-tour-card-head">
+        <div className="ax-tour-card-meta">
+          <span className="ax-tour-step-pill">
             Paso {stepNumber} de {totalSteps}
           </span>
           {currentStep.badge && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+            <span className="ax-tour-badge">
               {currentStep.badge}
             </span>
           )}
@@ -83,7 +83,7 @@ export function TourCard() {
           onClick={skip}
           aria-label="Cerrar tutorial"
           title="Cerrar tutorial (Esc)"
-          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="ax-tour-close"
         >
           <svg
             aria-hidden="true"
@@ -105,41 +105,41 @@ export function TourCard() {
       {/* Title & Description */}
       <h3
         id="farmaxia-tour-card-title"
-        className="text-base font-bold text-slate-900 dark:text-slate-50 tracking-tight"
+        className="ax-tour-title"
       >
         {currentStep.title}
       </h3>
       <p
         id="farmaxia-tour-card-description"
-        className="mt-1.5 text-sm text-slate-600 dark:text-slate-300 leading-relaxed"
+        className="ax-tour-description"
       >
         {currentStep.description}
       </p>
 
       {/* Progress Bar */}
-      <div className="mt-3.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+      <div className="ax-tour-progress">
         <div
-          className="bg-indigo-600 dark:bg-indigo-500 h-1.5 rounded-full transition-all duration-300 ease-out"
+          className="ax-tour-progress-bar"
           style={{ width: `${progress}%` }}
         />
       </div>
 
       {/* Footer Actions */}
-      <div className="mt-4 flex items-center justify-between pt-1">
+      <div className="ax-tour-footer">
         <button
           type="button"
           onClick={skip}
-          className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none focus:underline"
+          className="ax-tour-skip"
         >
           Omitir
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="ax-tour-actions">
           {!isFirstStep && (
             <button
               type="button"
               onClick={prev}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="ax-tour-btn"
             >
               Anterior
             </button>
@@ -148,7 +148,7 @@ export function TourCard() {
           <button
             type="button"
             onClick={next}
-            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+            className="ax-tour-btn is-primary"
           >
             {isLastStep ? "Finalizar" : currentStep.actionLabel ?? "Siguiente"}
           </button>

@@ -5,35 +5,29 @@
 
 import {
   getSandboxState,
-  openCashShift,
-  addCashMovement,
-  closeCashShift,
   confirmMockSale,
   quarantineMockBatch,
   releaseMockBatch,
   recordMockWaste,
   type ConfirmMockSaleParams,
 } from "./sandbox-store.ts";
+import { parseBody, type SandboxInterceptResult } from "./sandbox-http.ts";
+import { handleExtendedRoutes } from "./sandbox-handlers.ts";
 
-export interface SandboxInterceptResult {
-  handled: boolean;
-  status: number;
-  body: unknown;
-}
+export type { SandboxInterceptResult };
+
+export const SANDBOX_BLOCKED_MESSAGE =
+  "Modo entrenamiento: esta acción no se simula y no se envió al servidor.";
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
- * Parses JSON body from RequestInit safely.
+ * Strips the optional /api or /api/v1 prefix and trailing slashes so routes can be matched exactly.
  */
-function parseBody<T>(init?: RequestInit): T | null {
-  if (!init?.body) return null;
-  try {
-    if (typeof init.body === "string") {
-      return JSON.parse(init.body) as T;
-    }
-  } catch {
-    return null;
-  }
-  return null;
+export function normalizeRoute(pathname: string): string {
+  const withoutPrefix = pathname.replace(/^\/api(?:\/v1)?(?=\/)/, "");
+  const trimmed = withoutPrefix.replace(/\/+$/, "");
+  return trimmed || "/";
 }
 
 /**
@@ -44,15 +38,17 @@ export async function handleSandboxRequest(
   init?: RequestInit,
 ): Promise<SandboxInterceptResult> {
   const method = (init?.method || "GET").toUpperCase();
-  const [pathname, searchString] = url.split("?");
+  const [rawPathname, searchString] = url.split("?");
   const searchParams = new URLSearchParams(searchString || "");
 
-  if (!pathname) {
+  if (!rawPathname) {
     return { handled: false, status: 404, body: null };
   }
+  // Exact matching happens on the route without the /api or /api/v1 prefix and trailing slash.
+  const pathname = normalizeRoute(rawPathname);
 
   // 1. Sales lookup: /api/sales/lookup or /api/v1/sales/lookup
-  if (pathname.includes("/sales/lookup") && method === "GET") {
+  if (pathname === "/sales/lookup" && method === "GET") {
     const query = (searchParams.get("q") || searchParams.get("query") || "").toLowerCase().trim();
     const state = getSandboxState();
 
@@ -93,7 +89,7 @@ export async function handleSandboxRequest(
   }
 
   // 2. Sales confirm: /api/sales/confirm or /api/v1/sales/confirm
-  if (pathname.includes("/sales/confirm") && method === "POST") {
+  if (pathname === "/sales/confirm" && method === "POST") {
     const body = parseBody<ConfirmMockSaleParams>(init);
     if (!body) {
       return { handled: true, status: 400, body: { message: "Cuerpo de solicitud inválido." } };
@@ -111,8 +107,50 @@ export async function handleSandboxRequest(
     }
   }
 
+  // 2b. Sales lookup of lots (FEFO order) for one presentation
+  if (pathname === "/sales/lookup/batches" && method === "GET") {
+    const presentationId = searchParams.get("presentationId") ?? "";
+    const warehouseId = searchParams.get("warehouseId");
+    const lots = getSandboxState()
+      .batches.filter(
+        (b) =>
+          b.presentationId === presentationId &&
+          b.status === "AVAILABLE" &&
+          b.availableQuantity > 0 &&
+          (!warehouseId || b.warehouseId === warehouseId),
+      )
+      .sort((a, b) => a.expiresOn.localeCompare(b.expiresOn));
+    const items = lots.map((b, index) => ({
+      batchId: b.id,
+      lotCode: b.lotCode,
+      expiresOn: b.expiresOn,
+      availableBase: b.availableQuantity,
+      fefoSuggested: index === 0,
+    }));
+    return { handled: true, status: 200, body: { items } };
+  }
+
+  // 3a. Warehouse management details (counts, stock totals)
+  if (pathname === "/inventory/warehouses/details" && method === "GET") {
+    const state = getSandboxState();
+    const items = [
+      {
+        id: "WH-DEMO-01",
+        name: "Almacén Central",
+        warehouseType: "CENTRAL",
+        isDispatchEnabled: true,
+        isActive: true,
+        batchCount: state.batches.length,
+        stockBase: state.batches.reduce((acc, b) => acc + b.availableQuantity, 0),
+        reservedBase: state.batches.reduce((acc, b) => acc + b.reservedQuantity, 0),
+        createdAt: state.shifts[0]?.openedAt ?? new Date().toISOString(),
+      },
+    ];
+    return { handled: true, status: 200, body: { items } };
+  }
+
   // 3. Inventory warehouses
-  if (pathname.includes("/inventory/warehouses") && method === "GET") {
+  if (pathname === "/inventory/warehouses" && method === "GET") {
     return {
       handled: true,
       status: 200,
@@ -129,27 +167,65 @@ export async function handleSandboxRequest(
     };
   }
 
-  // 4. Inventory expiry alerts
-  if (pathname.includes("/inventory/expiry-alerts") && method === "GET") {
-    const state = getSandboxState();
-    const alerts = state.batches.map((b) => ({
-      batchId: b.id,
-      lotCode: b.lotCode,
-      expiresOn: b.expiresOn,
-      status: new Date(b.expiresOn) < new Date() ? "EXPIRED" : "DUE_SOON",
-      batchStatus: b.status,
-      quantityBase: b.availableQuantity,
-      reservedBase: b.reservedQuantity,
-      availableQuantity: b.availableQuantity,
-    }));
+  // 4. Inventory expiry alerts (FEFO traffic light), filtered by horizon like the real API
+  if (pathname === "/inventory/expiry-alerts" && method === "GET") {
+    const horizonDays = Number(searchParams.get("horizonDays") || "30");
+    const warehouseId = searchParams.get("warehouseId");
+    const limit = Date.now() + horizonDays * 24 * 3600 * 1000;
+    const alerts = getSandboxState()
+      .batches.filter(
+        (b) =>
+          b.status !== "DISPOSED" &&
+          (!warehouseId || b.warehouseId === warehouseId) &&
+          new Date(b.expiresOn).getTime() <= limit,
+      )
+      .sort((a, b) => a.expiresOn.localeCompare(b.expiresOn))
+      .map((b) => ({
+        batchId: b.id,
+        lotCode: b.lotCode,
+        expiresOn: b.expiresOn,
+        status: new Date(b.expiresOn) < new Date() ? "EXPIRED" : "DUE_SOON",
+        batchStatus: b.status,
+        quantityBase: b.availableQuantity,
+        reservedBase: b.reservedQuantity,
+        availableQuantity: b.availableQuantity,
+      }));
     return { handled: true, status: 200, body: alerts };
   }
 
+  // 4b. Automatic inventory alerts panel
+  if (pathname === "/inventory/alerts" && method === "GET") {
+    const state = getSandboxState();
+    const dayMs = 24 * 3600 * 1000;
+    const items = state.batches
+      .filter((b) => b.status !== "DISPOSED")
+      .map((b) => ({ batch: b, daysToExpiry: Math.ceil((new Date(b.expiresOn).getTime() - Date.now()) / dayMs) }))
+      .filter(({ daysToExpiry }) => daysToExpiry <= 90)
+      .map(({ batch, daysToExpiry }) => {
+        const product = state.products.find((p) => p.presentationId === batch.presentationId);
+        return {
+          id: `alert-${batch.id}`,
+          alertType: daysToExpiry < 0 ? "EXPIRED" : "EXPIRING",
+          warehouseId: batch.warehouseId,
+          warehouseName: batch.warehouseName,
+          batchId: batch.id,
+          lotCode: batch.lotCode,
+          productName: product?.name ?? "Producto Demo",
+          presentationName: product?.presentationName ?? "",
+          expiresOn: batch.expiresOn,
+          daysToExpiry,
+          quantityBase: batch.availableQuantity,
+          createdAt: new Date().toISOString(),
+          acknowledgedAt: null,
+        };
+      });
+    return { handled: true, status: 200, body: { items } };
+  }
+
   // 5. Inventory batch quarantine
-  if (pathname.includes("/inventory/batches/") && pathname.includes("/quarantine") && method === "POST") {
-    const parts = pathname.split("/");
-    const qIndex = parts.indexOf("quarantine");
-    const batchId = parts[qIndex - 1] ?? "batch-demo-1";
+  const quarantineMatch = /^\/inventory\/batches\/([^/]+)\/quarantine$/.exec(pathname);
+  if (quarantineMatch && method === "POST") {
+    const batchId = decodeURIComponent(quarantineMatch[1]!);
     const body = parseBody<{ reason: string; reasonCode?: string; temperatureCelsius?: number }>(init);
 
     const batch = quarantineMockBatch(
@@ -162,14 +238,9 @@ export async function handleSandboxRequest(
   }
 
   // 6. Inventory batch release
-  if (
-    pathname.includes("/inventory/batches/") &&
-    (pathname.includes("/release-quarantine") || pathname.endsWith("/release")) &&
-    method === "POST"
-  ) {
-    const parts = pathname.split("/");
-    const relIndex = parts.findIndex((p) => p === "release" || p === "release-quarantine");
-    const batchId = parts[relIndex - 1] ?? "batch-demo-1";
+  const releaseMatch = /^\/inventory\/batches\/([^/]+)\/(?:release-quarantine|release)$/.exec(pathname);
+  if (releaseMatch && method === "POST") {
+    const batchId = decodeURIComponent(releaseMatch[1]!);
     const body = parseBody<{ reason: string }>(init);
 
     const batch = releaseMockBatch(batchId, body?.reason ?? "Liberación demo");
@@ -177,19 +248,15 @@ export async function handleSandboxRequest(
   }
 
   // 7. Inventory waste
-  if (
-    (pathname.includes("/inventory/waste") || (pathname.includes("/inventory/batches/") && pathname.endsWith("/waste"))) &&
-    method === "POST"
-  ) {
-    const parts = pathname.split("/");
-    const wIndex = parts.indexOf("waste");
+  const wasteMatch = /^\/inventory\/batches\/([^/]+)\/waste$/.exec(pathname);
+  if ((pathname === "/inventory/waste" || wasteMatch) && method === "POST") {
     const body = parseBody<{
       batchId?: string;
       quantityBase: number;
       reason: string;
       disposalMethod?: string;
     }>(init);
-    const batchId = body?.batchId ?? parts[wIndex - 1] ?? "batch-demo-1";
+    const batchId = body?.batchId ?? (wasteMatch ? decodeURIComponent(wasteMatch[1]!) : "batch-demo-1");
 
     if (!body?.quantityBase) {
       return { handled: true, status: 400, body: { message: "Datos de merma incompletos." } };
@@ -204,217 +271,17 @@ export async function handleSandboxRequest(
     return { handled: true, status: 201, body: { wasteEventId: waste.id, ...waste } };
   }
 
-  // 8. Cash registers
-  if (pathname.includes("/cash/registers") && method === "GET") {
-    return {
-      handled: true,
-      status: 200,
-      body: {
-        items: [{ id: "CR-DEMO-01", code: "CAJA-DEMO-01", isActive: true }],
-      },
-    };
+  // Cash, procurement, transfers, staff and users
+  const extended = handleExtendedRoutes(pathname, method, searchParams, init);
+  if (extended) {
+    return extended;
   }
 
-  // 9. Cash eligible users
-  if (pathname.includes("/cash/eligible-users") && method === "GET") {
-    return {
-      handled: true,
-      status: 200,
-      body: {
-        items: [{ id: "user-demo", displayName: "Usuario Demo" }],
-      },
-    };
+  // Deny-by-default: a write the sandbox does not simulate must never reach the real API.
+  if (MUTATING_METHODS.has(method)) {
+    return { handled: true, status: 423, body: { code: "SANDBOX_BLOCKED", message: SANDBOX_BLOCKED_MESSAGE } };
   }
 
-  // 10. Cash shift movements: /cash/shifts/:id/movements or /cash/movements
-  if (pathname.includes("/cash/shifts/") && pathname.endsWith("/movements")) {
-    const parts = pathname.split("/");
-    const mIndex = parts.indexOf("movements");
-    const shiftId = parts[mIndex - 1] ?? "shift-demo-01";
-
-    if (method === "GET") {
-      const state = getSandboxState();
-      const shift = state.shifts.find((s) => s.id === shiftId) ?? state.shifts[0];
-      const items = state.movements.map((m) => ({
-        id: m.id,
-        cashShiftId: m.shiftId,
-        type: m.movementType,
-        amountBob: m.amountBob,
-        reason: m.reason,
-        category: m.category,
-        createdByUserId: "user-demo",
-        createdAt: m.createdAt,
-      }));
-      const movementsIn = state.movements
-        .filter((m) => m.movementType === "IN")
-        .reduce((acc, m) => acc + Number(m.amountBob || 0), 0);
-      const movementsOut = state.movements
-        .filter((m) => m.movementType === "OUT")
-        .reduce((acc, m) => acc + Number(m.amountBob || 0), 0);
-
-      return {
-        handled: true,
-        status: 200,
-        body: {
-          items,
-          summary: {
-            openingAmountBob: shift?.initialFundBob ?? "200.00",
-            cashSalesBob: "0.00",
-            movementsInBob: movementsIn.toFixed(2),
-            movementsOutBob: movementsOut.toFixed(2),
-            expectedAmountBob: shift?.currentCashBob ?? "200.00",
-          },
-        },
-      };
-    }
-
-    if (method === "POST") {
-      const body = parseBody<{
-        type: "IN" | "OUT";
-        amountBob: string;
-        reason: string;
-        category?: "CHANGE_FUND" | "EXPENSE" | "DEPOSIT" | "OTHER";
-      }>(init);
-
-      if (!body?.amountBob || !body?.type) {
-        return { handled: true, status: 400, body: { message: "Datos de movimiento incompletos." } };
-      }
-
-      const movement = addCashMovement(
-        shiftId,
-        body.type,
-        body.amountBob,
-        body.reason ?? "Movimiento demo",
-        body.category,
-      );
-      return { handled: true, status: 201, body: movement };
-    }
-  }
-
-  // 11. Standalone cash movements: /cash/movements
-  if (pathname.endsWith("/cash/movements") && method === "POST") {
-    const body = parseBody<{
-      cashShiftId: string;
-      movementType: "IN" | "OUT";
-      amountBob: string;
-      reason: string;
-      category?: "CHANGE_FUND" | "EXPENSE" | "DEPOSIT" | "OTHER";
-    }>(init);
-
-    if (!body?.cashShiftId || !body?.amountBob || !body?.movementType) {
-      return { handled: true, status: 400, body: { message: "Datos de movimiento incompletos." } };
-    }
-
-    try {
-      const movement = addCashMovement(
-        body.cashShiftId,
-        body.movementType,
-        body.amountBob,
-        body.reason,
-        body.category,
-      );
-      return { handled: true, status: 201, body: movement };
-    } catch (err) {
-      return {
-        handled: true,
-        status: 400,
-        body: { message: err instanceof Error ? err.message : "Error al registrar movimiento." },
-      };
-    }
-  }
-
-  // 12. Cash shift actions: open, count, close, approve
-  if (pathname.includes("/cash/shifts/")) {
-    const parts = pathname.split("/");
-    const action = parts[parts.length - 1];
-    const shiftId = parts[parts.length - 2] ?? "shift-demo-01";
-
-    const createControl = (s: ReturnType<typeof getSandboxState>["shifts"][0]) => ({
-      id: `ctrl-${s.id}`,
-      cashShiftId: s.id,
-      openingAmountBob: s.initialFundBob,
-      expectedAmountBob: s.currentCashBob,
-      countedAmountBob: s.countedCashBob ?? null,
-      differenceAmountBob: s.differenceBob ?? null,
-      status: s.status === "OPEN" ? "OPEN" : "CLOSED",
-      openedByUserId: "user-demo",
-      openedAt: s.openedAt,
-      countedByUserId: null,
-      countedAt: null,
-      approvedByUserId: null,
-      approvedAt: null,
-      closedByUserId: null,
-      closedAt: s.closedAt ?? null,
-      approvalNote: null,
-      cashSalesBob: "0.00",
-      movementsInBob: "0.00",
-      movementsOutBob: "0.00",
-    });
-
-    if (action === "open" && method === "POST") {
-      const body = parseBody<{ openingAmountBob: string }>(init);
-      const shift = openCashShift(body?.openingAmountBob ?? "200.00");
-      return { handled: true, status: 200, body: createControl(shift) };
-    }
-
-    if ((action === "count" || action === "close") && method === "POST") {
-      const body = parseBody<{ countedAmountBob?: string; countedCashBob?: string }>(init);
-      const counted = body?.countedAmountBob ?? body?.countedCashBob ?? "200.00";
-      const closed = closeCashShift(shiftId, counted);
-      return { handled: true, status: 200, body: createControl(closed) };
-    }
-
-    if (action === "approve" && method === "POST") {
-      const state = getSandboxState();
-      const shift = state.shifts.find((s) => s.id === shiftId) ?? state.shifts[0]!;
-      return { handled: true, status: 200, body: createControl(shift) };
-    }
-  }
-
-  // 13. Cash shifts listing / creating: /api/cash/shifts or /api/v1/cash/shifts
-  if (pathname.endsWith("/cash/shifts")) {
-    if (method === "GET") {
-      const state = getSandboxState();
-      const items = state.shifts.map((s) => ({
-        id: s.id,
-        cashRegisterId: "CR-DEMO-01",
-        cashRegisterCode: s.cashRegisterCode,
-        scheduledStartAt: s.openedAt,
-        scheduledEndAt: s.closedAt || new Date(Date.now() + 8 * 3600 * 1000).toISOString(),
-        status: "SCHEDULED" as const,
-        users: [{ id: "user-demo", displayName: "Usuario Demo" }],
-        control: {
-          id: `ctrl-${s.id}`,
-          cashShiftId: s.id,
-          openingAmountBob: s.initialFundBob,
-          expectedAmountBob: s.currentCashBob,
-          countedAmountBob: s.countedCashBob ?? null,
-          differenceAmountBob: s.differenceBob ?? null,
-          status: s.status === "OPEN" ? ("OPEN" as const) : ("CLOSED" as const),
-          openedByUserId: "user-demo",
-          openedAt: s.openedAt,
-          countedByUserId: null,
-          countedAt: null,
-          approvedByUserId: null,
-          approvedAt: null,
-          closedByUserId: null,
-          closedAt: s.closedAt ?? null,
-          approvalNote: null,
-          cashSalesBob: "0.00",
-          movementsInBob: "0.00",
-          movementsOutBob: "0.00",
-        },
-      }));
-      return { handled: true, status: 200, body: { items } };
-    }
-
-    if (method === "POST") {
-      const body = parseBody<{ initialFundBob: string; cashRegisterCode?: string }>(init);
-      const shift = openCashShift(body?.initialFundBob ?? "200.00", body?.cashRegisterCode);
-      return { handled: true, status: 201, body: shift };
-    }
-  }
-
-  // Unhandled endpoint -> let normal network fetch handle it
+  // Unhandled read -> let normal network fetch handle it (no pollution)
   return { handled: false, status: 404, body: null };
 }

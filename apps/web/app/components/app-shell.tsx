@@ -10,8 +10,9 @@ import { statusLabels, subscriptionSummary, type SubscriptionSummary } from "../
 import { currentSession, logout, type AuthSession } from "../lib/session";
 import { setTheme, useTheme } from "../lib/theme";
 import { getTourForPathname } from "../lib/tour-definitions";
+import { INITIAL_AUTO_LAUNCH_GATE, stepAutoLaunchGate, type AutoLaunchGate } from "../lib/tours/auto-launch";
 import { NavIcon } from "./nav-icon";
-import { SandboxBanner, RoleTrainingModal, SandboxProvider, useSandbox } from "./sandbox/index.ts";
+import { SandboxBanner, RoleTrainingModal, SandboxProvider, TrainingDialogs, TrainingSpotlight, useSandbox } from "./sandbox/index.ts";
 import { TourProvider, useTour } from "./tours";
 
 /** Rutas del sistema interno de la farmacia: todas llevan el marco con sidebar y barra superior. */
@@ -45,15 +46,22 @@ export function useShellSession(): ShellValue | null {
 function TourAutoLauncher() {
   const pathname = usePathname();
   const { startTour } = useTour();
+  const { isSandboxActive } = useSandbox();
+  const gateRef = useRef<AutoLaunchGate>(INITIAL_AUTO_LAUNCH_GATE);
 
   useEffect(() => {
+    // Page tours would overlap the training banner/spotlight, and must not pop up the moment
+    // training ends: the gate holds them back until the next real navigation.
+    const step = stepAutoLaunchGate(gateRef.current, { trainingActive: isSandboxActive, pathname });
+    gateRef.current = step.gate;
+    if (!step.allowed) return;
     const tour = getTourForPathname(pathname);
     if (!tour) return;
     const timer = window.setTimeout(() => {
       startTour(tour, false);
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [pathname, startTour]);
+  }, [pathname, startTour, isSandboxActive]);
 
   return null;
 }
@@ -81,7 +89,10 @@ function TourTriggerButton() {
 
 /** Botón para abrir el selector de entrenamiento por rol y modo sandbox. */
 function RoleTrainingTriggerButton() {
-  const { openModal } = useSandbox();
+  const { openModal, availableTracks, isSandboxActive } = useSandbox();
+
+  // Nothing to practice with the signed-in permissions: hide the entry point.
+  if (availableTracks.length === 0 && !isSandboxActive) return null;
 
   return (
     <button
@@ -169,10 +180,12 @@ function AppShell({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <ShellContext.Provider value={{ session, account, subscription, alerts }}>
       <TourProvider tenantId={session.tenantId} userId={session.userId}>
-        <SandboxProvider>
+        <SandboxProvider permissions={session.permissions} userId={session.userId}>
           <TourAutoLauncher />
           <SandboxBanner />
+          <TrainingSpotlight />
           <RoleTrainingModal />
+          <TrainingDialogs />
           <div className={`app-shell ax-shell ${mobileOpen ? "is-menu-open" : ""}`}>
             <button aria-hidden="true" className="ax-backdrop" onClick={() => setMobileOpen(false)} tabIndex={-1} type="button" />
 

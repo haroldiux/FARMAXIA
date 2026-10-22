@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useSandbox } from "../components/sandbox/index.ts";
 import { StaffNav } from "../components/staff-nav";
 import { StaffHeader, StaffPlanRequired, useStaffAccess } from "../components/staff-shared";
 import {
@@ -130,6 +131,7 @@ function MyShifts({ onRestricted }: Readonly<{ onRestricted: () => void }>) {
 
 /** Rol semanal de la sucursal: crear y cancelar turnos (requiere staff.shifts.manage). */
 function Roster() {
+  const { notifyAction } = useSandbox();
   const [start, setStart] = useState(() => weekStart(todayIso()));
   const [shifts, setShifts] = useState<StaffShift[] | null>(null);
   const [members, setMembers] = useState<StaffMember[]>([]);
@@ -172,6 +174,7 @@ function Roster() {
       setMessage("Turno creado.");
       setNotes("");
       await load();
+      notifyAction("schedule_shift");
     } catch (reason) {
       setError(errorMessage(reason, "No pudimos crear el turno."));
     } finally {
@@ -198,7 +201,7 @@ function Roster() {
   }
 
   return (
-    <section className="panel">
+    <section className="panel" data-tour="staff-schedule">
       <div className="panel-heading">
         <div><p className="section-kicker">Sucursal activa</p><h2>Rol semanal</h2></div>
         <div className="staff-week-nav">

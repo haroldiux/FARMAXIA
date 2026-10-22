@@ -4,6 +4,7 @@ import {
   type DOMRectLike,
   calculateTargetRect,
   calculatePopoverPosition,
+  rectsEqual,
 } from "./tour-position.ts";
 
 test("calculateTargetRect returns null if element is null", () => {
@@ -186,4 +187,13 @@ test("calculatePopoverPosition handles placement=auto intelligently", () => {
 
   const pos = calculatePopoverPosition(targetRect, popoverSize, "auto", viewportSize);
   assert.equal(pos.actualPlacement, "bottom");
+});
+
+test("rectsEqual compares rects with sub-pixel tolerance and handles nulls", () => {
+  const a: DOMRectLike = { top: 10, left: 20, width: 100, height: 40, bottom: 50, right: 120 };
+  assert.equal(rectsEqual(null, null), true);
+  assert.equal(rectsEqual(a, null), false);
+  assert.equal(rectsEqual(a, { ...a, top: 10.4, bottom: 50.4 }), true);
+  assert.equal(rectsEqual(a, { ...a, left: 24, right: 124 }), false);
+  assert.equal(rectsEqual(a, { ...a, height: 80, bottom: 90 }), false);
 });

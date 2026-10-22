@@ -89,7 +89,7 @@ export function CashMovementsPanel({ shiftId, control, canRegister, onChanged }:
 
   const summary = data?.summary;
   return (
-    <section className="cash-movements" aria-label="Movimientos de caja">
+    <section className="cash-movements" aria-label="Movimientos de caja" data-tour="cash-movements">
       <div className="cash-control-heading"><strong>Movimientos de caja</strong><span>{data?.items.length ?? 0}</span></div>
       <dl className="cash-breakdown">
         <div><dt>Fondo inicial</dt><dd>{summary?.openingAmountBob ?? control.openingAmountBob} BOB</dd></div>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSandbox, useTrainingViewAction } from "../components/sandbox/index.ts";
 import { formatDate } from "../lib/saas";
 import { currentSession, type AuthSession } from "../lib/session";
 import {
@@ -41,6 +42,7 @@ function toggle(list: string[], value: string): string[] {
 export default function UsersPage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [tab, setTab] = useState<Tab>("users");
+  const { notifyAction } = useSandbox();
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [permissions, setPermissions] = useState<PermissionDefinition[]>([]);
@@ -86,6 +88,8 @@ export default function UsersPage() {
       .catch(() => window.location.assign("/"))
       .finally(() => setLoading(false));
   }, [load]);
+
+  useTrainingViewAction("check_quotas", tab === "branches" && allBranches.length > 0);
 
   const permissionLabels = useMemo(() => new Map(permissions.map((permission) => [permission.code, permission.label])), [permissions]);
   const permissionGroups = useMemo(() => {
@@ -133,6 +137,7 @@ export default function UsersPage() {
     if (userPanel.kind === "create") {
       void run(async () => {
         await createUser(userForm);
+        notifyAction("create_user");
         setUserPanel({ kind: "none" });
         return `Usuario ${userForm.displayName} creado. Ya puede iniciar sesión con su correo.`;
       });
@@ -244,7 +249,7 @@ export default function UsersPage() {
 
       {tab === "users" ? (
         <section className="cash-layout">
-          <article className="panel">
+          <article className="panel" data-tour="users-list">
             <div className="panel-heading"><div><p className="section-kicker">Equipo</p><h2>Usuarios</h2></div><button className="secondary-button" onClick={() => openUser({ kind: "create" })} type="button">+ Nuevo usuario</button></div>
             <div className="user-list">
               {users.map((user) => (
@@ -413,7 +418,7 @@ export default function UsersPage() {
         </section>
       ) : (
         <section className="cash-layout">
-          <article className="panel">
+          <article className="panel" data-tour="branches-list">
             <div className="panel-heading">
               <div>
                 <p className="section-kicker">Establecimientos</p>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ControlledDenied, ControlledHeader, formatDateTime, formatDay, useControlledAccess } from "../components/controlled-shared";
+import { useTrainingViewAction } from "../components/sandbox/index.ts";
 import { ControlledNav } from "../components/controlled-nav";
 import { listPrescriptions, type PrescriptionList } from "../lib/controlled";
 
@@ -19,6 +20,7 @@ export default function ControlledArchivePage() {
   const [result, setResult] = useState<PrescriptionList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  useTrainingViewAction("view_prescription_archive", access.status === "ready" && !loading && (result?.items.length ?? 0) > 0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,7 +79,7 @@ export default function ControlledArchivePage() {
         </form>
       </section>
 
-      <section className="panel">
+      <section className="panel" data-tour="controlled-prescriptions-list">
         <div className="panel-heading">
           <div><p className="section-kicker">Archivo</p><h2>Recetas dispensadas</h2></div>
           <span className="panel-count">{total.toString().padStart(2, "0")}</span>

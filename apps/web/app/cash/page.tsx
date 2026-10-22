@@ -259,7 +259,7 @@ export default function CashPage() {
       {notice ? <p className="form-success cash-message" role="status">{notice}</p> : null}
 
       <section className="cash-layout">
-        <article className="panel cash-shifts-panel">
+        <article className="panel cash-shifts-panel" data-tour="cash-shifts-list">
           <div className="panel-heading"><div><p className="section-kicker">Agenda operativa</p><h2>Turnos programados</h2></div><span className="panel-count">{shifts.length.toString().padStart(2, "0")}</span></div>
           {shifts.length ? <div className="cash-shift-list">{shifts.map((shift) => <article className="cash-shift-card" key={shift.id}>
             <div className="cash-shift-card-head"><strong>{shift.cashRegisterCode}</strong><span>{shift.status === "SCHEDULED" ? "Programado" : "Cancelado"}</span></div>
@@ -268,7 +268,7 @@ export default function CashPage() {
             <div className="cash-control" aria-live="polite">
               {!shift.control ? <>
                 <div className="cash-control-heading"><strong>Control de caja</strong><span>Sin abrir</span></div>
-                {shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action">
+                {shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action" data-tour="cash-open-shift">
                   <label className="field"><span>Monto inicial (BOB)</span><input type="text" inputMode="decimal" placeholder="0.0000" value={openingDrafts[shift.id] ?? ""} onChange={(event) => setOpeningDrafts((current) => ({ ...current, [shift.id]: event.target.value }))} /></label>
                   <button className="secondary-button" disabled={controlBusy === `${shift.id}:open`} onClick={() => void handleOpen(shift)} type="button">{controlBusy === `${shift.id}:open` ? "Abriendo…" : "Abrir turno"}</button>
                 </div> : <p className="form-note">Solo una persona asignada puede abrir este turno.</p>}
@@ -276,7 +276,7 @@ export default function CashPage() {
                 <div className="cash-control-heading"><strong>Control de caja</strong><span className={`cash-control-status cash-control-status-${shift.control.status.toLowerCase()}`}>{shift.control.status === "OPEN" ? "Abierto" : shift.control.status === "PENDING_APPROVAL" ? "Pendiente de aprobación" : "Cerrado"}</span></div>
                 <p className="cash-control-values">Esperado: <strong>{shift.control.expectedAmountBob} BOB</strong>{shift.control.differenceAmountBob !== null ? <> · Diferencia: <strong>{shift.control.differenceAmountBob} BOB</strong></> : null}</p>
                 {shift.control.status === "OPEN" ? <CashMovementsPanel canRegister={shift.users.some((user) => user.id === session.userId)} control={shift.control} onChanged={refresh} shiftId={shift.id} /> : null}
-                {shift.control.status === "OPEN" && shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action">
+                {shift.control.status === "OPEN" && shift.users.some((user) => user.id === session.userId) ? <div className="cash-control-action" data-tour="cash-close-shift">
                   <label className="field"><span>Conteo final (BOB)</span><input type="text" inputMode="decimal" placeholder="0.0000" value={countingDrafts[shift.id] ?? ""} onChange={(event) => setCountingDrafts((current) => ({ ...current, [shift.id]: event.target.value }))} /></label>
                   <button className="secondary-button" disabled={controlBusy === `${shift.id}:count`} onClick={() => void handleCount(shift)} type="button">{controlBusy === `${shift.id}:count` ? "Guardando…" : "Guardar conteo"}</button>
                 </div> : null}

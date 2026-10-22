@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSandbox } from "../../components/sandbox/index.ts";
 import { ProcurementNav } from "../../components/procurement-nav";
 import { currentSession, type AuthSession } from "../../lib/session";
 import {
@@ -40,6 +41,7 @@ function statusLabel(status: string): string {
 }
 
 export default function ReceivingPage() {
+  const { notifyAction } = useSandbox();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -176,6 +178,7 @@ export default function ReceivingPage() {
       });
       setNotice(`Recepción ${result.receiptId.slice(0, 8)}… registrada con ${result.lineCount} lote${result.lineCount === 1 ? "" : "s"}.`);
       await refreshOrders();
+      notifyAction("receive_batch");
       setLines([]);
       setReceivedAt(localDateTime());
       setRequestKey(procurementIdempotencyKey());
@@ -216,7 +219,7 @@ export default function ReceivingPage() {
           {selectedOrder ? <div className="receiving-order-summary"><span className={`order-status order-${selectedOrder.status.toLowerCase()}`}>{statusLabel(selectedOrder.status)}</span><strong>{selectedOrder.supplierName}</strong><small>{selectedOrder.warehouseName}</small>{selectedOrder.lines.map((line) => <div key={line.presentationId}><span>{line.productName} · {line.presentationName}</span><b>{line.quantityBase} u. ordenadas</b></div>)}</div> : <p className="empty-copy">Selecciona una orden pendiente para habilitar sus presentaciones.</p>}
         </aside>
 
-        <section className="panel receiving-form-panel">
+        <section className="panel receiving-form-panel" data-tour="procurement-receiving-form">
           <div className="panel-heading"><div><p className="section-kicker">Ingreso físico</p><h2>Lotes recibidos</h2></div><button className="row-action" disabled={!selectedOrder} onClick={addLine} type="button">+ Agregar lote</button></div>
           {!receivableOrders.length ? <div className="procurement-empty"><span className="empty-symbol">✓</span><h3>No hay órdenes pendientes.</h3><p>Crea una orden nueva o revisa las recepciones completadas.</p></div> : <form className="receiving-form" onSubmit={submitReceipt}>
             <label className="field receiving-date"><span>Fecha y hora de recepción</span><input required type="datetime-local" value={receivedAt} onChange={(event) => updateReceivedAt(event.target.value)} /></label>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { InventoryNav } from "../components/inventory-nav";
 import { currentSession, type AuthSession } from "../lib/session";
-import { useSandbox } from "../components/sandbox/index.ts";
+import { useSandbox, useTrainingViewAction } from "../components/sandbox/index.ts";
 import {
   acknowledgeAlert,
   disposalMethodLabels,
@@ -72,6 +72,8 @@ export default function InventoryPage() {
   const [alerts, setAlerts] = useState<ExpiryAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
+  useTrainingViewAction("view_warehouses", !loading && warehouses.length > 0);
+  useTrainingViewAction("check_fefo_alerts", !loading && !loadingAlerts && alerts.length > 0);
   const [action, setAction] = useState<ActionState | null>(null);
   const [reasonCode, setReasonCode] = useState<QuarantineReasonCode>("QUALITY");
   const [reason, setReason] = useState("");

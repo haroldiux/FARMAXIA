@@ -10,6 +10,8 @@ import {
   ownerTrainingTrack,
   allRoleTracks,
   getTrainingTrackForRole,
+  shouldNavigateToStep,
+  stepMatchesPath,
 } from "./role-tracks.ts";
 
 test("all 5 role training tracks exist and are distinct", () => {
@@ -61,6 +63,38 @@ test("cajeroTrainingTrack covers full POS counter and cash shift lifecycle", () 
   assert.ok(actions.includes("confirm_sale"));
   assert.ok(actions.includes("record_movement"));
   assert.ok(actions.includes("close_shift"));
+});
+
+test("cajeroTrainingTrack covers customer loyalty and the receipt preview in order", () => {
+  const actions = cajeroTrainingTrack.steps.map((s) => s.interactiveAction);
+  const index = (action: string) => actions.indexOf(action as never);
+  assert.ok(index("link_customer") > index("search_product"), "customer is linked after the product is in the cart");
+  assert.ok(index("link_customer") < index("confirm_sale"), "customer is linked before the sale is confirmed");
+  assert.ok(index("open_receipt") > index("confirm_sale"), "receipt opens after the sale");
+  assert.equal(index("choose_receipt_width"), index("open_receipt") + 1);
+  assert.ok(index("choose_receipt_width") < index("record_movement"));
+  const widthStep = cajeroTrainingTrack.steps[index("choose_receipt_width")]!;
+  assert.equal(widthStep.landingPath, "/sales/[saleId]");
+});
+
+test("stepMatchesPath supports static and dynamic landing pages", () => {
+  assert.equal(stepMatchesPath({ path: "/cash" }, "/cash"), true);
+  assert.equal(stepMatchesPath({ path: "/cash" }, "/sales"), false);
+  assert.equal(stepMatchesPath({ path: "/branches", landingPath: "/users" }, "/users"), true);
+  const dynamic = { path: "/sales", landingPath: "/sales/[saleId]" };
+  assert.equal(stepMatchesPath(dynamic, "/sales/sale-demo-0001"), true);
+  assert.equal(stepMatchesPath(dynamic, "/sales/a/b"), false);
+  assert.equal(stepMatchesPath(dynamic, "/sales"), false);
+});
+
+test("shouldNavigateToStep never bounces the learner off a dynamic landing page", () => {
+  const dynamic = { path: "/sales", landingPath: "/sales/[saleId]" };
+  assert.equal(shouldNavigateToStep(dynamic, "/sales/sale-demo-0001"), false);
+  assert.equal(shouldNavigateToStep(dynamic, "/cash"), true);
+  assert.equal(shouldNavigateToStep({ path: "/cash" }, "/cash"), false);
+  assert.equal(shouldNavigateToStep({ path: "/cash" }, "/sales"), true);
+  // A redirecting path is always visited so the redirect (and its tab) is applied.
+  assert.equal(shouldNavigateToStep({ path: "/branches", landingPath: "/users" }, "/users"), true);
 });
 
 test("almaceneroTrainingTrack covers procurement receiving, FEFO alerts, quarantine, and waste acts", () => {

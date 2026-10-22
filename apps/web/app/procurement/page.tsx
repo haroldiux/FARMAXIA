@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { useTrainingViewAction } from "../components/sandbox/index.ts";
 import { ProcurementNav } from "../components/procurement-nav";
 import { currentSession, type AuthSession } from "../lib/session";
 import { listWarehouses, type Warehouse } from "../lib/inventory";
@@ -54,6 +55,7 @@ export default function ProcurementPage() {
   const [orderWarehouseId, setOrderWarehouseId] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
   const [closing, setClosing] = useState<{ orderId: string; reason: string } | null>(null);
+  useTrainingViewAction("view_orders", !loading && orders.length > 0);
 
   async function refresh(): Promise<void> {
     const [warehouseResult, supplierResult, presentationResult, orderResult, costResult] = await Promise.all([
@@ -207,7 +209,7 @@ export default function ProcurementPage() {
       {notice ? <p className="form-success procurement-message" role="status">{notice}</p> : null}
 
       <section className="procurement-layout">
-        <article className="procurement-orders panel">
+        <article className="procurement-orders panel" data-tour="procurement-orders">
           <div className="panel-heading"><div><p className="section-kicker">Órdenes de compra</p><h2>Abastecimiento en curso</h2></div><span className="panel-count">{orders.length.toString().padStart(2, "0")}</span></div>
           {orders.length ? <div className="order-list">{orders.map((order) => {
             const open = order.status === "SUBMITTED" || order.status === "PARTIALLY_RECEIVED";
